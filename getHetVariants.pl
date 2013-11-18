@@ -1,0 +1,113 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use Data::Dumper;
+use FindBin;
+use lib "$FindBin::Bin";
+use ParseVCF;
+use Pod::Usage;
+use Getopt::Long;
+my $vcf;
+my $out;
+my @samples = ();
+my $min_gq = 0;
+my $hom;
+my $help;
+my $man;
+GetOptions ("input=s" => \$vcf, "output=s" => \$out, "reverse" => \$hom, "samples=s{,}" => \@samples, "gq=f" => \$min_gq,  "help|?" => \$help, "manual" => \$man) or pod2usage(-exitval => 2, -message => "Syntax error") ;
+pod2usage (-verbose => 2) if $man;
+pod2usage (-verbose => 1) if $help;
+pod2usage(-exitval => 2, -message => "Syntax error") if not $vcf ;
+
+my $OUT;
+
+if ($out){
+	open ($OUT, ">$out") || die "Can't open $out for writing: $!\n";
+}else{
+	$OUT = \*STDOUT;
+}
+
+my $obj = ParseVCF->new( file=> $vcf);
+
+if (not @samples){
+	@samples = $obj->getSampleNames;
+}
+
+print $OUT join("", @{$obj->get_metaHeader});
+print  $OUT $obj->get_header ."\n";
+while (my $line = $obj->readLine){
+	if ($hom){
+		my $hom = $obj->sampleIsHomozygous(multiple => \@samples, minGQ => $min_gq);
+		print $OUT "$line\n" if $hom;
+	}else{
+		my $het = $obj->sampleIsHeterozygous(multiple => \@samples, minGQ => $min_gq);
+		print $OUT "$line\n" if $het;
+	}
+}
+
+
+
+
+=head1 NAME
+
+getHetVariants.pl - print heterozygous variants from VCF file
+
+
+=head1 SYNOPSIS
+
+getHetVariants.pl -i [vcf_file] [options]
+
+=head1 ARGUMENTS
+
+=over 8
+
+=item B<-i    --input>
+
+Input VCF file with SNPs annotated (e.g. by GATK's UnifiedGenotyper).
+
+=item B<-o    --output>
+
+Output filename.
+
+=item B<-s    --samples>
+
+One or more samples to check variants for. Default is to check all samples in vcf.
+
+=item B<-g    --gq>
+
+Minimum genotype quality to specify for het variants.  Anything less will be counted as a no call.
+
+=item B<-r    --reverse>
+
+Use this flag to print homozygous variants rather than heterozygous variants.
+
+=item B<-h    --help>
+
+Show help message.
+
+=item B<-m    --manual>
+
+Show manual page.
+
+=back
+
+=cut
+
+=head1 DESCRIPTION
+
+Prints only heterozygous variants from a VCF file.  Will only print if all variants or all variants for samples selected with --samples argument are heterozygous. More sophisticated implementations may follow.
+
+
+=head1 AUTHOR
+
+David A. Parry
+
+University of Leeds
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2011, 2012  David A. Parry
+
+This library is free software; you can redistribute it and/or modify it under the same terms as Perl itself. 
+
+=cut
