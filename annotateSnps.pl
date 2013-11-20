@@ -319,8 +319,8 @@ sub checkSnpMatches{
 		return 0 if not grep { /^$allele$/ } @snp_alleles;
 	}
 	return 1;
-}		
-
+}
+		
 =head1 NAME
 
 annotateSnps.pl - annotate and optionally filter SNPs from a VCF file 
@@ -343,7 +343,7 @@ Input VCF file
 
 =item B<-o    --output>
 
-Output snp filtered file. Optional - default is STDOUT.
+Output snp annotated/filtered file. Optional - default is STDOUT.
 
 =item B<-k    --known_out>
 
@@ -365,11 +365,11 @@ One or more samples to check variants for.  Default is to check all variants spe
 
 =item B<-b    --build>
 
-Build number to filter from (e.g. 129).  SNPs from this build or before will be filtered regardless of any value given for --freq. Must be an integer.
+Build number to filter from (e.g. 129).  SNPs from this build or before will be filtered from output regardless of any value given for --freq. Must be an integer.
 
 =item B<-f    --freq>
 
-Percent SNP minor allele frequency to filter from. SNPs with minor alleles equal to or over this frequency will be removed regardless of value given for --build.
+Percent SNP minor allele frequency to filter from. SNPs with minor alleles equal to or over this frequency will be removed from output regardless of value given for --build.
 
 =item B<--pathogenic>
 
