@@ -27,14 +27,14 @@ our $AUTOLOAD;
                 _file => ["", "read/required"],
                 _header => ["", "read/write"],
                 _metaHeader => [[], "read/write"],
-				_variantCount => [0, "read"],
-				_totalLines => [0, "read"],
-				_inputIsStdin => [0, "read"],
-				_sampleOrder => [[], "read"],
-				_currentLine => ["", "read"],
-				_index => ["", "read"],
-				_noHeaderCheck => [0, "read/write"],
-				_noLineCount => [0, "read/write"],
+		_variantCount => [0, "read"],
+		_totalLines => [0, "read"],
+		_inputIsStdin => [0, "read"],
+		_sampleOrder => [[], "read"],
+		_currentLine => ["", "read"],
+		_index => ["", "read"],
+		_noHeaderCheck => [0, "read/write"],
+		_noLineCount => [0, "read/write"],
         );
         sub _all_attrs{
                 keys %_attrs;
@@ -61,7 +61,7 @@ our $AUTOLOAD;
 
 sub DESTROY{
         my ($self) = @_;
-	    close $self->{_filehandle};
+        close $self->{_filehandle};
         $self -> _decr_count( );
 }
 

@@ -8,6 +8,8 @@ Unzip the downloaded file and ensure you keep the .pl scripts in the same direct
 
 You will also need to install the Tabix.pm perl module by Heng Li. Download the latest version of tabix from https://sourceforge.net/projects/samtools/files/tabix/, unpack the tabix-x.x.x.tar.bz2 file and run 'make' in the newly created 'tabix-x.x.x' directory. Next cd into the 'perl' subdirectory, run 'perl Makefile.PL' followed by 'make test'. If tests succeed run 'sudo make install' to complete Tabix.pm installation.
 
+Other perl modules required by these scripts are installable via CPAN.
+
 __CODE__
 
 These scripts were written __David A. Parry__, a geneticist/molecular biologist at the University of Leeds.  These were written and modified over a period of self-tutelage in which my programming styles/skills have been changeable so anyone browsing code may see varying states of readability and documentation. This is an issue I hope to tidy up over time. 

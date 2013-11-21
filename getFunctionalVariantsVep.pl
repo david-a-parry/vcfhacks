@@ -216,7 +216,7 @@ foreach my $in(@infile){
         	}
 	}
 	unless ($no_head){
-        print $OUT  $vcf_obj->getHeader(0) ."####getFunctionalVariantsVep.pl=\"";
+        print $OUT  $vcf_obj->getHeader(0) ."##getFunctionalVariantsVep.pl=\"";
         my @opt_string = ();
         foreach my $k (sort keys %opts){
             if (not ref $opts{$k}){
@@ -474,17 +474,17 @@ sub binsearch{
 }
 =head1 NAME
 
-##getFunctionalVariantsVep.pl  -  retrieve specific variant classes from an annotated vcf file.
+getFunctionalVariantsVep.pl  -  retrieve specific variant classes from an annotated vcf file.
 
 =head1 SYNOPSIS
 
 =over
 
-=item ##getFunctionalVariantsVep.pl --input <annotated vcf file> [options]
+=item getFunctionalVariantsVep.pl --input <annotated vcf file> [options]
 
-=item ##getFunctionalVariantsVep.pl --help for help message
+=item getFunctionalVariantsVep.pl --help for help message
 
-=item ##getFunctionalVariantsVep.pl --manual for manual page
+=item getFunctionalVariantsVep.pl --manual for manual page
 
 =back
 =cut
@@ -650,32 +650,32 @@ Show manual page.
 
 =over
 
-=item ##getFunctionalVariantsVep.pl -i var.vcf 
+=item getFunctionalVariantsVep.pl -i var.vcf 
 
 (filter on default set of consequences, print output to STDOUT.)
 
 
-=item ##getFunctionalVariantsVep.pl -i var.vcf --classes stop_gained stop_lost
+=item getFunctionalVariantsVep.pl -i var.vcf --classes stop_gained stop_lost
 
 (filter on 'stop_gained' and 'stop_lost' classes only.)
 
 
-=item ##getFunctionalVariantsVep.pl -i var.vcf --gmaf 0.01 
+=item getFunctionalVariantsVep.pl -i var.vcf --gmaf 0.01 
 
 (filter on default set of consequences, filter anything with a GMAF greater than or equal to 0.01.)
 
 
-=item ##getFunctionalVariantsVep.pl -i var.vcf --gmaf 0.01 --damaging all 
+=item getFunctionalVariantsVep.pl -i var.vcf --gmaf 0.01 --damaging all 
 
 (As above but only keep missense variation predicted damaging by all annotation programs.)
 
 
-=item ##getFunctionalVariantsVep.pl -i var.vcf --gmaf 0.01 --damaging all --list gene_list.txt 
+=item getFunctionalVariantsVep.pl -i var.vcf --gmaf 0.01 --damaging all --list gene_list.txt 
 
 (As above but also filter genes in gene_list.txt file.)
 
 
-=item ##getFunctionalVariantsVep.pl -i var.vcf --gmaf 0.01 --damaging all --list gene_list.txt -o output.vcf
+=item getFunctionalVariantsVep.pl -i var.vcf --gmaf 0.01 --damaging all --list gene_list.txt -o output.vcf
 
 (As above but specifying output file)
 
@@ -708,3 +708,10 @@ You can add extra classes using the --add option or specify a totally different 
 David A. Parry
 
 University of Leeds
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2013  David A. Parry
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with this program. If not, see <http://www.gnu.org/licenses/>.
+
