@@ -104,7 +104,7 @@ will be split into one MNV and one deletion.
 
 The motivation for this was due to a bug in the variant_effect_predictor.pl (present at v73 and before) that mishandled SNVs on the same line as 'unbalanced' variants, bearing in mind the GATK HaplotypeCaller does not offer separate SNP and INDEL genotyping nor does the GATK offer a way to split such variants from each other when present on the same line. Please note that this script is a BIG HACK and that certain more complicated VCF fields will not be accurate following use of this script, but sample genotypes should be as you would expect. It's intended only for use before using VEP or to rescue variants that GATKs SelectVariants tool may ignore. Hopefully the GATK people will come up with a better fix for this in time.
 
-(splitMultiallelicVariants is a bit of a misnomer, a bit suggestion would be appreciated!).
+(splitMultiallelicVariants is a bit of a misnomer, a better suggestion would be appreciated!).
 
 
 =cut
