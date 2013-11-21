@@ -51,9 +51,9 @@ if (not @{$opts{samples}}){
 }else{
 #for each sample check it exists in input vcf 
     foreach my $sample (@samples){
-	if (not grep{/^$sample$/} $vcf_obj->getSampleNames()){
-    	    die "Can't find sample $sample in $opts{input}. Found these samples: "
-	        .join(", ", $vcf_obj->getSampleNames()) . "\n";
+    if (not grep{/^$sample$/} $vcf_obj->getSampleNames()){
+            die "Can't find sample $sample in $opts{input}. Found these samples: "
+            .join(", ", $vcf_obj->getSampleNames()) . "\n";
         }
     }
 }
@@ -66,7 +66,7 @@ foreach my $sample (@samples){
     if ($opts{output}){
     $out = $opts{output} . "_$sample.snpview.txt";
     }else{
-	$out = "$sample.snpview.txt";
+    $out = "$sample.snpview.txt";
     }
     if (-e $out and not $opts{force}){
         die "$out already exists - choose a new name or use --force to overwrite\n";

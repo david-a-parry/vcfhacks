@@ -21,196 +21,196 @@ use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 our $AUTOLOAD;
 use base ( "SortGenomicCoordinates" );
 {
- 	my $_count = 0;
-	my %_attrs = (
-		_file => ["", "read/write"], 
-		_array => ["", "read/write"],
-		_col => [0, "read/write"], 
-		_type => ["bed", "read/write"],
-		_chrom => ["", "read/write"],
-		_start => ["", "read/write"],
-		_stop => ["", "read/write"],
-		_ordered => ["", "read/write"],
-		_merged => ["", "read"],
-		_search_file => ["", "read/write"],
-		_search_list => ["", "read/write"],
-		_list_type => ["bed", "read/write"],
-		_return_type => ["match", "read/write"],
-		_flanks => [0, "read/write"],
-	);
-	sub _all_attrs{
-		keys %_attrs;
-	}
-	sub _accessible{
-		my ($self, $attr, $mode) = @_;
-		$_attrs{$attr}[1] =~ /$mode/
-	}
-	sub _attr_default{
-		my ($self, $attr) = @_;
-		$_attrs{$attr}[0];
-	}
-		
+     my $_count = 0;
+    my %_attrs = (
+        _file => ["", "read/write"], 
+        _array => ["", "read/write"],
+        _col => [0, "read/write"], 
+        _type => ["bed", "read/write"],
+        _chrom => ["", "read/write"],
+        _start => ["", "read/write"],
+        _stop => ["", "read/write"],
+        _ordered => ["", "read/write"],
+        _merged => ["", "read"],
+        _search_file => ["", "read/write"],
+        _search_list => ["", "read/write"],
+        _list_type => ["bed", "read/write"],
+        _return_type => ["match", "read/write"],
+        _flanks => [0, "read/write"],
+    );
+    sub _all_attrs{
+        keys %_attrs;
+    }
+    sub _accessible{
+        my ($self, $attr, $mode) = @_;
+        $_attrs{$attr}[1] =~ /$mode/
+    }
+    sub _attr_default{
+        my ($self, $attr) = @_;
+        $_attrs{$attr}[0];
+    }
+        
 }
 sub DESTROY{
-	my ($self) = @_;
-	$self -> _decr_count( );
+    my ($self) = @_;
+    $self -> _decr_count( );
 }
 
 #use autoload for standard ->get and ->set methods
 sub AUTOLOAD{
-	my ($self, $val) = @_;
-	no strict 'refs';
-	if ($AUTOLOAD =~ /.*::get(_\w+)/ and $self -> _accessible($1, "read")){
-		my $attr = $1;
-		croak "No such attribute \"$attr\"" unless exists $self->{$attr};
-		*{$AUTOLOAD} = sub { return $_[0] -> {$attr} };
-		return $self->{$attr};
-	}elsif ($AUTOLOAD =~ /.*::set(_\w+)/ and $self -> _accessible($1, "write")){
-		my $attr = $1;
-		croak "No such attribute \"$attr\"" unless exists $self->{$attr};
-		$self -> _check_col($val) if $attr eq "col";
-		$self -> _check_type($val) if $attr eq "type";
-		*{$AUTOLOAD} = sub { $_[0] -> {$attr} = $_[1]; return ; };
-		$self -> {$attr} = $val;
-		return
-	}else{
-		croak "Method name \"$AUTOLOAD\" not available";
-	}
+    my ($self, $val) = @_;
+    no strict 'refs';
+    if ($AUTOLOAD =~ /.*::get(_\w+)/ and $self -> _accessible($1, "read")){
+        my $attr = $1;
+        croak "No such attribute \"$attr\"" unless exists $self->{$attr};
+        *{$AUTOLOAD} = sub { return $_[0] -> {$attr} };
+        return $self->{$attr};
+    }elsif ($AUTOLOAD =~ /.*::set(_\w+)/ and $self -> _accessible($1, "write")){
+        my $attr = $1;
+        croak "No such attribute \"$attr\"" unless exists $self->{$attr};
+        $self -> _check_col($val) if $attr eq "col";
+        $self -> _check_type($val) if $attr eq "type";
+        *{$AUTOLOAD} = sub { $_[0] -> {$attr} = $_[1]; return ; };
+        $self -> {$attr} = $val;
+        return
+    }else{
+        croak "Method name \"$AUTOLOAD\" not available";
+    }
 }
 sub search_list{
-	my ($self, %args) = @_;
-	my $SEARCH; #filehandle
-	croak "You must order and merge your reference coordinates before performing a search" if not  $self -> {_merged};
-	set_search_file($self, $args{search_file}) if $args{search_file};
-	if ($self-> {_search_file}){
-		if ($self-> {_search_file} =~ /\.gz$/){
-			$SEARCH = new IO::Uncompress::Gunzip $self-> {_search_file} || die("IO::Uncompress::Gunzip failed while opening $self->{_search_file} for searching:\n$GunzipError\n");
-		}else{
-			open ($SEARCH, $self->{_search_file}) || croak "Can't open search file \"$self->{_search_file}\" ";
-		}
-		my @search_array = grep {!/^#/} (<$SEARCH>);
-		croak "No regions in search file" if @search_array < 1;
-		$self -> {_search_list} = \@search_array;
-	}
-	set_return_type($self, $args{return_type}) if $args{return_type};
-	set_search_list($self, $args{search_list}) if $args{search_list};
-	croak "search_list or search_file argument must be set for search_list subroutine " if not $self->{_search_list};
-	ref $self->{_search_list} eq "ARRAY" || die "_search_list argument must be a reference to an array ";
-	my $spl = "\t";
-	$spl = '[:-]' if $self->{_list_type} eq "regions";
-	my ($start, $stop) = (1, 2); #fine for regions and bed files
-	($start, $stop) = (2, 3) if $self -> {_list_type} eq "gene"; #gene tables have strand field between chr and start
-	my $min = 3;
-	$min = 4 if $self -> {_list_type} eq "gene";
-	my @ret = ();
-	foreach my $search (@{$self->{_search_list}}){
-		my $off = 0;
-		my @srch = split(/$spl/, $search);
-		croak "Minimum of $min fields must be specified for list type $self -> {_list_type} " if @srch < $min;
-		no warnings 'uninitialized';
-		$off++ until $srch[$off] =~ /^chr[\dXYMUG][TLn\d_]*/i or $off > $#srch;
-		croak ("no valid region found in line $search ") if $off > $#srch;
-		set_chrom($self, $srch[$off]);
-		set_start($self, $srch[$off + $start]);
-		set_stop($self, $srch[$off + $stop]);
-		push (@ret, $search) if ($self -> locate >= 0);
-	}
-	return @ret if defined(wantarray);
-	carp "search_list method called in a void context";
+    my ($self, %args) = @_;
+    my $SEARCH; #filehandle
+    croak "You must order and merge your reference coordinates before performing a search" if not  $self -> {_merged};
+    set_search_file($self, $args{search_file}) if $args{search_file};
+    if ($self-> {_search_file}){
+        if ($self-> {_search_file} =~ /\.gz$/){
+            $SEARCH = new IO::Uncompress::Gunzip $self-> {_search_file} || die("IO::Uncompress::Gunzip failed while opening $self->{_search_file} for searching:\n$GunzipError\n");
+        }else{
+            open ($SEARCH, $self->{_search_file}) || croak "Can't open search file \"$self->{_search_file}\" ";
+        }
+        my @search_array = grep {!/^#/} (<$SEARCH>);
+        croak "No regions in search file" if @search_array < 1;
+        $self -> {_search_list} = \@search_array;
+    }
+    set_return_type($self, $args{return_type}) if $args{return_type};
+    set_search_list($self, $args{search_list}) if $args{search_list};
+    croak "search_list or search_file argument must be set for search_list subroutine " if not $self->{_search_list};
+    ref $self->{_search_list} eq "ARRAY" || die "_search_list argument must be a reference to an array ";
+    my $spl = "\t";
+    $spl = '[:-]' if $self->{_list_type} eq "regions";
+    my ($start, $stop) = (1, 2); #fine for regions and bed files
+    ($start, $stop) = (2, 3) if $self -> {_list_type} eq "gene"; #gene tables have strand field between chr and start
+    my $min = 3;
+    $min = 4 if $self -> {_list_type} eq "gene";
+    my @ret = ();
+    foreach my $search (@{$self->{_search_list}}){
+        my $off = 0;
+        my @srch = split(/$spl/, $search);
+        croak "Minimum of $min fields must be specified for list type $self -> {_list_type} " if @srch < $min;
+        no warnings 'uninitialized';
+        $off++ until $srch[$off] =~ /^chr[\dXYMUG][TLn\d_]*/i or $off > $#srch;
+        croak ("no valid region found in line $search ") if $off > $#srch;
+        set_chrom($self, $srch[$off]);
+        set_start($self, $srch[$off + $start]);
+        set_stop($self, $srch[$off + $stop]);
+        push (@ret, $search) if ($self -> locate >= 0);
+    }
+    return @ret if defined(wantarray);
+    carp "search_list method called in a void context";
 }
 sub search_against_list{
-	my ($self, %args) = @_;
-	croak "You must order and merge your reference coordinates before performing a search" if not  $self -> {_merged};
-	set_search_file($self, $args{search_file}) if $args{search_file};
-	my $SEARCH;
-	if ($self-> {_search_file}){
-		if ($self-> {_search_file} =~ /\.gz$/){
-			$SEARCH = new IO::Uncompress::Gunzip $self-> {_search_file} || die("IO::Uncompress::Gunzip failed while opening $self->{_search_file} for searching:\n$GunzipError\n");
-		}else{
-			open ($SEARCH, $self->{_search_file}) || croak "Can't open search file \"$self->{_search_file}\" ";
-		}
-		my @search_array = grep {!/^#/} (<$SEARCH>);
-		croak "No regions in search file" if @search_array < 1;
-		$self -> {_search_list} = \@search_array;
-	}
-	set_return_type($self, $args{return_type}) if $args{return_type};
-	set_search_list($self, $args{search_list}) if $args{search_list};
-	croak "search_list or search_file argument must be set for search_list subroutine " if not $self->{_search_list};
-	ref $self->{_search_list} eq "ARRAY" || die "_search_list argument must be a reference to an array ";
-	my $spl = "\t";
-	$spl = '[:-]' if $self->{_list_type} eq "regions";
-	my ($start, $stop) = (1, 2); #fine for regions and bed files
-	($start, $stop) = (2, 3) if $self -> {_list_type} eq "gene"; #gene tables have strand field between chr and start
-	my $min = 3;
-	$min = 4 if $self -> {_list_type} eq "gene";
-	my @ret = ();
-	foreach my $search (@{$self->{_search_list}}){
-		my $off = 0;
-		my @srch = split(/$spl/, $search);
-		croak "Minimum of $min fields must be specified for list type $self -> {_list_type} " if @srch < $min;
-		no warnings 'uninitialized';
-		$off++ until $srch[$off] =~ /^chr[\dXYMUG][TLn\d_]*/i or $off > $#srch;
-		croak ("no valid region found in line $search ") if $off > $#srch;
-		set_chrom($self, $srch[$off]);
-		set_start($self, $srch[$off + $start]);
-		set_stop($self, $srch[$off + $stop]);
-		$self -> locate;
-		push (@ret, $self-> return_info);
-	}
-	my %seen = ();
-	@ret = grep {! $seen{$_}++} @ret;
-	return @ret if defined(wantarray);
-	carp "search_against_list method called in a void context";
+    my ($self, %args) = @_;
+    croak "You must order and merge your reference coordinates before performing a search" if not  $self -> {_merged};
+    set_search_file($self, $args{search_file}) if $args{search_file};
+    my $SEARCH;
+    if ($self-> {_search_file}){
+        if ($self-> {_search_file} =~ /\.gz$/){
+            $SEARCH = new IO::Uncompress::Gunzip $self-> {_search_file} || die("IO::Uncompress::Gunzip failed while opening $self->{_search_file} for searching:\n$GunzipError\n");
+        }else{
+            open ($SEARCH, $self->{_search_file}) || croak "Can't open search file \"$self->{_search_file}\" ";
+        }
+        my @search_array = grep {!/^#/} (<$SEARCH>);
+        croak "No regions in search file" if @search_array < 1;
+        $self -> {_search_list} = \@search_array;
+    }
+    set_return_type($self, $args{return_type}) if $args{return_type};
+    set_search_list($self, $args{search_list}) if $args{search_list};
+    croak "search_list or search_file argument must be set for search_list subroutine " if not $self->{_search_list};
+    ref $self->{_search_list} eq "ARRAY" || die "_search_list argument must be a reference to an array ";
+    my $spl = "\t";
+    $spl = '[:-]' if $self->{_list_type} eq "regions";
+    my ($start, $stop) = (1, 2); #fine for regions and bed files
+    ($start, $stop) = (2, 3) if $self -> {_list_type} eq "gene"; #gene tables have strand field between chr and start
+    my $min = 3;
+    $min = 4 if $self -> {_list_type} eq "gene";
+    my @ret = ();
+    foreach my $search (@{$self->{_search_list}}){
+        my $off = 0;
+        my @srch = split(/$spl/, $search);
+        croak "Minimum of $min fields must be specified for list type $self -> {_list_type} " if @srch < $min;
+        no warnings 'uninitialized';
+        $off++ until $srch[$off] =~ /^chr[\dXYMUG][TLn\d_]*/i or $off > $#srch;
+        croak ("no valid region found in line $search ") if $off > $#srch;
+        set_chrom($self, $srch[$off]);
+        set_start($self, $srch[$off + $start]);
+        set_stop($self, $srch[$off + $stop]);
+        $self -> locate;
+        push (@ret, $self-> return_info);
+    }
+    my %seen = ();
+    @ret = grep {! $seen{$_}++} @ret;
+    return @ret if defined(wantarray);
+    carp "search_against_list method called in a void context";
 }
 
 #if a search produces a hit with -> locate method return the array of info for the relevant merged interval
 #otherwise return undef if not hit
 sub return_info{
-	my ($self, %args) = @_;
-	set_return_type($self, $args{return_type}) if $args{return_type};
-	croak "A region must be located before info can be returned" if not defined $self->{_location};
-	if ($_[0]->{_location} < 0){
-		return if defined(wantarray);
-		carp "return_info method called in void context";
-	}elsif ($self->{_return_type} =~ /^all$/i){
-		return @{$_[0]->{_merged}->[$_[0]->{_location}]->{info}} if defined(wantarray);
-		carp "return_info method called in void context"; #complain if not sent to either scalar or array
-	}elsif ($self->{_return_type} =~ /^(match|matches)$/i){
-		my @ret = ();
-		my $spl = "\t";
-		$spl = '[:-]' if $self->{_type} eq "regions";
-		$self->{_chrom}  =~ s/^chr//i;
-		my ($start, $stop) = (1, 2); #fine for regions and bed files
-		($start, $stop) = (2, 3) if $self -> {_type} eq "gene"; #gene tables have strand field between chr and start
-		foreach my $region (@{$_[0]->{_merged}->[$_[0]->{_location}]->{info}}){
-			if ($self->{_col} == 0){ #with no valid column value we'll try and find the region field ourself
-				my $off = 0;
-				my @split = (split /$spl/, $region);
-				no warnings 'uninitialized';
-				$off++ until $split[$off] =~ /^chr[\dXYMUG][TLn\d_]*/i or $off > $#split;
-				croak ("no valid region found in line $region ") if $off > $#split;
-				$split[$off] =~ s/^chr//i;
-				$self->{_chrom}  =~ s/^chr//i;
-				if (uc$split[$off] eq uc$self->{_chrom}	and 
-				($self->{_start} <=($split[$off+$stop] + $self->{_flanks}) and $self->{_stop} >= ($split[$off+$start] - $self->{_flanks}))){ 
-					push (@ret, $region);
-				}
-			}else{
-				my @split = (split /$spl/, $region);
-				$split[$self->{_col}-1] =~ s/^chr//i;
+    my ($self, %args) = @_;
+    set_return_type($self, $args{return_type}) if $args{return_type};
+    croak "A region must be located before info can be returned" if not defined $self->{_location};
+    if ($_[0]->{_location} < 0){
+        return if defined(wantarray);
+        carp "return_info method called in void context";
+    }elsif ($self->{_return_type} =~ /^all$/i){
+        return @{$_[0]->{_merged}->[$_[0]->{_location}]->{info}} if defined(wantarray);
+        carp "return_info method called in void context"; #complain if not sent to either scalar or array
+    }elsif ($self->{_return_type} =~ /^(match|matches)$/i){
+        my @ret = ();
+        my $spl = "\t";
+        $spl = '[:-]' if $self->{_type} eq "regions";
+        $self->{_chrom}  =~ s/^chr//i;
+        my ($start, $stop) = (1, 2); #fine for regions and bed files
+        ($start, $stop) = (2, 3) if $self -> {_type} eq "gene"; #gene tables have strand field between chr and start
+        foreach my $region (@{$_[0]->{_merged}->[$_[0]->{_location}]->{info}}){
+            if ($self->{_col} == 0){ #with no valid column value we'll try and find the region field ourself
+                my $off = 0;
+                my @split = (split /$spl/, $region);
+                no warnings 'uninitialized';
+                $off++ until $split[$off] =~ /^chr[\dXYMUG][TLn\d_]*/i or $off > $#split;
+                croak ("no valid region found in line $region ") if $off > $#split;
+                $split[$off] =~ s/^chr//i;
+                $self->{_chrom}  =~ s/^chr//i;
+                if (uc$split[$off] eq uc$self->{_chrom}    and 
+                ($self->{_start} <=($split[$off+$stop] + $self->{_flanks}) and $self->{_stop} >= ($split[$off+$start] - $self->{_flanks}))){ 
+                    push (@ret, $region);
+                }
+            }else{
+                my @split = (split /$spl/, $region);
+                $split[$self->{_col}-1] =~ s/^chr//i;
                                 $self->{_chrom}  =~ s/^chr//i;
-				if (uc$split[$self->{_col} -1] eq uc$self->{_chrom}	and 
-				(($self->{_start} <=($split[$self->{_col}-1+$stop] + $self->{_flanks})) and ($self->{_stop} >= ($split[$self->{_col}-1+$start] - $self->{_flanks}) ))){
-					push (@ret, $region);
-				}
-			}
-		}
-		croak "Error, region was located but no matching regions for current chromosome and position values exist " if (not @ret);
-		return @ret if defined(wantarray); #allow scalar or array for return value
-		carp "return_info method called in void context"; #complain if not sent to either scalar or array
-	}else{
-		croak "unrecognised return type given to $self -> return_info method ";
-	}
+                if (uc$split[$self->{_col} -1] eq uc$self->{_chrom}    and 
+                (($self->{_start} <=($split[$self->{_col}-1+$stop] + $self->{_flanks})) and ($self->{_stop} >= ($split[$self->{_col}-1+$start] - $self->{_flanks}) ))){
+                    push (@ret, $region);
+                }
+            }
+        }
+        croak "Error, region was located but no matching regions for current chromosome and position values exist " if (not @ret);
+        return @ret if defined(wantarray); #allow scalar or array for return value
+        carp "return_info method called in void context"; #complain if not sent to either scalar or array
+    }else{
+        croak "unrecognised return type given to $self -> return_info method ";
+    }
 }
 
 # a simple binary search testing whether a position lies within an interval from our merged array
@@ -219,39 +219,39 @@ sub return_info{
 # by ->return_info method, so it is fine (and probably recommended)
 # to call ->locate in void context
 sub locate{
-	my ($self, %args) = @_;
-	croak "You must order and merge your reference coordinates before performing a search" if not  $self -> {_merged};
-	my ($search_chr, $search_start, $search_stop);
-	set_chrom($self, $args{chrom}) if $args{chrom};
-	croak "chrom argument is required for locate_region method " if not $self->{_chrom};
-	$self->{_chrom}  =~ s/^chr//i;
-	set_start($self, $args{start}) if $args{start};
-	croak "start argument is required for locate_region method " if not defined $self->{_start};
-	$self->{_start} =~ s/\,//g;
-	croak "Start argument must be an integer" if $self->{_start} !~ /^\d+$/;
-	set_stop($self, $args{stop}) if $args{stop};
-	croak "stop argument is required for locate_region method " if not defined $self->{_stop};
-	$self->{_stop} =~ s/\,//g;
-	croak "Stop argument must be an integer" if $self->{_stop} !~ /^\d+$/;
-	$self->{_flanks} =~ s/\,//g; 
-	croak "Flanks argument must be an integer" if $self->{_flanks} !~ /^\d+$/;
-	my $l = 0;
-	my $u = @{$self->{_merged}} -1;
-	while ($l <= $u){
-		my $i = int(($u+$l)/2);
-		if((uc$self->{_chrom} lt uc$self->{_merged}->[$i]->{chrom}) or 
-		( uc$self->{_chrom} eq uc$self->{_merged}->[$i]->{chrom} and $self->{_stop}  <= ($self->{_merged}->[$i]->{start} - $self->{_flanks})  )){
-			$u = $i - 1;
-		}elsif ((uc$self->{_chrom} gt uc$self->{_merged}->[$i]->{chrom}) or 
-		( uc$self->{_chrom} eq uc$self->{_merged}->[$i]->{chrom} and $self->{_start}  >= ($self->{_merged}->[$i]->{end} + $self->{_flanks})  )){
-			$l = $i + 1;
-		}else{
-			$self->{_location} = $i;
-			return $i;
-		}
-	}
-	$self->{_location} = -1;
-	return -1;
+    my ($self, %args) = @_;
+    croak "You must order and merge your reference coordinates before performing a search" if not  $self -> {_merged};
+    my ($search_chr, $search_start, $search_stop);
+    set_chrom($self, $args{chrom}) if $args{chrom};
+    croak "chrom argument is required for locate_region method " if not $self->{_chrom};
+    $self->{_chrom}  =~ s/^chr//i;
+    set_start($self, $args{start}) if $args{start};
+    croak "start argument is required for locate_region method " if not defined $self->{_start};
+    $self->{_start} =~ s/\,//g;
+    croak "Start argument must be an integer" if $self->{_start} !~ /^\d+$/;
+    set_stop($self, $args{stop}) if $args{stop};
+    croak "stop argument is required for locate_region method " if not defined $self->{_stop};
+    $self->{_stop} =~ s/\,//g;
+    croak "Stop argument must be an integer" if $self->{_stop} !~ /^\d+$/;
+    $self->{_flanks} =~ s/\,//g; 
+    croak "Flanks argument must be an integer" if $self->{_flanks} !~ /^\d+$/;
+    my $l = 0;
+    my $u = @{$self->{_merged}} -1;
+    while ($l <= $u){
+        my $i = int(($u+$l)/2);
+        if((uc$self->{_chrom} lt uc$self->{_merged}->[$i]->{chrom}) or 
+        ( uc$self->{_chrom} eq uc$self->{_merged}->[$i]->{chrom} and $self->{_stop}  <= ($self->{_merged}->[$i]->{start} - $self->{_flanks})  )){
+            $u = $i - 1;
+        }elsif ((uc$self->{_chrom} gt uc$self->{_merged}->[$i]->{chrom}) or 
+        ( uc$self->{_chrom} eq uc$self->{_merged}->[$i]->{chrom} and $self->{_start}  >= ($self->{_merged}->[$i]->{end} + $self->{_flanks})  )){
+            $l = $i + 1;
+        }else{
+            $self->{_location} = $i;
+            return $i;
+        }
+    }
+    $self->{_location} = -1;
+    return -1;
 }
 
 1;

@@ -131,27 +131,27 @@ my $vcf_obj = ParseVCF->new(file=> $vcf);
 my @filter_objs = ();
 my $current_f = 0;
 foreach my $filter(@filter_vcfs){
-	$current_f++;
-	my $filter_obj;
-	print STDERR "Initializing filter VCF $current_f of " . scalar@filter_vcfs . " ($filter)\n";
-	if ($filter =~ /\.gz$/){
+    $current_f++;
+    my $filter_obj;
+    print STDERR "Initializing filter VCF $current_f of " . scalar@filter_vcfs . " ($filter)\n";
+    if ($filter =~ /\.gz$/){
         $filter_obj = ParseVCF->new(file=> $filter, noLineCount => 1);
     }else{
-	    $filter_obj = ParseVCF->new(file=> $filter);
+        $filter_obj = ParseVCF->new(file=> $filter);
     }
-	push @filter_objs, $filter_obj;
+    push @filter_objs, $filter_obj;
 }
 print STDERR "Done intializing filter VCFs.\n";
 my $OUT;
 if ($out){
-	open ($OUT, ">$out") or die "Can't open $out for writing: $!\n";
+    open ($OUT, ">$out") or die "Can't open $out for writing: $!\n";
 }else{
-	$OUT = \*STDOUT;
+    $OUT = \*STDOUT;
 }
 my $prev_chrom = 0;
 my $progressbar;
 if ($progress){
-	$progressbar = Term::ProgressBar->new({name => "Filtering", count => $vcf_obj->countLines("variants"), ETA => "linear", });
+    $progressbar = Term::ProgressBar->new({name => "Filtering", count => $vcf_obj->countLines("variants"), ETA => "linear", });
 }
 my $next_update = 0;
 my $n = 0;
@@ -161,113 +161,113 @@ print $OUT  $vcf_obj->getHeader(1);
 my $lines_filtered = 0;
 my $lines_passed = 0;
 LINE: while (my $line = $vcf_obj->readLine){
-	$n++;
-	if ($progress){
+    $n++;
+    if ($progress){
                 $next_update = $progressbar->update($n) if $n >= $next_update;
         }
-	my $qual = $vcf_obj->getVariantField('QUAL');
-	my $chrom = $vcf_obj->getVariantField('CHROM');
-	my $pos = $vcf_obj->getVariantField('POS');
-	my $ref = $vcf_obj->getVariantField('REF');
-	next LINE if $qual < $min_qual;
-	my @alts = ();
-	if (@samples){
-		@alts = $vcf_obj->getSampleActualGenotypes(multiple => \@samples, return_alleles_only => 1);
-	}else{
-		@alts = $vcf_obj->readAlleles(alt_alleles=>1);
-	}
-	my $threshold_counts = 0;#count samples in all filter_vcfs i.e. don't reset after each file
-FILTER:	foreach my $filter_obj(@filter_objs){
-		if ($filter_obj->searchForPosition(chrom=> $chrom, pos => $pos)){
-FILTER_LINE:	while (my $filter_line = $filter_obj->readPosition()){
-				my $filter_chrom = $filter_obj->getVariantField('CHROM');
-				my $filter_pos = $filter_obj->getVariantField('POS');
-				my $filter_qual = $filter_obj->getVariantField('QUAL');
-				next FILTER_LINE if $filter_qual < $min_qual;
-				my $f_ref = $filter_obj->getVariantField('REF');
-				next FILTER_LINE if ($chrom ne $filter_chrom or $pos ne $filter_pos); #this might happen if tabix finds a deletion
-				next FILTER_LINE if $ref ne $f_ref;
-				my @f_alts = ();
-				if (@reject){
-					@f_alts = $filter_obj->getSampleActualGenotypes(multiple => \@reject, return_alleles_only => 1);
-				}else{
-					@f_alts = $filter_obj->readAlleles(alt_alleles=>1);
-				}
-				my $alts_match = 0;
-				foreach my $alt (@alts){
-					$alts_match++ if grep{/^$alt$/i} @f_alts;
-					last if $alts_match;
-				}
-				next FILTER_LINE if not $alts_match;
-				if ($threshold){
-					my @t_samples = ();
-					if (@reject){
-						@t_samples = @reject;
-					}else{
-						@t_samples = $filter_obj->getSampleNames();
-					}
-					foreach my $t_samp(@t_samples){
-						my @t_alleles = $filter_obj->getSampleActualGenotypes(sample => $t_samp, return_alleles_only => 1);
-						foreach my $t_allele (@t_alleles){
-							if (grep {/^$t_allele$/} @alts){
-							#we're counting no. of samples with at least one matching allele
-							#not no. matching alleles
-								$threshold_counts++;
-								last;
-							}
-						}
-					}
-					next FILTER_LINE if $threshold_counts < $threshold;
-				}
-				#we have a match - no need to look at other filter_vcfs
-				$lines_filtered++;
-				if ($print_matching){
-					print $OUT "$line\n";
-					next LINE;
-				}else{
-					next LINE;
-				}
-			}
-		}
-	}#no matching line
-	$lines_passed++;
-	print $OUT "$line\n" if not $print_matching; 
+    my $qual = $vcf_obj->getVariantField('QUAL');
+    my $chrom = $vcf_obj->getVariantField('CHROM');
+    my $pos = $vcf_obj->getVariantField('POS');
+    my $ref = $vcf_obj->getVariantField('REF');
+    next LINE if $qual < $min_qual;
+    my @alts = ();
+    if (@samples){
+        @alts = $vcf_obj->getSampleActualGenotypes(multiple => \@samples, return_alleles_only => 1);
+    }else{
+        @alts = $vcf_obj->readAlleles(alt_alleles=>1);
+    }
+    my $threshold_counts = 0;#count samples in all filter_vcfs i.e. don't reset after each file
+FILTER:    foreach my $filter_obj(@filter_objs){
+        if ($filter_obj->searchForPosition(chrom=> $chrom, pos => $pos)){
+FILTER_LINE:    while (my $filter_line = $filter_obj->readPosition()){
+                my $filter_chrom = $filter_obj->getVariantField('CHROM');
+                my $filter_pos = $filter_obj->getVariantField('POS');
+                my $filter_qual = $filter_obj->getVariantField('QUAL');
+                next FILTER_LINE if $filter_qual < $min_qual;
+                my $f_ref = $filter_obj->getVariantField('REF');
+                next FILTER_LINE if ($chrom ne $filter_chrom or $pos ne $filter_pos); #this might happen if tabix finds a deletion
+                next FILTER_LINE if $ref ne $f_ref;
+                my @f_alts = ();
+                if (@reject){
+                    @f_alts = $filter_obj->getSampleActualGenotypes(multiple => \@reject, return_alleles_only => 1);
+                }else{
+                    @f_alts = $filter_obj->readAlleles(alt_alleles=>1);
+                }
+                my $alts_match = 0;
+                foreach my $alt (@alts){
+                    $alts_match++ if grep{/^$alt$/i} @f_alts;
+                    last if $alts_match;
+                }
+                next FILTER_LINE if not $alts_match;
+                if ($threshold){
+                    my @t_samples = ();
+                    if (@reject){
+                        @t_samples = @reject;
+                    }else{
+                        @t_samples = $filter_obj->getSampleNames();
+                    }
+                    foreach my $t_samp(@t_samples){
+                        my @t_alleles = $filter_obj->getSampleActualGenotypes(sample => $t_samp, return_alleles_only => 1);
+                        foreach my $t_allele (@t_alleles){
+                            if (grep {/^$t_allele$/} @alts){
+                            #we're counting no. of samples with at least one matching allele
+                            #not no. matching alleles
+                                $threshold_counts++;
+                                last;
+                            }
+                        }
+                    }
+                    next FILTER_LINE if $threshold_counts < $threshold;
+                }
+                #we have a match - no need to look at other filter_vcfs
+                $lines_filtered++;
+                if ($print_matching){
+                    print $OUT "$line\n";
+                    next LINE;
+                }else{
+                    next LINE;
+                }
+            }
+        }
+    }#no matching line
+    $lines_passed++;
+    print $OUT "$line\n" if not $print_matching; 
 }
 if ($progressbar){
         $progressbar->update($vcf_obj->countLines("variants")) if $vcf_obj->countLines("variants") >= $next_update;
 }
 if ($print_matching){
-	print STDERR "$lines_filtered matching variants printed, $lines_passed filtered ";
+    print STDERR "$lines_filtered matching variants printed, $lines_passed filtered ";
 }else{
-	print STDERR "$lines_filtered matching variants filtered, $lines_passed printed ";
+    print STDERR "$lines_filtered matching variants filtered, $lines_passed printed ";
 }
 print STDERR "(" .$vcf_obj->countLines("variants") . " total)\n";
 
 ##################
 sub get_vcfs_from_directories{
-	my ($dirs, $regex) = @_;
-	my @vcfs = ();
-	foreach my $d (@$dirs){
-		$d =~ s/\/$//;
-		opendir (my $DIR, $d) or die "Can't open directory $d: $!\n";
-		#my @dir_vcfs = grep {/\.vcf(\.gz)*$/i} readdir $DIR;
-		my @dir_vcfs = grep {/\.vcf$/i} readdir $DIR;#can't use gzipped vcfs with ParseVCF search functions
-		if (not @dir_vcfs){
-			print STDERR "WARNING - no VCF files in directory $d\n";
-		}elsif ($regex){
-			@dir_vcfs = grep {/$regex/} @dir_vcfs;
-			if (not @dir_vcfs){
-				print STDERR "WARNING - no VCF files matching regex /$regex/ in directory $d\n" if not @dir_vcfs;
-			}else{
-				foreach my $v (@dir_vcfs){
-					push @vcfs, "$d/$v";
-				}
-			}
-		}else{
-			foreach my $v (@dir_vcfs){
-				push @vcfs, "$d/$v";
-			}
-		}
-	}
-	return @vcfs;
+    my ($dirs, $regex) = @_;
+    my @vcfs = ();
+    foreach my $d (@$dirs){
+        $d =~ s/\/$//;
+        opendir (my $DIR, $d) or die "Can't open directory $d: $!\n";
+        #my @dir_vcfs = grep {/\.vcf(\.gz)*$/i} readdir $DIR;
+        my @dir_vcfs = grep {/\.vcf$/i} readdir $DIR;#can't use gzipped vcfs with ParseVCF search functions
+        if (not @dir_vcfs){
+            print STDERR "WARNING - no VCF files in directory $d\n";
+        }elsif ($regex){
+            @dir_vcfs = grep {/$regex/} @dir_vcfs;
+            if (not @dir_vcfs){
+                print STDERR "WARNING - no VCF files matching regex /$regex/ in directory $d\n" if not @dir_vcfs;
+            }else{
+                foreach my $v (@dir_vcfs){
+                    push @vcfs, "$d/$v";
+                }
+            }
+        }else{
+            foreach my $v (@dir_vcfs){
+                push @vcfs, "$d/$v";
+            }
+        }
+    }
+    return @vcfs;
 }

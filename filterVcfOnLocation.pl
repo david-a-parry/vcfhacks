@@ -136,8 +136,8 @@ pod2usage(-verbose => 2) if ($manual);
 pod2usage(-verbose => 1) if ($help);
 pod2usage(-message => "Syntax error.", -exitval => 2) if (not $vcf_file or (not @bedfile and not @reg));
 if ($progress and $vcf_file eq "-"){
-	print STDERR "Can't use progress option when input is from STDIN.\n";
-	$progress = "";
+    print STDERR "Can't use progress option when input is from STDIN.\n";
+    $progress = "";
 }
 my $time = strftime("%H:%M:%S", localtime);
 print STDERR "Time started: $time\n";
@@ -145,46 +145,46 @@ $offset = 0 if not $offset;
 my $vcf_obj = ParseVCF->new( file=> $vcf_file);
 my $progressbar ;
 if ($progress){
-	$total_lines = $vcf_obj->countLines("variants");
-	print STDERR "vcf file has $total_lines variants\n";
-        $progressbar = Term::ProgressBar->new({name => "Filtering", count => $total_lines, ETA => "linear", });	
+    $total_lines = $vcf_obj->countLines("variants");
+    print STDERR "vcf file has $total_lines variants\n";
+        $progressbar = Term::ProgressBar->new({name => "Filtering", count => $total_lines, ETA => "linear", });    
 }
 my @regions = ();
 
 if (@bedfile){
-	foreach my $bedfile (@bedfile){
-		open (BED, $bedfile) || die "can't open $bedfile";
-		my @temp = ();
-		while (my $temp =  <BED>){
-			chomp $temp;
-			next if not $temp;
-			$temp =~ s/[:-]/\t/g;
-			$temp =~ s/\,//g;
-			push (@temp, $temp);
-		}
-	#	my @temp = (<BED>) =~ s/[:-]/\t/g;
-		close BED;
+    foreach my $bedfile (@bedfile){
+        open (BED, $bedfile) || die "can't open $bedfile";
+        my @temp = ();
+        while (my $temp =  <BED>){
+            chomp $temp;
+            next if not $temp;
+            $temp =~ s/[:-]/\t/g;
+            $temp =~ s/\,//g;
+            push (@temp, $temp);
+        }
+    #    my @temp = (<BED>) =~ s/[:-]/\t/g;
+        close BED;
         my $invalid = grep {!/^(chr)*[\dXYMU][\w\d]*\t[\d]+\t[\d]+/} @temp;
-		warn "$invalid invalid region(s) found in $bedfile" if $invalid;
-		push (@regions, @temp);
-	}
+        warn "$invalid invalid region(s) found in $bedfile" if $invalid;
+        push (@regions, @temp);
+    }
 }
 if (@reg){
-	foreach my $reg (@reg){
-		$reg =~ s/\,//g;
-		die "invalid region specied: $reg" if $reg !~ /^(chr)*[\dXYMU][\w\d]*:[\d]+-[\d]+$/; 
-		$reg =~ s/[\:\-]/\t/g;
-		push (@regions, $reg);
-	}
+    foreach my $reg (@reg){
+        $reg =~ s/\,//g;
+        die "invalid region specied: $reg" if $reg !~ /^(chr)*[\dXYMU][\w\d]*:[\d]+-[\d]+$/; 
+        $reg =~ s/[\:\-]/\t/g;
+        push (@regions, $reg);
+    }
 }
 
 my $reg_obj = SortGenomicCoordinates -> new(array => \@regions, type => 'bed', col => 1);
 $reg_obj->prep();
 my $OUT;
 if ($outfile){
-	open ($OUT, ">$outfile") || die "Can't open $outfile for writing\n";
+    open ($OUT, ">$outfile") || die "Can't open $outfile for writing\n";
 }else{
-	$OUT = *STDOUT;
+    $OUT = *STDOUT;
 }
 my $lines = 0;
 my $next_update = 0;
@@ -193,50 +193,50 @@ my $printed = 0;
 my $filtered = 0;
 print $OUT $vcf_obj->getHeader ;
 while (my $varLine = $vcf_obj->readLine){
-	my @line = split("\t", $varLine);
-	if ($reg_obj->locate(chrom => $line[$offset+0], position => $line[$offset+1]) > -1){
-		if (not $exclude){
-			print $OUT "$varLine\n";
-			$printed++;
-		}else{
-			$filtered++;
-		}
-	}else{
-		if ($exclude){
-			print $OUT "$varLine\n";
-			$printed++;
-		}else{
-			$filtered++;
-		}
-	}
-	$lines++;
-	if ($progress){
-		$next_update = $progressbar->update($lines) if $lines >= $next_update;
-	}
+    my @line = split("\t", $varLine);
+    if ($reg_obj->locate(chrom => $line[$offset+0], position => $line[$offset+1]) > -1){
+        if (not $exclude){
+            print $OUT "$varLine\n";
+            $printed++;
+        }else{
+            $filtered++;
+        }
+    }else{
+        if ($exclude){
+            print $OUT "$varLine\n";
+            $printed++;
+        }else{
+            $filtered++;
+        }
+    }
+    $lines++;
+    if ($progress){
+        $next_update = $progressbar->update($lines) if $lines >= $next_update;
+    }
 }
 if ($progress){
-	$progressbar->update($total_lines) if $total_lines >= $next_update;
+    $progressbar->update($total_lines) if $total_lines >= $next_update;
 }
 $time = strftime("%H:%M:%S", localtime);
 print STDERR "Time finished: $time\n";
 print STDERR "$filtered variants filtered, $printed variants retained.\n";
 
 #############################################
-		
+        
 ############################################
 sub percentcomplete {
-	my ($processedLines, $totalLines, $previousPercentComplete) = @_;
-	my $percentComplete = int(($processedLines/$totalLines)*100);
-	if ($percentComplete != $$previousPercentComplete){
-		if ($percentComplete % 10 == 0 or $processedLines == $totalLines){
-			$$previousPercentComplete = $percentComplete;
-			return sprintf ("%7d out of %7d processed... %3d %% complete\n", $processedLines, $totalLines, $percentComplete);
-		}
-		else{
-			$$previousPercentComplete = $percentComplete;
-			return 0;
-		}
-	}else{
-		return 0;
-	}
+    my ($processedLines, $totalLines, $previousPercentComplete) = @_;
+    my $percentComplete = int(($processedLines/$totalLines)*100);
+    if ($percentComplete != $$previousPercentComplete){
+        if ($percentComplete % 10 == 0 or $processedLines == $totalLines){
+            $$previousPercentComplete = $percentComplete;
+            return sprintf ("%7d out of %7d processed... %3d %% complete\n", $processedLines, $totalLines, $percentComplete);
+        }
+        else{
+            $$previousPercentComplete = $percentComplete;
+            return 0;
+        }
+    }else{
+        return 0;
+    }
 }

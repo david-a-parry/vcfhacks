@@ -22,27 +22,27 @@ pod2usage(-exitval => 2, -message => "Syntax error") if not $vcf ;
 my $OUT;
 
 if ($out){
-	open ($OUT, ">$out") || die "Can't open $out for writing: $!\n";
+    open ($OUT, ">$out") || die "Can't open $out for writing: $!\n";
 }else{
-	$OUT = \*STDOUT;
+    $OUT = \*STDOUT;
 }
 
 my $obj = ParseVCF->new( file=> $vcf);
 
 if (not @samples){
-	@samples = $obj->getSampleNames;
+    @samples = $obj->getSampleNames;
 }
 
 print $OUT join("", @{$obj->get_metaHeader});
 print  $OUT $obj->get_header ."\n";
 while (my $line = $obj->readLine){
-	if ($hom){
-		my $hom = $obj->sampleIsHomozygous(multiple => \@samples, minGQ => $min_gq);
-		print $OUT "$line\n" if $hom;
-	}else{
-		my $het = $obj->sampleIsHeterozygous(multiple => \@samples, minGQ => $min_gq);
-		print $OUT "$line\n" if $het;
-	}
+    if ($hom){
+        my $hom = $obj->sampleIsHomozygous(multiple => \@samples, minGQ => $min_gq);
+        print $OUT "$line\n" if $hom;
+    }else{
+        my $het = $obj->sampleIsHeterozygous(multiple => \@samples, minGQ => $min_gq);
+        print $OUT "$line\n" if $het;
+    }
 }
 
 

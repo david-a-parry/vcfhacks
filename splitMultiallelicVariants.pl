@@ -31,9 +31,9 @@ if ($out){
 foreach my $in (@input){
     my $vcf_obj = ParseVCF->new(file=>$in);
     print $OUT  $vcf_obj->getHeader();
-LINE:	while (my $line = $vcf_obj->readLine){
+LINE:    while (my $line = $vcf_obj->readLine){
         my $ref = $vcf_obj->getVariantField("REF");
-	    my @alts = $vcf_obj->readAlleles(alt_alleles => 1);
+        my @alts = $vcf_obj->readAlleles(alt_alleles => 1);
         my $same_length = 0;
         my $diff_length = 0;
         foreach my $alt (@alts){

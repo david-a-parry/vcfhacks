@@ -27,14 +27,14 @@ our $AUTOLOAD;
                 _file => ["", "read/required"],
                 _header => ["", "read/write"],
                 _metaHeader => [[], "read/write"],
-		_variantCount => [0, "read"],
-		_totalLines => [0, "read"],
-		_inputIsStdin => [0, "read"],
-		_sampleOrder => [[], "read"],
-		_currentLine => ["", "read"],
-		_index => ["", "read"],
-		_noHeaderCheck => [0, "read/write"],
-		_noLineCount => [0, "read/write"],
+        _variantCount => [0, "read"],
+        _totalLines => [0, "read"],
+        _inputIsStdin => [0, "read"],
+        _sampleOrder => [[], "read"],
+        _currentLine => ["", "read"],
+        _index => ["", "read"],
+        _noHeaderCheck => [0, "read/write"],
+        _noLineCount => [0, "read/write"],
         );
         sub _all_attrs{
                 keys %_attrs;
@@ -78,45 +78,45 @@ sub new {
                         $self->{$attr} = $self->_attr_default($attr);
                 }
         }
-	if ($self->{_file} eq '-'){
-		$self->{_inputIsStdin} = 1;
-		$self->{_filehandle} = $self -> _openFileHandle();
-	}else{
-		$self->{_filehandle} = $self -> _openFileHandle();
-		$self->{_totalLines} = $self -> _getLineCount() unless $self->{_noLineCount};#get line count
-		$self -> reopenFileHandle();#close and repopen file
-	    if ($self->{_file} =~ /\.gz$/){
-		    $self->{_index} = $self->{_file}.".tbi";
+    if ($self->{_file} eq '-'){
+        $self->{_inputIsStdin} = 1;
+        $self->{_filehandle} = $self -> _openFileHandle();
+    }else{
+        $self->{_filehandle} = $self -> _openFileHandle();
+        $self->{_totalLines} = $self -> _getLineCount() unless $self->{_noLineCount};#get line count
+        $self -> reopenFileHandle();#close and repopen file
+        if ($self->{_file} =~ /\.gz$/){
+            $self->{_index} = $self->{_file}.".tbi";
         }else{
-		    $self->{_index} = $self->{_file}.".pvidx";
-		}
+            $self->{_index} = $self->{_file}.".pvidx";
+        }
         $self->{_fileSize} = -s $self->{_file};
-	}
-	#if user has supplied header seperately
-	if ($self->{_header}){
-		my $success = $self->changeHeader(string=>$self->{_header});
-		if (not $success){
-			croak "Could not initialise with user supplied header ";
-		}
-	}else{
-		$self -> _readHeader();
-		$self -> _readHeaderInfo();
-	}
+    }
+    #if user has supplied header seperately
+    if ($self->{_header}){
+        my $success = $self->changeHeader(string=>$self->{_header});
+        if (not $success){
+            croak "Could not initialise with user supplied header ";
+        }
+    }else{
+        $self -> _readHeader();
+        $self -> _readHeaderInfo();
+    }
         $class -> _incr_count();
         return $self;
 }
 
 sub _getLineCount{
-	my ($self) = shift;
-	my $line_count = 0;
-	if ($self->{_file} =~ /\.gz$/){
-	    while (my $line = scalar readline $self->{_filehandle}){
+    my ($self) = shift;
+    my $line_count = 0;
+    if ($self->{_file} =~ /\.gz$/){
+        while (my $line = scalar readline $self->{_filehandle}){
             $line_count++ ;
         }
     }else{
-	    $line_count += tr/\n/\n/ while sysread($self->{_filehandle}, $_, 2 ** 16);
+        $line_count += tr/\n/\n/ while sysread($self->{_filehandle}, $_, 2 ** 16);
     }
-	return $line_count;
+    return $line_count;
 }
 
 sub AUTOLOAD{
@@ -139,23 +139,23 @@ sub AUTOLOAD{
 }
 
 sub reopenFileHandle{
-	my ($self) = @_;
-	croak "Error - can't use reopenFileHandle method on input from STDIN!\n" if ($self->{_file} eq '-');
-	close $self->{_filehandle};
-	$self->{_filehandle} = $self -> _openFileHandle();
-	return $self->{_filehandle} if defined wantarray;
+    my ($self) = @_;
+    croak "Error - can't use reopenFileHandle method on input from STDIN!\n" if ($self->{_file} eq '-');
+    close $self->{_filehandle};
+    $self->{_filehandle} = $self -> _openFileHandle();
+    return $self->{_filehandle} if defined wantarray;
 }
 
 sub _openFileHandle{
-	my ($self) = @_;
-	my $FH;
-	croak "file argument is not defined! " if not defined $self->{_file};
-	if ($self->{_file} =~ /\.gz/){
-		$FH = new IO::Uncompress::Gunzip $self->{_file}, MultiStream => 1 or croak "IO::Uncompress::Gunzip failed while opening $self->{_file} for reading: \n$GunzipError";
-	}else{
-		open ($FH, $self->{_file}) or croak "Can't open VCF file $self->{_file}: $! ";
-	}
-	return $FH;
+    my ($self) = @_;
+    my $FH;
+    croak "file argument is not defined! " if not defined $self->{_file};
+    if ($self->{_file} =~ /\.gz/){
+        $FH = new IO::Uncompress::Gunzip $self->{_file}, MultiStream => 1 or croak "IO::Uncompress::Gunzip failed while opening $self->{_file} for reading: \n$GunzipError";
+    }else{
+        open ($FH, $self->{_file}) or croak "Can't open VCF file $self->{_file}: $! ";
+    }
+    return $FH;
 }
 
 sub sortVcf{
@@ -224,10 +224,10 @@ sub sortVcf{
         $sortex->finish; 
         print STDERR "Sort done. Writing output...";
         $n = 0;
-    	while ( defined( $_ = $sortex->fetch ) ) {
+        while ( defined( $_ = $sortex->fetch ) ) {
             print $SORTOUT $_;
-		    $n++;
-    	}
+            $n++;
+        }
     }
     close $SORTOUT or croak "Couldn't finish writing to sort output file $sorted: $!\n" ;
     print STDERR " Done.\n";
@@ -291,28 +291,28 @@ sub _altToVep{
 }
 
 sub readVepHeader{
-	my ($self) = @_;
-	if (not @{$self->{_metaHeader}}){
-		croak "Method 'readVepHeader' requires meta header but no meta header lines found ";
-	}
-	my @info = grep{/^##INFO=<ID=CSQ/} (@{$self->{_metaHeader}});
-	if (not @info){
-		croak "Method 'readVepHeader' requires CSQ INFO field in meta header (e.g. '##INFO=<ID=CSQ,Number...') but no matching lines found ";
-	}
-	carp "Warning - multiple CSQ fields found, ignoring all but the most recent field " if @info > 1;
-	my $csq_line = $info[-1] ;#assume last applied VEP consequences are what we are looking for 
-	my @csq_fields = ();	
-	if ($csq_line =~ /Format:\s(\S+\|\S+)">/){
-		@csq_fields = split(/\|/, $1);
-	}else{
-		croak "Method 'readVepHeader' couldn't properly read the CSQ format from the corresponding INFO line: $csq_line ";
-	}
-	if (not @csq_fields){
-		croak "Method 'readVepHeader' didn't find any VEP fields from the corresponding CSQ INFO line: $csq_line ";
-	}
-	for (my $i = 0; $i < @csq_fields; $i++){
-		$self->{_vepCsqHeader}->{lc($csq_fields[$i])} = $i;
-	}
+    my ($self) = @_;
+    if (not @{$self->{_metaHeader}}){
+        croak "Method 'readVepHeader' requires meta header but no meta header lines found ";
+    }
+    my @info = grep{/^##INFO=<ID=CSQ/} (@{$self->{_metaHeader}});
+    if (not @info){
+        croak "Method 'readVepHeader' requires CSQ INFO field in meta header (e.g. '##INFO=<ID=CSQ,Number...') but no matching lines found ";
+    }
+    carp "Warning - multiple CSQ fields found, ignoring all but the most recent field " if @info > 1;
+    my $csq_line = $info[-1] ;#assume last applied VEP consequences are what we are looking for 
+    my @csq_fields = ();    
+    if ($csq_line =~ /Format:\s(\S+\|\S+)">/){
+        @csq_fields = split(/\|/, $1);
+    }else{
+        croak "Method 'readVepHeader' couldn't properly read the CSQ format from the corresponding INFO line: $csq_line ";
+    }
+    if (not @csq_fields){
+        croak "Method 'readVepHeader' didn't find any VEP fields from the corresponding CSQ INFO line: $csq_line ";
+    }
+    for (my $i = 0; $i < @csq_fields; $i++){
+        $self->{_vepCsqHeader}->{lc($csq_fields[$i])} = $i;
+    }
     #from v73 of VEP 'hgnc' has been replaced with 'symbol'
     #the code below is aimed to maintain compatibility between versions
     if (grep {/^hgnc$/i} @csq_fields){
@@ -330,88 +330,88 @@ sub readVepHeader{
 
 sub vepFieldToString{
 #take single vep hash and order it according to vep header - useful if splitting vep fields to sep lines
-	my ($self, $csq) = @_;
-	if (not $self->{_vepCsqArrayField}){
-		$self->readVepHeader();
-	}
-	my @string = ();
-	foreach my $field (@{$self->{_vepCsqArrayField}}){
-		if (exists $csq->{lc$field}){
-			$csq->{lc$field} ? push @string, $csq->{lc$field} : push @string, "";
-		}
-	}
-	return join("|", @string);
+    my ($self, $csq) = @_;
+    if (not $self->{_vepCsqArrayField}){
+        $self->readVepHeader();
+    }
+    my @string = ();
+    foreach my $field (@{$self->{_vepCsqArrayField}}){
+        if (exists $csq->{lc$field}){
+            $csq->{lc$field} ? push @string, $csq->{lc$field} : push @string, "";
+        }
+    }
+    return join("|", @string);
 }
 
 sub getVepFields{
 #if more than one VEP annotation has been performed this will only look at the field corresponding to the last 
 #applied annotation
-	#ALLELE FIELD IS REQUIRED
-	#my @all_genes =  $obj->getVepFields("Gene")
-	#my @all_gene_cons_pph = $obj->getVepFields([Gene, Consequence, PolyPhen]); # returns an array of hashes with the keys being the field 
-	#my @everything = $obj->getVepFields("All");
-	#	e.g. $all_gene_cons_pph[0] -> {Gene} = ENSG000012345
+    #ALLELE FIELD IS REQUIRED
+    #my @all_genes =  $obj->getVepFields("Gene")
+    #my @all_gene_cons_pph = $obj->getVepFields([Gene, Consequence, PolyPhen]); # returns an array of hashes with the keys being the field 
+    #my @everything = $obj->getVepFields("All");
+    #    e.g. $all_gene_cons_pph[0] -> {Gene} = ENSG000012345
 
-	my ($self, $fields) = @_;
-	if (not $fields){
-		croak "Method 'getVepFields' requires either an ARRAY reference or a scalar value as an argument";
-	}elsif(ref $fields && ref $fields ne 'ARRAY'){
-		croak "Method 'getVepFields' takes either an ARRAY reference or a scalar value as an argument, not a " . ref $fields ." reference ";
-	}
-	if (not $self->{_vepCsqHeader}){#get VEP CSQ format from header if we haven't already
-		$self->readVepHeader();
-	}
-	my @info_field = split(';', $self->getVariantField("INFO"));
-	my @csqs = grep{/^CSQ/} @info_field;
-	if (not @csqs){
-		carp "No CSQ field found in INFO field for line: $self->{_currentLine} ";
-		return;
-	}
-	my @vep = split(",", $csqs[-1]);
-	my @return = ();
-	if (not ref $fields){
-		foreach my $v (@vep){
-			my @v_part = split(/[\|]/, $v);
-			if (lc$fields eq 'all'){
-				my %consequence = ();
-				foreach my $f (keys %{$self->{_vepCsqHeader}}){
-					my $value = $v_part[$self->{_vepCsqHeader}->{$f}];
-					$value =~ s/^CSQ=//i if $value;
-					$consequence{lc$f} = $value;
-				}
-				push @return, \%consequence;
-			}else{
-				if (exists $self->{_vepCsqHeader}->{lc($fields)}){
-					my $value = $v_part[$self->{_vepCsqHeader}->{lc($fields)}] ;
-					$value =~ s/^CSQ=//i;
-					push @return, $value;
-				}else{
-					carp "$fields feature does not exist in CSQ field ";
-				}
-			}
-		}
-	}elsif (ref $fields eq 'ARRAY'){
-		my %warned = ();
-		foreach my $v (@vep){
-			my %consequence = ();
-			my @v_part = split(/\|/, $v);
-			foreach my $f (@$fields){
-				if (exists $self->{_vepCsqHeader}->{lc($f)}){
-					my $value = $v_part[$self->{_vepCsqHeader}->{lc($f)}];
-					$value =~ s/^CSQ=//i if $value;
-					$consequence{lc$f} = $value;
-				}else{
-					carp "$f feature does not exist in CSQ field " unless $warned{lc$f};
-					$consequence{lc$f} = '';
-					$warned{lc$f}++;
-				}
-			}
-			push @return, \%consequence;
-		}
-	}
-	return @return if wantarray;
-	return \@return if defined wantarray;
-	carp "getVepFields called in void context ";
+    my ($self, $fields) = @_;
+    if (not $fields){
+        croak "Method 'getVepFields' requires either an ARRAY reference or a scalar value as an argument";
+    }elsif(ref $fields && ref $fields ne 'ARRAY'){
+        croak "Method 'getVepFields' takes either an ARRAY reference or a scalar value as an argument, not a " . ref $fields ." reference ";
+    }
+    if (not $self->{_vepCsqHeader}){#get VEP CSQ format from header if we haven't already
+        $self->readVepHeader();
+    }
+    my @info_field = split(';', $self->getVariantField("INFO"));
+    my @csqs = grep{/^CSQ/} @info_field;
+    if (not @csqs){
+        carp "No CSQ field found in INFO field for line: $self->{_currentLine} ";
+        return;
+    }
+    my @vep = split(",", $csqs[-1]);
+    my @return = ();
+    if (not ref $fields){
+        foreach my $v (@vep){
+            my @v_part = split(/[\|]/, $v);
+            if (lc$fields eq 'all'){
+                my %consequence = ();
+                foreach my $f (keys %{$self->{_vepCsqHeader}}){
+                    my $value = $v_part[$self->{_vepCsqHeader}->{$f}];
+                    $value =~ s/^CSQ=//i if $value;
+                    $consequence{lc$f} = $value;
+                }
+                push @return, \%consequence;
+            }else{
+                if (exists $self->{_vepCsqHeader}->{lc($fields)}){
+                    my $value = $v_part[$self->{_vepCsqHeader}->{lc($fields)}] ;
+                    $value =~ s/^CSQ=//i;
+                    push @return, $value;
+                }else{
+                    carp "$fields feature does not exist in CSQ field ";
+                }
+            }
+        }
+    }elsif (ref $fields eq 'ARRAY'){
+        my %warned = ();
+        foreach my $v (@vep){
+            my %consequence = ();
+            my @v_part = split(/\|/, $v);
+            foreach my $f (@$fields){
+                if (exists $self->{_vepCsqHeader}->{lc($f)}){
+                    my $value = $v_part[$self->{_vepCsqHeader}->{lc($f)}];
+                    $value =~ s/^CSQ=//i if $value;
+                    $consequence{lc$f} = $value;
+                }else{
+                    carp "$f feature does not exist in CSQ field " unless $warned{lc$f};
+                    $consequence{lc$f} = '';
+                    $warned{lc$f}++;
+                }
+            }
+            push @return, \%consequence;
+        }
+    }
+    return @return if wantarray;
+    return \@return if defined wantarray;
+    carp "getVepFields called in void context ";
 }
 
 #this method is required for finding tabix to allow
@@ -438,38 +438,38 @@ sub setTabix{
 
 sub readPosition{
 #first use:
-# 	if ($obj->searchForPosition(chrom => 1, pos = 2000000)){
+#     if ($obj->searchForPosition(chrom => 1, pos = 2000000)){
 #then: 
-#		while($obj->readPosition){
-#			<do something with each line/variant (_currentLine/_currentVar)>
-#		}
-#	}
-	my ($self) = @_;
-	return if not $self->{_searchMatches};
-	return if not @{$self->{_searchMatches}};
-	$self->{_currentLine} = shift @{$self->{_searchMatches}};
-	chomp ($self->{_currentLine});
-	@{$self->{_split_line}} = split("\t", $self->{_currentLine});
-	$self->readVariant;
-	return $self->{_currentLine} if defined wantarray;
+#        while($obj->readPosition){
+#            <do something with each line/variant (_currentLine/_currentVar)>
+#        }
+#    }
+    my ($self) = @_;
+    return if not $self->{_searchMatches};
+    return if not @{$self->{_searchMatches}};
+    $self->{_currentLine} = shift @{$self->{_searchMatches}};
+    chomp ($self->{_currentLine});
+    @{$self->{_split_line}} = split("\t", $self->{_currentLine});
+    $self->readVariant;
+    return $self->{_currentLine} if defined wantarray;
 }
 
 sub searchForPosition{
 #my @matching lines = $obj->searchForPosition(chrom => 1, pos = 2000000)
 #OR
-# 	if ($obj->searchForPosition(chrom => 1, pos = 2000000)){
-#		while($obj->readPosition){
-#			<do something with each matching line (_currentLine/_currentVar)>
-#		}
-#	}
-	my ($self, %args) = @_;
-	croak "Can't use searchForPosition method when noLineCount option is set and input is not bgzip compressed " if $self->{_noLineCount} and not $self->{_file} =~ /\.gz$/;
-	croak "Can't use searchForPosition method when reading from STDIN" if $self->{_inputIsStdin} ;
-	carp "chrom argument is required for searchForPosition method " if not exists $args{chrom};
-	carp "pos argument is required for searchForPosition method " if not exists $args{pos};
-	return if not exists $args{pos} or not exists $args{chrom};
+#     if ($obj->searchForPosition(chrom => 1, pos = 2000000)){
+#        while($obj->readPosition){
+#            <do something with each matching line (_currentLine/_currentVar)>
+#        }
+#    }
+    my ($self, %args) = @_;
+    croak "Can't use searchForPosition method when noLineCount option is set and input is not bgzip compressed " if $self->{_noLineCount} and not $self->{_file} =~ /\.gz$/;
+    croak "Can't use searchForPosition method when reading from STDIN" if $self->{_inputIsStdin} ;
+    carp "chrom argument is required for searchForPosition method " if not exists $args{chrom};
+    carp "pos argument is required for searchForPosition method " if not exists $args{pos};
+    return if not exists $args{pos} or not exists $args{chrom};
     #if compressed assume bgzip compression and try to read with tabix
-	if ($self->{_file} =~ /\.gz$/){
+    if ($self->{_file} =~ /\.gz$/){
         if (not -e "$self->{_index}"){
             $self->setTabix if not $self->{_tabix}; 
             print STDERR "Indexing $self->{_file} with tabix.\n";
@@ -486,429 +486,429 @@ sub searchForPosition{
             push @matches, $result;
         }
         $self->{_searchMatches} = \@matches;
-	    return @matches if defined wantarray;
+        return @matches if defined wantarray;
         return;
     }
 
     #otherwise use our own line indexing method
-	if (not $self->{_indexHandle}){
-		if (not -e $self->{_index}){
-			$self->{_indexHandle} = $self->indexVcf;
-		}else{
-			open ($self->{_indexHandle}, $self->{_index}) or croak "Can't open index file $self->{_index} for reading: $! ";
-		}
-	}
-	if (not $self->{_contigOrder}){
-		$self->{_contigIndex} ||= $self->{_file}.".pvdict";
-		if (not -e $self->{_contigIndex}){
-			$self->{_indexHandle} = $self->indexVcf;
-		}else{
-			open (my $CONTIGS, $self->{_contigIndex}) or croak "Can't open contig index $self->{_contigIndex} for reading: $! ";
-			my %contigs = ();
-			while (my $line = <$CONTIGS>){
-				chomp $line;
-				croak "Contig index $self->{_contigIndex} is corrupt - extraneous white space found " if $line =~ /\s/;
-				if (exists $contigs{$line}){
-					if ($contigs{$line}  != scalar(keys%contigs) -1 ){
-						croak "Contig index $self->{_contigIndex} is corrupt - duplicate entries ";
-					}
-				}else{
-					$contigs{$line}  = scalar(keys%contigs);
-				}
-			}
-			close $CONTIGS;
-			croak "Could not find any contigs in contig index ($self->{_contigIndex}). Try deleting $self->{_contigIndex} and rerunning "  if (not %contigs); 
-			$self->{_contigOrder} = \%contigs;
-		}
-	}
-	my @matches = $self->_searchVcf(chrom => $args{chrom}, pos => $args{pos});
-	$self->{_searchMatches} = \@matches;
-	return @matches if defined wantarray;
+    if (not $self->{_indexHandle}){
+        if (not -e $self->{_index}){
+            $self->{_indexHandle} = $self->indexVcf;
+        }else{
+            open ($self->{_indexHandle}, $self->{_index}) or croak "Can't open index file $self->{_index} for reading: $! ";
+        }
+    }
+    if (not $self->{_contigOrder}){
+        $self->{_contigIndex} ||= $self->{_file}.".pvdict";
+        if (not -e $self->{_contigIndex}){
+            $self->{_indexHandle} = $self->indexVcf;
+        }else{
+            open (my $CONTIGS, $self->{_contigIndex}) or croak "Can't open contig index $self->{_contigIndex} for reading: $! ";
+            my %contigs = ();
+            while (my $line = <$CONTIGS>){
+                chomp $line;
+                croak "Contig index $self->{_contigIndex} is corrupt - extraneous white space found " if $line =~ /\s/;
+                if (exists $contigs{$line}){
+                    if ($contigs{$line}  != scalar(keys%contigs) -1 ){
+                        croak "Contig index $self->{_contigIndex} is corrupt - duplicate entries ";
+                    }
+                }else{
+                    $contigs{$line}  = scalar(keys%contigs);
+                }
+            }
+            close $CONTIGS;
+            croak "Could not find any contigs in contig index ($self->{_contigIndex}). Try deleting $self->{_contigIndex} and rerunning "  if (not %contigs); 
+            $self->{_contigOrder} = \%contigs;
+        }
+    }
+    my @matches = $self->_searchVcf(chrom => $args{chrom}, pos => $args{pos});
+    $self->{_searchMatches} = \@matches;
+    return @matches if defined wantarray;
 }
 
 sub _binSearch{
-	my ($self, %args) = @_;
-	my $u = $self->{_totalLines};
-	my $l = 1;
-	return 0 if not exists $self->{_contigOrder}->{$args{chrom}};
-	while ($l <= $u){
-		my $i = int(($l + $u)/2);
-		my $line =  $self->_lineWithIndex($i);
-		if ($line =~ /^#/){
-			$l = $i+1;
-			next;
-		}
-		my @split = split("\t", $line);
-		if ($self->{_contigOrder}->{$args{chrom}}  < $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]} or
-			($self->{_contigOrder}->{$args{chrom}} == $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]} and $args{pos} < $split[$self->{_fields}->{POS}]) ){
-				$u = $i -1;
-		}elsif($self->{_contigOrder}->{$args{chrom}}  > $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]} or
-			($self->{_contigOrder}->{$args{chrom}} == $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]} and $args{pos} > $split[$self->{_fields}->{POS}]) ){
-				$l = $i + 1;
-		}else{
-			return $i;
-		}
-	}
-	return 0;
+    my ($self, %args) = @_;
+    my $u = $self->{_totalLines};
+    my $l = 1;
+    return 0 if not exists $self->{_contigOrder}->{$args{chrom}};
+    while ($l <= $u){
+        my $i = int(($l + $u)/2);
+        my $line =  $self->_lineWithIndex($i);
+        if ($line =~ /^#/){
+            $l = $i+1;
+            next;
+        }
+        my @split = split("\t", $line);
+        if ($self->{_contigOrder}->{$args{chrom}}  < $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]} or
+            ($self->{_contigOrder}->{$args{chrom}} == $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]} and $args{pos} < $split[$self->{_fields}->{POS}]) ){
+                $u = $i -1;
+        }elsif($self->{_contigOrder}->{$args{chrom}}  > $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]} or
+            ($self->{_contigOrder}->{$args{chrom}} == $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]} and $args{pos} > $split[$self->{_fields}->{POS}]) ){
+                $l = $i + 1;
+        }else{
+            return $i;
+        }
+    }
+    return 0;
 }
 
 sub _searchVcf{
-	my ($self, %args) = @_;
-	croak "chrom argument is required for _searchVcf method " if not exists $args{chrom};
-	croak "pos argument is required for _searchVcf method " if not exists $args{pos};
-	my $i = $self->_binSearch(chrom=>$args{chrom}, pos => $args{pos});
-	if ($i){
-		my @hits;
-		for (my $j = $i - 1; $j > 0; $j--){#look at previous lines
-			my $line = $self->_lineWithIndex($j);
-		 	my @split = split("\t", $line);
-			if ($split[$self->{_fields}->{CHROM}] eq $args{chrom} and $split[$self->{_fields}->{POS}] == $args{pos}){
-				push @hits, $line;
-			}else{
-				last;
-			}
-		}
-		@hits = reverse(@hits);#put in original order
-		push @hits, $self->_lineWithIndex($i);#add original hit
-		for (my $j = $i + 1; $j <= $self->{_totalLines}; $j++){#look at next lines
-			my $line = $self->_lineWithIndex($j);
-		 	my @split = split("\t", $line);
-			if ($split[$self->{_fields}->{CHROM}] eq $args{chrom} and $split[$self->{_fields}->{POS}] == $args{pos}){
-				push @hits, $line;
-			}else{
-				last;
-			}
-		}
-		return @hits;
-	}else{
-		return;
-	}
+    my ($self, %args) = @_;
+    croak "chrom argument is required for _searchVcf method " if not exists $args{chrom};
+    croak "pos argument is required for _searchVcf method " if not exists $args{pos};
+    my $i = $self->_binSearch(chrom=>$args{chrom}, pos => $args{pos});
+    if ($i){
+        my @hits;
+        for (my $j = $i - 1; $j > 0; $j--){#look at previous lines
+            my $line = $self->_lineWithIndex($j);
+             my @split = split("\t", $line);
+            if ($split[$self->{_fields}->{CHROM}] eq $args{chrom} and $split[$self->{_fields}->{POS}] == $args{pos}){
+                push @hits, $line;
+            }else{
+                last;
+            }
+        }
+        @hits = reverse(@hits);#put in original order
+        push @hits, $self->_lineWithIndex($i);#add original hit
+        for (my $j = $i + 1; $j <= $self->{_totalLines}; $j++){#look at next lines
+            my $line = $self->_lineWithIndex($j);
+             my @split = split("\t", $line);
+            if ($split[$self->{_fields}->{CHROM}] eq $args{chrom} and $split[$self->{_fields}->{POS}] == $args{pos}){
+                push @hits, $line;
+            }else{
+                last;
+            }
+        }
+        return @hits;
+    }else{
+        return;
+    }
 }
 
 
 sub indexVcf{
-	my ($self) = @_;
-	if ($self->{_file} =~ /\.gz$/){
+    my ($self) = @_;
+    if ($self->{_file} =~ /\.gz$/){
         $self->setTabix if not $self->{_tabix};
         print STDERR "Indexing $self->{_file} with tabix.\n";
         my $er = `$self->{_tabix} -p vcf $self->{_file} 2>&1`;
         croak "Tabix indexing failed, code $?: $er\n" if $?;
         return;
     }
-	open (my $INDEX, "+>$self->{_index}") or croak "can't open $self->{_index} for writing index: $!";
-	$self->reopenFileHandle();
+    open (my $INDEX, "+>$self->{_index}") or croak "can't open $self->{_index} for writing index: $!";
+    $self->reopenFileHandle();
     my $offset = 0;
-	$self->{_contigIndex} = $self->{_file}.".pvdict";
-	open (my $CONTIGS, ">$self->{_contigIndex}") or croak "Can't open $self->{_contigIndex} file for writing contig order: $! ";
-	my %contigs = ();
-	my $pack = "N";
-	print STDERR "Indexing $self->{_file} ($self->{_totalLines} lines)...";
-	$pack = "Q" if $self->{_fileSize} >= 4294967296;
-	while (my $line = scalar readline $self->{_filehandle}){
-		print $INDEX pack($pack, $offset);
-		$offset = tell $self->{_filehandle};
-		next if $line =~ /^#/;
-		my $chrom = (split "\t", $line)[$self->{_fields}->{CHROM}];
-		if (exists $contigs{$chrom}){
-			if ($contigs{$chrom}  != scalar(keys%contigs) -1 ){
-				close $INDEX;
-				unlink $self->{_index} or carp "Couldn't delete partial index $self->{_index} - please delete manually: $!" ;
-				croak "Can't index VCF - $self->{_file} not sorted properly ";
-			}
-		}else{
-			$contigs{$chrom}  = scalar(keys%contigs);
-			print $CONTIGS "$chrom\n";
-		}
-	}
-	print STDERR " Done indexing.\n";
-	$self->{_contigOrder} = \%contigs;
-	$self->reopenFileHandle();
-	close $CONTIGS;
-	close $INDEX;
-	open ($INDEX, $self->{_index}) or croak "can't open $self->{_index} for reading index: $!";
-	return $INDEX if defined wantarray;
+    $self->{_contigIndex} = $self->{_file}.".pvdict";
+    open (my $CONTIGS, ">$self->{_contigIndex}") or croak "Can't open $self->{_contigIndex} file for writing contig order: $! ";
+    my %contigs = ();
+    my $pack = "N";
+    print STDERR "Indexing $self->{_file} ($self->{_totalLines} lines)...";
+    $pack = "Q" if $self->{_fileSize} >= 4294967296;
+    while (my $line = scalar readline $self->{_filehandle}){
+        print $INDEX pack($pack, $offset);
+        $offset = tell $self->{_filehandle};
+        next if $line =~ /^#/;
+        my $chrom = (split "\t", $line)[$self->{_fields}->{CHROM}];
+        if (exists $contigs{$chrom}){
+            if ($contigs{$chrom}  != scalar(keys%contigs) -1 ){
+                close $INDEX;
+                unlink $self->{_index} or carp "Couldn't delete partial index $self->{_index} - please delete manually: $!" ;
+                croak "Can't index VCF - $self->{_file} not sorted properly ";
+            }
+        }else{
+            $contigs{$chrom}  = scalar(keys%contigs);
+            print $CONTIGS "$chrom\n";
+        }
+    }
+    print STDERR " Done indexing.\n";
+    $self->{_contigOrder} = \%contigs;
+    $self->reopenFileHandle();
+    close $CONTIGS;
+    close $INDEX;
+    open ($INDEX, $self->{_index}) or croak "can't open $self->{_index} for reading index: $!";
+    return $INDEX if defined wantarray;
 }
 
 sub _lineWithIndex{
-	my ($self, $line_number) =@_;
-	my $size;               # size of an index entry
-	my $i_offset;           # offset into the index of the entry
-	my $entry;              # index entry
-	my $d_offset;           # offset into the data file
-	my $pack = "N";
-	$pack = "Q" if $self->{_fileSize} >= 4294967296;
-	$size = length(pack($pack, 0));
-	$i_offset = $size * ($line_number-1);
-	seek($self->{_indexHandle}, $i_offset, 0) or return;
-	read($self->{_indexHandle}, $entry, $size);
-	$d_offset = unpack($pack, $entry);
-	seek($self->{_filehandle}, $d_offset, 0);
-	return scalar readline $self->{_filehandle};
+    my ($self, $line_number) =@_;
+    my $size;               # size of an index entry
+    my $i_offset;           # offset into the index of the entry
+    my $entry;              # index entry
+    my $d_offset;           # offset into the data file
+    my $pack = "N";
+    $pack = "Q" if $self->{_fileSize} >= 4294967296;
+    $size = length(pack($pack, 0));
+    $i_offset = $size * ($line_number-1);
+    seek($self->{_indexHandle}, $i_offset, 0) or return;
+    read($self->{_indexHandle}, $entry, $size);
+    $d_offset = unpack($pack, $entry);
+    seek($self->{_filehandle}, $d_offset, 0);
+    return scalar readline $self->{_filehandle};
 }
 sub _readHeader{
-	my ($self) = @_;
-	my @meta_header = ();
-	my @header = ();
-	my $pos = tell $self->{_filehandle};
-	while (my $vcf_line = scalar readline $self->{_filehandle}){
-		if ($vcf_line =~ /^##/){
-			push(@meta_header, $vcf_line);
-		}elsif ($vcf_line =~ /^#/){
-			push(@header, $vcf_line);
-		}else{
-			croak "No header found for VCF file $self->{_file} " if not @header;
-			if ($self->{_inputIsStdin} or $self->{_file} =~ /\.gz$/){
-				$self->{_firstLine} = $vcf_line;
-				last;
-			}else{
-				#move back so that readLine method won't skip first line
-				seek ($self->{_filehandle},0,0);
-				seek ($self->{_filehandle}, $pos, 0);
-				last;
-			}
-		}
-		$pos = tell $self->{_filehandle};
-	}
-	croak "No header found for VCF file $self->{_file} " if not @header;
-	if (@header > 1){
-		carp "WARNING - Multiple headers found for VCF file $self->{_file} ";
-		#in case there are multiple header lines we'll assume the last one is the REAL header
-		#and put the others in the _metaHeader
-		push (@meta_header, @header[0..$#header-1]);
-	}
-	$self->{_metaHeader} = \@meta_header;
-	#in case there are multiple header lines we'll assume the last one is the REAL header
-	chomp ($self->{_header} = $header[-1]);
-	return if not defined wantarray;
-	return (@meta_header, $self->{_header}) if wantarray;
-	return $self->{_header};
+    my ($self) = @_;
+    my @meta_header = ();
+    my @header = ();
+    my $pos = tell $self->{_filehandle};
+    while (my $vcf_line = scalar readline $self->{_filehandle}){
+        if ($vcf_line =~ /^##/){
+            push(@meta_header, $vcf_line);
+        }elsif ($vcf_line =~ /^#/){
+            push(@header, $vcf_line);
+        }else{
+            croak "No header found for VCF file $self->{_file} " if not @header;
+            if ($self->{_inputIsStdin} or $self->{_file} =~ /\.gz$/){
+                $self->{_firstLine} = $vcf_line;
+                last;
+            }else{
+                #move back so that readLine method won't skip first line
+                seek ($self->{_filehandle},0,0);
+                seek ($self->{_filehandle}, $pos, 0);
+                last;
+            }
+        }
+        $pos = tell $self->{_filehandle};
+    }
+    croak "No header found for VCF file $self->{_file} " if not @header;
+    if (@header > 1){
+        carp "WARNING - Multiple headers found for VCF file $self->{_file} ";
+        #in case there are multiple header lines we'll assume the last one is the REAL header
+        #and put the others in the _metaHeader
+        push (@meta_header, @header[0..$#header-1]);
+    }
+    $self->{_metaHeader} = \@meta_header;
+    #in case there are multiple header lines we'll assume the last one is the REAL header
+    chomp ($self->{_header} = $header[-1]);
+    return if not defined wantarray;
+    return (@meta_header, $self->{_header}) if wantarray;
+    return $self->{_header};
 }
 
 sub _readHeaderInfo{
-	my ($self) = @_;
-	croak "Header not defined!" if not defined $self->{_header};#this should never happen - should have exited in _getHeader called by new
-	my @split = split ("\t", $self->{_header});
-	#Essential fields are CHROM POS ID REF ALT QUAL FILTER INFO
-	foreach my $f (qw (CHROM POS ID REF ALT QUAL FILTER INFO)){
-		my $i = 0;
-		no warnings 'uninitialized';
-		$i++ until $split[$i] =~ /^#*$f$/ or $i > $#split;
-		if (not $self->{_noHeaderCheck}){
-			croak "Can't find required $f field in header:\n$self->{_header}\n" if $i > $#split;
-		}else{
-			next if $i > $#split;
-		}
-		$self->{_fields} ->{$f} = $i;
-		#$self->{_fields} is a ref to an anonymous hash giving the column of 
-		#each of the essential fields in the header. While these fields are 
-		#usually the same this allows for custom fields in VCFs e.g. before CHROM
-	}
-	#FORMAT FIELD ONLY PRESENT IF GENOTYPE INFORMATION IS AVAILABLE
-	my $i = 0; 
-	no warnings 'uninitialized';
-	$i++ until $split[$i] =~ /#*FORMAT$/ or $i > $#split;
-	$self->{_fields}->{FORMAT} = $i unless $i > $#split;
-	#sample fields must be after FORMAT if genotpyes are present - assume anything after FORMATis a sample
-	if (defined ($self->{_fields}->{FORMAT})){
-		croak "No Samples found in header:\n$self->{_header}\n" if $self->{_fields}->{FORMAT} >= $#split;
-		for (my $i = 1 + $self->{_fields}->{FORMAT}; $i < @split; $i++){
-			$self->{_samples}->{$split[$i]} = $i;
-			push @{$self->{_sampleOrder}}, $split[$i];
-		}
-		return ($self->{_fields}, $self->{_samples}) if defined wantarray;
-	}else{#otherwise there should be no samples/genotypes
-		return ($self->{_fields}) if defined wantarray;
-	}
-		
+    my ($self) = @_;
+    croak "Header not defined!" if not defined $self->{_header};#this should never happen - should have exited in _getHeader called by new
+    my @split = split ("\t", $self->{_header});
+    #Essential fields are CHROM POS ID REF ALT QUAL FILTER INFO
+    foreach my $f (qw (CHROM POS ID REF ALT QUAL FILTER INFO)){
+        my $i = 0;
+        no warnings 'uninitialized';
+        $i++ until $split[$i] =~ /^#*$f$/ or $i > $#split;
+        if (not $self->{_noHeaderCheck}){
+            croak "Can't find required $f field in header:\n$self->{_header}\n" if $i > $#split;
+        }else{
+            next if $i > $#split;
+        }
+        $self->{_fields} ->{$f} = $i;
+        #$self->{_fields} is a ref to an anonymous hash giving the column of 
+        #each of the essential fields in the header. While these fields are 
+        #usually the same this allows for custom fields in VCFs e.g. before CHROM
+    }
+    #FORMAT FIELD ONLY PRESENT IF GENOTYPE INFORMATION IS AVAILABLE
+    my $i = 0; 
+    no warnings 'uninitialized';
+    $i++ until $split[$i] =~ /#*FORMAT$/ or $i > $#split;
+    $self->{_fields}->{FORMAT} = $i unless $i > $#split;
+    #sample fields must be after FORMAT if genotpyes are present - assume anything after FORMATis a sample
+    if (defined ($self->{_fields}->{FORMAT})){
+        croak "No Samples found in header:\n$self->{_header}\n" if $self->{_fields}->{FORMAT} >= $#split;
+        for (my $i = 1 + $self->{_fields}->{FORMAT}; $i < @split; $i++){
+            $self->{_samples}->{$split[$i]} = $i;
+            push @{$self->{_sampleOrder}}, $split[$i];
+        }
+        return ($self->{_fields}, $self->{_samples}) if defined wantarray;
+    }else{#otherwise there should be no samples/genotypes
+        return ($self->{_fields}) if defined wantarray;
+    }
+        
 }
 
 sub getHeaderColumns{
-	my ($self) = @_;
-	my %columns = ();
-	foreach my $k (keys %{$self->{_fields}}){
-		$columns{$k} = $self->{_fields}->{$k};
-	}
-	foreach my $k (keys %{$self->{_samples}}){
-		$columns{$k} = $self->{_samples}->{$k};
-	}
-	return %columns;
+    my ($self) = @_;
+    my %columns = ();
+    foreach my $k (keys %{$self->{_fields}}){
+        $columns{$k} = $self->{_fields}->{$k};
+    }
+    foreach my $k (keys %{$self->{_samples}}){
+        $columns{$k} = $self->{_samples}->{$k};
+    }
+    return %columns;
 }
 
 
 sub getSampleNames{
-	my ($self) =@_;
-	croak "No samples found in header " if not defined $self->{_samples};
-	return @{$self->{_sampleOrder}} if defined wantarray;
-	#return keys %{$self->{_samples}} if defined wantarray;
-	carp "getSampleNames method called in void context ";	
+    my ($self) =@_;
+    croak "No samples found in header " if not defined $self->{_samples};
+    return @{$self->{_sampleOrder}} if defined wantarray;
+    #return keys %{$self->{_samples}} if defined wantarray;
+    carp "getSampleNames method called in void context ";    
 }
 
 sub changeHeader{
-	my ($self, %args) = @_;
-	my @header = ();
-	my @meta_header = ();
-	if ($args{file}){
-		open (my $HEAD, $args{file}) or croak "Can't open header file $args{file}: $! ";
-		while (my $vcf_line = <$HEAD>){
-			if ($vcf_line =~ /^##/){
-	                        push(@meta_header, $vcf_line);
-	                }elsif ($vcf_line =~ /^#/){
-	                        push(@header, $vcf_line);
-	                }else{
-				if (not @header){
-					carp "No header found for VCF file $args{file} ";
-					close $HEAD;
-					return 0;
-				}
-				last;
-			}
-		}
-	}elsif ($args{array}){
-		croak "array argument passed to changeHeader method must be a reference to an arrray " if ref $args{array} ne 'ARRAY';
-		foreach my $vcf_line (@{$args{array}}){
-			if ($vcf_line =~ /^##/){
-	                        push(@meta_header, $vcf_line);
-	                }elsif ($vcf_line =~ /^#/){
-	                        push(@header, $vcf_line);
-	                }else{
-				if (not @header){
-					carp "No header found for array ";
-					return 0;
-				}
-				last;
-			}
-		}
-	}elsif($args{string}){
-		my @lines = split("\n", $args{string});
-		foreach my $vcf_line (@lines){
-			if ($vcf_line =~ /^##/){
-	                        push(@meta_header, $vcf_line);
-	                }elsif ($vcf_line =~ /^#/){
-	                        push(@header, $vcf_line);
-	                }else{
-				if (not @header){
-					carp "No header found for string ";
-					return 0;
-				}
-				last;
-			}
-		}
-	}
-	if (not @header){
-		carp "No header found in changeHeader method " ;
-		return 0;
-	}
-	if (@header > 1){
-		carp "WARNING - Multiple headers found in changeHeader method";
-		#in case there are multiple header lines we'll assume the last one is the REAL header
-		#and put the others in the _metaHeader
-		push (@meta_header, @header[0..$#header-1]);
-	}
-	if (@meta_header){
-		$self->{_oldHeaderCount} += @{$self->{_metaHeader}} + 1;
-		$self->{_metaHeader} = \@meta_header;
-		
-	}
-	#in case there are multiple header lines we'll assume the last one is the REAL header
-	chomp ($self->{_header} = $header[-1]);
-	$self -> _readHeaderInfo();
-	return 1;
+    my ($self, %args) = @_;
+    my @header = ();
+    my @meta_header = ();
+    if ($args{file}){
+        open (my $HEAD, $args{file}) or croak "Can't open header file $args{file}: $! ";
+        while (my $vcf_line = <$HEAD>){
+            if ($vcf_line =~ /^##/){
+                            push(@meta_header, $vcf_line);
+                    }elsif ($vcf_line =~ /^#/){
+                            push(@header, $vcf_line);
+                    }else{
+                if (not @header){
+                    carp "No header found for VCF file $args{file} ";
+                    close $HEAD;
+                    return 0;
+                }
+                last;
+            }
+        }
+    }elsif ($args{array}){
+        croak "array argument passed to changeHeader method must be a reference to an arrray " if ref $args{array} ne 'ARRAY';
+        foreach my $vcf_line (@{$args{array}}){
+            if ($vcf_line =~ /^##/){
+                            push(@meta_header, $vcf_line);
+                    }elsif ($vcf_line =~ /^#/){
+                            push(@header, $vcf_line);
+                    }else{
+                if (not @header){
+                    carp "No header found for array ";
+                    return 0;
+                }
+                last;
+            }
+        }
+    }elsif($args{string}){
+        my @lines = split("\n", $args{string});
+        foreach my $vcf_line (@lines){
+            if ($vcf_line =~ /^##/){
+                            push(@meta_header, $vcf_line);
+                    }elsif ($vcf_line =~ /^#/){
+                            push(@header, $vcf_line);
+                    }else{
+                if (not @header){
+                    carp "No header found for string ";
+                    return 0;
+                }
+                last;
+            }
+        }
+    }
+    if (not @header){
+        carp "No header found in changeHeader method " ;
+        return 0;
+    }
+    if (@header > 1){
+        carp "WARNING - Multiple headers found in changeHeader method";
+        #in case there are multiple header lines we'll assume the last one is the REAL header
+        #and put the others in the _metaHeader
+        push (@meta_header, @header[0..$#header-1]);
+    }
+    if (@meta_header){
+        $self->{_oldHeaderCount} += @{$self->{_metaHeader}} + 1;
+        $self->{_metaHeader} = \@meta_header;
+        
+    }
+    #in case there are multiple header lines we'll assume the last one is the REAL header
+    chomp ($self->{_header} = $header[-1]);
+    $self -> _readHeaderInfo();
+    return 1;
 }
 
 
 sub getHeader{
-	my ($self, $head_only) = @_;
-	if (defined $head_only){
-		if ($head_only){
-			return $self->{_header} ."\n";
-		}else{
-			return join("", @{$self->{_metaHeader}});
-		}
-	}else{
-		return join("", @{$self->{_metaHeader}}) . $self->{_header} ."\n";
-	}
+    my ($self, $head_only) = @_;
+    if (defined $head_only){
+        if ($head_only){
+            return $self->{_header} ."\n";
+        }else{
+            return join("", @{$self->{_metaHeader}});
+        }
+    }else{
+        return join("", @{$self->{_metaHeader}}) . $self->{_header} ."\n";
+    }
 }
 
 sub readLine{
-	my ($self) = @_;
-	if ($self->{_inputIsStdin} and $self->{_firstLine}){
-		$self->{_currentLine} = $self->{_firstLine};
-		$self->{_firstLine} = '';
-	}else{
-		$self->{_currentLine} = scalar readline $self->{_filehandle};
-	}
-	if (defined $self->{_currentLine}){
-		if ($self->{_currentLine} =~ /^#/){
+    my ($self) = @_;
+    if ($self->{_inputIsStdin} and $self->{_firstLine}){
+        $self->{_currentLine} = $self->{_firstLine};
+        $self->{_firstLine} = '';
+    }else{
+        $self->{_currentLine} = scalar readline $self->{_filehandle};
+    }
+    if (defined $self->{_currentLine}){
+        if ($self->{_currentLine} =~ /^#/){
 #we should only encounter headers if we've specified a diff header on initialisation
 #we need to keep track of these lines tho in order for countLines method to work
-			no warnings 'recursion';#we might recurse through >100 headers
-			$self->{_oldHeaderCount}++;
-			$self->readLine;
-		}else{
-			$self->{_variantCount}++;
-			chomp ($self->{_currentLine});
-			@{$self->{_split_line}} = split("\t", $self->{_currentLine});
-			$self->readVariant;
-			return $self->{_currentLine} if defined wantarray;
-		}
-	}else{
-		return;
-	}
+            no warnings 'recursion';#we might recurse through >100 headers
+            $self->{_oldHeaderCount}++;
+            $self->readLine;
+        }else{
+            $self->{_variantCount}++;
+            chomp ($self->{_currentLine});
+            @{$self->{_split_line}} = split("\t", $self->{_currentLine});
+            $self->readVariant;
+            return $self->{_currentLine} if defined wantarray;
+        }
+    }else{
+        return;
+    }
 }
 
 sub countLines{
-	my ($self, $type) = @_;
-	if ($self->{_noLineCount}){
-		carp "Can't call countLines method when noLineCount argument is set ";
-		return;
-	}
-	if ($self->{_inputIsStdin}){
-		carp "Can't call countLines method when input is STDIN ";
-		return;
-	}
-	$type = "variants" if not $type;
-	my @valid_types = qw/total header remaining variants/;
-	croak "invalid type $type passed to countLines method " if not grep {/$type/} @valid_types;
-	my $header_count = 0;
-	if ($self->{_oldHeaderCount}){#if we've replaced the header already
-		$header_count = $self->{_oldHeaderCount};
-	}else{
-		$header_count = @{$self->{_metaHeader}} + 1; 
-	}
-	return $header_count if $type eq "header";
-	
-	return $self->{_totalLines} if $type eq "total";
-	return ($self->{_totalLines} - $header_count - $self->{_variantCount}) if $type eq "remaining";
-	return ($self->{_totalLines} - $header_count)  if $type eq "variants";
+    my ($self, $type) = @_;
+    if ($self->{_noLineCount}){
+        carp "Can't call countLines method when noLineCount argument is set ";
+        return;
+    }
+    if ($self->{_inputIsStdin}){
+        carp "Can't call countLines method when input is STDIN ";
+        return;
+    }
+    $type = "variants" if not $type;
+    my @valid_types = qw/total header remaining variants/;
+    croak "invalid type $type passed to countLines method " if not grep {/$type/} @valid_types;
+    my $header_count = 0;
+    if ($self->{_oldHeaderCount}){#if we've replaced the header already
+        $header_count = $self->{_oldHeaderCount};
+    }else{
+        $header_count = @{$self->{_metaHeader}} + 1; 
+    }
+    return $header_count if $type eq "header";
+    
+    return $self->{_totalLines} if $type eq "total";
+    return ($self->{_totalLines} - $header_count - $self->{_variantCount}) if $type eq "remaining";
+    return ($self->{_totalLines} - $header_count)  if $type eq "variants";
 }
-	
+    
 #this is not a perfect way of doing things but is a fudged attempt to
 #split multiallelic records that may cause a problem with VEP
 #makes no attempt at modifying INFO fields, has a go at modifying GT, AD and PL
 #fields appropriately
 sub splitMultiAllelicVariants{
-	my ($self) = @_;
-	$self->{_currentLine} ||= $self->readLine; #get line if we haven't already
-	my @ref = split(",", $self->{_currentVar}->{REF});
-	my @alleles = split(",", $self->{_currentVar}->{ALT});
-	return  $self->{_currentLine} if (@alleles < 2);#not multiallelic
-	my @splitLines = ();
-	$self->getFormatFields();
-	my @possible_codes = $self->getAllPossibleGenotypeCodes();
-	for (my $i = 0; $i < @alleles; $i++){
+    my ($self) = @_;
+    $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
+    my @ref = split(",", $self->{_currentVar}->{REF});
+    my @alleles = split(",", $self->{_currentVar}->{ALT});
+    return  $self->{_currentLine} if (@alleles < 2);#not multiallelic
+    my @splitLines = ();
+    $self->getFormatFields();
+    my @possible_codes = $self->getAllPossibleGenotypeCodes();
+    for (my $i = 0; $i < @alleles; $i++){
                 my $call_code = $i + 1;
-		my @line = ();
-		foreach my $field (qw(CHROM POS ID REF)){
-			push @line, $self->getVariantField($field);
-		}
-		push @line, $alleles[$i];
-		foreach my $field (qw(QUAL FILTER INFO FORMAT)){
+        my @line = ();
+        foreach my $field (qw(CHROM POS ID REF)){
+            push @line, $self->getVariantField($field);
+        }
+        push @line, $alleles[$i];
+        foreach my $field (qw(QUAL FILTER INFO FORMAT)){
                         if ($field eq 'INFO'){
-			    push @line, $self->getVariantField($field) .";ParseVCF_split_variant-sample_fields_may_be_inaccurate";
+                push @line, $self->getVariantField($field) .";ParseVCF_split_variant-sample_fields_may_be_inaccurate";
                         }else{
-			    push @line, $self->getVariantField($field);
+                push @line, $self->getVariantField($field);
                         }
-		}
+        }
                 foreach my $sample ($self->getSampleNames){
                     my @sample_string = ();
                     my $call = $self->getSampleVariant($sample);
@@ -917,7 +917,7 @@ sub splitMultiAllelicVariants{
                        next;
                     }else{
                         my $delimiter = '/';
-		        foreach my $format (sort { 
+                foreach my $format (sort { 
                                 $self->{_currentVar}->{varFormat}->{$a} <=> $self->{_currentVar}->{varFormat}->{$b} 
                                 } keys %{$self->{_currentVar}->{varFormat}}){
                             if ($format eq 'GT'){#convert genotype to only include REF and $alleles[$i]
@@ -962,62 +962,62 @@ sub splitMultiAllelicVariants{
                     }
                 }
             push @splitLines, join("\t", @line);
-	}
-	return @splitLines;
+    }
+    return @splitLines;
 }
 
 sub getVariantID{
-	my ($self) = @_;
-	$self->{_currentLine} ||= $self->readLine; #get line if we haven't already
-	return $self->{_currentVar}->{ID};
+    my ($self) = @_;
+    $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
+    return $self->{_currentVar}->{ID};
 }
 
 sub getVariantField{
-	my ($self, $field) = @_;
-	$field =~ s/^#+//;
-	$self->{_currentLine} ||= $self->readLine; #get line if we haven't already
-	my @valid_fields = $self->getValidFields;#qw(CHROM POS ID REF ALT QUAL FILTER INFO FORMAT);
-	croak "Invalid field ($field) passed to getVariantField method " if not grep {/$field/} @valid_fields;
-	if (exists $self->{_currentVar}->{$field}){
-		return $self->{_currentVar}->{$field};
-	}else{
-		return;
-	}
+    my ($self, $field) = @_;
+    $field =~ s/^#+//;
+    $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
+    my @valid_fields = $self->getValidFields;#qw(CHROM POS ID REF ALT QUAL FILTER INFO FORMAT);
+    croak "Invalid field ($field) passed to getVariantField method " if not grep {/$field/} @valid_fields;
+    if (exists $self->{_currentVar}->{$field}){
+        return $self->{_currentVar}->{$field};
+    }else{
+        return;
+    }
 }
 
 sub getValidFields{
-	my @valid_fields = qw(CHROM POS ID REF ALT QUAL FILTER INFO FORMAT);
-	if (defined wantarray){
-		return @valid_fields;
-	}else{	
-		carp "getValidFields method called in void context ";
-	}
+    my @valid_fields = qw(CHROM POS ID REF ALT QUAL FILTER INFO FORMAT);
+    if (defined wantarray){
+        return @valid_fields;
+    }else{    
+        carp "getValidFields method called in void context ";
+    }
 }
 
 sub getCustomField{
-	my ($self, $field) = @_;
-	$self->{_currentLine} ||= $self->readLine; #get line if we haven't already
-	if (not exists $self->{_fields}->{$field}){
-		my @split = split ("\t", $self->{_header});
-		my $i = 0;
-		no warnings 'uninitialized';
-		$i++ until $split[$i] =~ /^#*$field$/ or $i > $#split;
-		return if $i > $#split;
-		$self->{_fields}->{$field} = $i;
-	}
-	return $self->{_split_line}->[$self->{_fields}->{$field}];
+    my ($self, $field) = @_;
+    $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
+    if (not exists $self->{_fields}->{$field}){
+        my @split = split ("\t", $self->{_header});
+        my $i = 0;
+        no warnings 'uninitialized';
+        $i++ until $split[$i] =~ /^#*$field$/ or $i > $#split;
+        return if $i > $#split;
+        $self->{_fields}->{$field} = $i;
+    }
+    return $self->{_split_line}->[$self->{_fields}->{$field}];
 }
 
 sub replaceVariantField{
-	my ($self, $field, $replacement) = @_;
-	$field =~ s/^#+//;
-	$self->{_currentLine} ||= $self->readLine; #get line if we haven't already
-	my @valid_fields = $self->getValidFields;#qw(CHROM POS ID REF ALT QUAL FILTER INFO FORMAT);
-	croak "Invalid field ($field) passed to getVariantField method " if not grep {/$field/} @valid_fields;
-	$self->{_currentVar}->{$field} = $replacement;
+    my ($self, $field, $replacement) = @_;
+    $field =~ s/^#+//;
+    $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
+    my @valid_fields = $self->getValidFields;#qw(CHROM POS ID REF ALT QUAL FILTER INFO FORMAT);
+    croak "Invalid field ($field) passed to getVariantField method " if not grep {/$field/} @valid_fields;
+    $self->{_currentVar}->{$field} = $replacement;
     my @line = ();
     foreach my $f ( split ("\t", $self->{_header})){
-	    $f =~ s/^#+//;
+        $f =~ s/^#+//;
         if ($f eq $field){
             push @line, $replacement;
         }else{
@@ -1031,17 +1031,17 @@ sub replaceVariantField{
 
 
 sub getColumnNumber{
-	my ($self, $field) = @_;
-	if (not exists $self->{_fields}->{$field}){
+    my ($self, $field) = @_;
+    if (not exists $self->{_fields}->{$field}){
                 my @split = split ("\t", $self->{_header});
                 my $i = 0;
-		no warnings 'uninitialized';
+        no warnings 'uninitialized';
                 $i++ until $split[$i] =~ /^#*$field$/ or $i > $#split;
                 return if $i > $#split;
-		return $i;
+        return $i;
         }else{
-        	return $self->{_fields}->{$field};
-	}
+            return $self->{_fields}->{$field};
+    }
 }
 
 
@@ -1050,80 +1050,80 @@ sub readVariant{
 #         my %var = $obj->readVariant;
 #     }
 #
-	my ($self, %args) = @_;
-	$self->{_currentLine} ||= $self->readLine; #get line if we haven't already
-	if (defined $self->{_currentLine}){
-		my %var = map {$_ => $self->{_split_line}->[$self->{_fields}->{$_}]} keys %{$self->{_fields}};#e.g. $var{CHROM} = 1, $var{POS} = 10000
-		if (defined $self->{_samples}){
-			%{$var{calls}} = map{ $_ => $self->{_split_line}->[$self->{_samples}->{$_}] }  keys %{$self->{_samples}};#e.g. $var{calls}->{sample1} = '0/1:5,6:...'
-		}
-		$self->{_currentVar} = \%var;
-		return %var if wantarray;
-	}else{
-		return;
-	}
+    my ($self, %args) = @_;
+    $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
+    if (defined $self->{_currentLine}){
+        my %var = map {$_ => $self->{_split_line}->[$self->{_fields}->{$_}]} keys %{$self->{_fields}};#e.g. $var{CHROM} = 1, $var{POS} = 10000
+        if (defined $self->{_samples}){
+            %{$var{calls}} = map{ $_ => $self->{_split_line}->[$self->{_samples}->{$_}] }  keys %{$self->{_samples}};#e.g. $var{calls}->{sample1} = '0/1:5,6:...'
+        }
+        $self->{_currentVar} = \%var;
+        return %var if wantarray;
+    }else{
+        return;
+    }
 }
 
 sub readAlleles{
-	my ($self, %args) = @_;
-	$self->{_currentLine} ||= $self->readLine; #get line if we haven't already
-	if (defined $self->{_currentLine}){
-		my @alleles = split(",", $self->{_currentVar}->{ALT});
-		#if no variant at position then ALT will be "." and we want to remove it from our alleles array
-		@alleles = grep {! /\./ } @alleles; 
-		if (defined $args{alt_alleles} && $args{alt_alleles}){
-			return @alleles if defined wantarray;
-			carp "readAlleles method called in void context ";
-		}
-		unshift(@alleles, $self->{_currentVar}->{REF});
-		#now ref is at index 0 of @alleles, and the alts correspond to the number in the call field
-		return @alleles if defined wantarray;
-		carp "readAlleles method called in void context ";
-	}else{
-		return;
-	}
+    my ($self, %args) = @_;
+    $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
+    if (defined $self->{_currentLine}){
+        my @alleles = split(",", $self->{_currentVar}->{ALT});
+        #if no variant at position then ALT will be "." and we want to remove it from our alleles array
+        @alleles = grep {! /\./ } @alleles; 
+        if (defined $args{alt_alleles} && $args{alt_alleles}){
+            return @alleles if defined wantarray;
+            carp "readAlleles method called in void context ";
+        }
+        unshift(@alleles, $self->{_currentVar}->{REF});
+        #now ref is at index 0 of @alleles, and the alts correspond to the number in the call field
+        return @alleles if defined wantarray;
+        carp "readAlleles method called in void context ";
+    }else{
+        return;
+    }
 }
 
 sub isMultiAllelic{
-	my ($self, %args) = @_;
+    my ($self, %args) = @_;
     my $alts = $self->readAlleles(alt_alleles => 1);
     return 1 if $alts > 1;
     return 0;
 }
 
 sub getFormatFields{
-	my ($self) = @_;
-	if (not defined ($self->{_fields}->{FORMAT})){
-		carp "No FORMAT field in VCF "; 
-		return;
-	}
-	$self->{_currentLine} ||= $self->readLine; #get line if we haven't already
-	my %format_fields = ();
-	my @format = split(":", $self->{_currentVar}->{FORMAT});
-	my $i = 0;
-	foreach my $f (@format){
-		$format_fields{$f} = $i++;
-	}
-	$self->{_currentVar}->{varFormat} = \%format_fields;
-	return %format_fields if wantarray;
-	return keys %format_fields if defined wantarray;
+    my ($self) = @_;
+    if (not defined ($self->{_fields}->{FORMAT})){
+        carp "No FORMAT field in VCF "; 
+        return;
+    }
+    $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
+    my %format_fields = ();
+    my @format = split(":", $self->{_currentVar}->{FORMAT});
+    my $i = 0;
+    foreach my $f (@format){
+        $format_fields{$f} = $i++;
+    }
+    $self->{_currentVar}->{varFormat} = \%format_fields;
+    return %format_fields if wantarray;
+    return keys %format_fields if defined wantarray;
 }
 
 
 sub getSampleVariant{
-	my ($self, $sample) = @_;
-	croak "Can't invoke getSampleVariant method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
-	$self->{_currentLine} ||= $self->readLine; #get line if we haven't already
-	if (defined $self->{_currentVar}){
-		if ($sample){
-			croak "Sample $sample does not exist - samples in header are: ". join(", ",  keys %{$self->{_samples}}) ." "  if not exists $self->{_samples}->{$sample};
-			return $self->{_currentVar} -> {calls} -> {$sample} if defined wantarray;
-		}else{#otherwise just return first sample
-			return $self->{_split_line}->[$self->{_fields}->{FORMAT}+1];	
-		}
-	}else{ 
-		return;
-	}
+    my ($self, $sample) = @_;
+    croak "Can't invoke getSampleVariant method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
+    $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
+    if (defined $self->{_currentVar}){
+        if ($sample){
+            croak "Sample $sample does not exist - samples in header are: ". join(", ",  keys %{$self->{_samples}}) ." "  if not exists $self->{_samples}->{$sample};
+            return $self->{_currentVar} -> {calls} -> {$sample} if defined wantarray;
+        }else{#otherwise just return first sample
+            return $self->{_split_line}->[$self->{_fields}->{FORMAT}+1];    
+        }
+    }else{ 
+        return;
+    }
 }
 
 sub getSampleCall{
@@ -1131,13 +1131,13 @@ sub getSampleCall{
 #unless multiple argument is used in which
 #case a hash of sample=>call key/values is returned
 #returns './.' for samples below $args{minGQ}
-	my ($self, %args) = @_;
-	croak "Can't invoke getSampleCall method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
-	carp "WARNING Both multiple and sample arguments supplied to getSampleCall method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
-	$self->{_currentLine} ||= $self->readLine; #get line if we haven't already
-	if (defined $self->{_currentVar}){
-		my $var; 
-		if ($args{all}){
+    my ($self, %args) = @_;
+    croak "Can't invoke getSampleCall method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
+    carp "WARNING Both multiple and sample arguments supplied to getSampleCall method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
+    $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
+    if (defined $self->{_currentVar}){
+        my $var; 
+        if ($args{all}){
                     my %calls = ();
                     foreach my $sample (keys %{$self->{_samples}}){
                         if (exists $args{minGQ} and $args{minGQ} > 0){
@@ -1146,216 +1146,216 @@ sub getSampleCall{
                            $calls{$sample} = './.';
                             next;
                             }
-			    if ($self->getSampleGenotypeField(sample=>$sample, field=>'GQ') < $args{minGQ}){
+                if ($self->getSampleGenotypeField(sample=>$sample, field=>'GQ') < $args{minGQ}){
                                 $calls{$sample} = './.';
                                 next;
                             }
                         }
-		        my $call = $self->getSampleGenotypeField(sample=>$sample, field=>'GT'); 
-		        $calls{$sample} = $call;
-		    }
-		    return %calls if defined wantarray;
-		    carp "getSampleCall called in a void context ";
-		}elsif($args{multiple}){
-			croak "multiple argument must be an array reference " if ref $args{multiple} ne 'ARRAY';
-			my %calls = ();
-			foreach my $sample (@{$args{multiple}}){
-				if (exists $args{minGQ} and $args{minGQ} > 0){
-					if (not defined $self->getSampleGenotypeField(sample=>$sample, field=>'GQ')){
+                my $call = $self->getSampleGenotypeField(sample=>$sample, field=>'GT'); 
+                $calls{$sample} = $call;
+            }
+            return %calls if defined wantarray;
+            carp "getSampleCall called in a void context ";
+        }elsif($args{multiple}){
+            croak "multiple argument must be an array reference " if ref $args{multiple} ne 'ARRAY';
+            my %calls = ();
+            foreach my $sample (@{$args{multiple}}){
+                if (exists $args{minGQ} and $args{minGQ} > 0){
+                    if (not defined $self->getSampleGenotypeField(sample=>$sample, field=>'GQ')){
                     #no GQ field - return no call (the above generally means that the call is './.' anyway)
                         $calls{$sample} = './.';
                         next;
                     }
-					if ($self->getSampleGenotypeField(sample=>$sample, field=>'GQ') < $args{minGQ}){
+                    if ($self->getSampleGenotypeField(sample=>$sample, field=>'GQ') < $args{minGQ}){
                         $calls{$sample} = './.';
                         next;
                     }
-				}
-				my $call = $self->getSampleGenotypeField(sample=>$sample, field=>'GT'); 
-				$calls{$sample} = $call;
-			}
-			return %calls if defined wantarray;
-			carp "getSampleCall called in a void context ";
-		}elsif (defined $args{sample}){
-			if (exists $args{minGQ} and $args{minGQ} > 0){
-				return './.' if (not defined $self->getSampleGenotypeField(sample=>$args{sample}, field=>'GQ') );
+                }
+                my $call = $self->getSampleGenotypeField(sample=>$sample, field=>'GT'); 
+                $calls{$sample} = $call;
+            }
+            return %calls if defined wantarray;
+            carp "getSampleCall called in a void context ";
+        }elsif (defined $args{sample}){
+            if (exists $args{minGQ} and $args{minGQ} > 0){
+                return './.' if (not defined $self->getSampleGenotypeField(sample=>$args{sample}, field=>'GQ') );
                 #the above generally means that the call is './.' anyway
-				return './.' if ($self->getSampleGenotypeField(sample=>$args{sample}, field=>'GQ') < $args{minGQ});
-			}
-			my $call = $self->getSampleGenotypeField(sample=>$args{sample}, field=>'GT'); 
-			return $call if defined wantarray;
-		}else{#otherwise just look at first sample
-			if (exists $args{minGQ} and $args{minGQ} > 0){
-				return './.' if (not defined $self->getSampleGenotypeField(sample=>$args{sample}, field=>'GQ') );
+                return './.' if ($self->getSampleGenotypeField(sample=>$args{sample}, field=>'GQ') < $args{minGQ});
+            }
+            my $call = $self->getSampleGenotypeField(sample=>$args{sample}, field=>'GT'); 
+            return $call if defined wantarray;
+        }else{#otherwise just look at first sample
+            if (exists $args{minGQ} and $args{minGQ} > 0){
+                return './.' if (not defined $self->getSampleGenotypeField(sample=>$args{sample}, field=>'GQ') );
                 #the above generally means that the call is './.' anyway
-				return './.' if ($self->getSampleGenotypeField( field=>'GQ') < $args{minGQ});
-			}
-			my $call = $self->getSampleGenotypeField(field=>'GT'); 	
-			return $call if defined wantarray;
-		}
-	}else{
-		return if defined wantarray;
-	}
-	carp "getSampleCall called in a void context ";
+                return './.' if ($self->getSampleGenotypeField( field=>'GQ') < $args{minGQ});
+            }
+            my $call = $self->getSampleGenotypeField(field=>'GT');     
+            return $call if defined wantarray;
+        }
+    }else{
+        return if defined wantarray;
+    }
+    carp "getSampleCall called in a void context ";
 }
 
 sub getSampleGenotypeField{
 #returns scalar value for genotype field 
 #unless multiple argument is used in which
 #case a hash of sample=>value key/values is returned
-	my ($self, %args) = @_;
-	croak "Can't invoke getSampleGenotypeField method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
-	carp "WARNING Both multiple and sample arguments supplied to getSampleGenotypeField method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
-	croak "\"field\" argument must be passed to getSampleGenotypeField - e.g. getSampleGenotypeField(field=>\"GQ\") " if not defined $args{field};
-	$self->getFormatFields();
-	if (not defined $self->{_currentVar}->{varFormat}->{$args{field}}){
-		carp "Field $args{field} not found for getSampleGenotypeField ";
-		return;
-	}
-	$self->{_currentLine} ||= $self->readLine; #get line if we haven't already
-	if (defined $self->{_currentVar}){
-		my $var; 
-		if ($args{all}){
-			my %values = ();
-			foreach my $sample (keys %{$self->{_samples}}){
+    my ($self, %args) = @_;
+    croak "Can't invoke getSampleGenotypeField method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
+    carp "WARNING Both multiple and sample arguments supplied to getSampleGenotypeField method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
+    croak "\"field\" argument must be passed to getSampleGenotypeField - e.g. getSampleGenotypeField(field=>\"GQ\") " if not defined $args{field};
+    $self->getFormatFields();
+    if (not defined $self->{_currentVar}->{varFormat}->{$args{field}}){
+        carp "Field $args{field} not found for getSampleGenotypeField ";
+        return;
+    }
+    $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
+    if (defined $self->{_currentVar}){
+        my $var; 
+        if ($args{all}){
+            my %values = ();
+            foreach my $sample (keys %{$self->{_samples}}){
                                 my $mvar = $self->getSampleVariant($sample);
                                 my $value = (split ":", $mvar)[$self->{_currentVar}->{varFormat}->{$args{field}}];
                                 $values{$sample} =  $value;
                         }
                         return %values if defined wantarray;
                         carp "getSampleGenotypeField called in a void context ";
-		}elsif($args{multiple}){
-			croak "multiple argument must be an array reference " if ref $args{multiple} ne 'ARRAY';
-			my %values = ();
-			foreach my $sample (@{$args{multiple}}){
-				my $mvar = $self->getSampleVariant($sample);
-				my $value = (split ":", $mvar)[$self->{_currentVar}->{varFormat}->{$args{field}}];
-				$values{$sample} =  $value;
-			}
-			return %values if defined wantarray;
-			carp "getSampleGenotypeField called in a void context ";
-		}elsif (defined $args{sample}){
-			$var = $self->getSampleVariant($args{sample});
-		}else{#otherwise just look at first sample
-			$var = $self->getSampleVariant();
-		}
-		return if not defined $var and defined wantarray;
-		my $value = (split ":", $var)[$self->{_currentVar}->{varFormat}->{$args{field}}];
-		return $value if defined wantarray;
-	}else{
-		return if defined wantarray;
-	}
-	carp "getSampleGenotypeField called in a void context ";
+        }elsif($args{multiple}){
+            croak "multiple argument must be an array reference " if ref $args{multiple} ne 'ARRAY';
+            my %values = ();
+            foreach my $sample (@{$args{multiple}}){
+                my $mvar = $self->getSampleVariant($sample);
+                my $value = (split ":", $mvar)[$self->{_currentVar}->{varFormat}->{$args{field}}];
+                $values{$sample} =  $value;
+            }
+            return %values if defined wantarray;
+            carp "getSampleGenotypeField called in a void context ";
+        }elsif (defined $args{sample}){
+            $var = $self->getSampleVariant($args{sample});
+        }else{#otherwise just look at first sample
+            $var = $self->getSampleVariant();
+        }
+        return if not defined $var and defined wantarray;
+        my $value = (split ":", $var)[$self->{_currentVar}->{varFormat}->{$args{field}}];
+        return $value if defined wantarray;
+    }else{
+        return if defined wantarray;
+    }
+    carp "getSampleGenotypeField called in a void context ";
 }
 
 #returns genotype codes - e.g. 0/0, 0/1, 1/1
 sub getAllPossibleGenotypeCodes{
-	my ($self, %args) = @_;
-	my @alleles = $self -> readAlleles;
-	my @combinations = ();
-	for (my $n = 0; $n < @alleles; $n++){
-		for (my $m = 0; $m <= $n; $m++){
-			push (@combinations, "$m/$n");
-		}
-	}
-	return @combinations if defined wantarray;
-	carp "getAllPossibleGenotypes called in void context ";
+    my ($self, %args) = @_;
+    my @alleles = $self -> readAlleles;
+    my @combinations = ();
+    for (my $n = 0; $n < @alleles; $n++){
+        for (my $m = 0; $m <= $n; $m++){
+            push (@combinations, "$m/$n");
+        }
+    }
+    return @combinations if defined wantarray;
+    carp "getAllPossibleGenotypes called in void context ";
 }
 
 #returns actual allele genotypes - e.g. A/A, A/T, T/T
 sub getAllPossibleGenotypes{
-	my ($self, %args) = @_;
-	my @alleles = $self -> readAlleles;
-	my @combinations = ();
-	for (my $n = 0; $n < @alleles; $n++){
-		for (my $m = 0; $m <= $n; $m++){
-			push (@combinations, "$alleles[$m]/$alleles[$n]");
-		}
-	}
-	return @combinations if defined wantarray;
-	carp "getAllPossibleGenotypes called in void context ";
+    my ($self, %args) = @_;
+    my @alleles = $self -> readAlleles;
+    my @combinations = ();
+    for (my $n = 0; $n < @alleles; $n++){
+        for (my $m = 0; $m <= $n; $m++){
+            push (@combinations, "$alleles[$m]/$alleles[$n]");
+        }
+    }
+    return @combinations if defined wantarray;
+    carp "getAllPossibleGenotypes called in void context ";
 }
 
 sub getSampleActualGenotypes{
-	my ($self, %args) = @_;
-	croak "Can't invoke getSampleActualGenotypes method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
-	carp "WARNING Both multiple and sample arguments supplied to getSampleActualGenotypes method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
-	$self->{_currentLine} ||= $self->readLine; #get line if we haven't already
-	my @alleles = $self -> readAlleles;
-	my %multiple = ();
-	my $genotype;
-	if (defined $self->{_currentVar}){
-		my @sample_alleles = ();
-		my $var;
-		if ($args{all}){
-			foreach my $sample (keys %{$self->{_samples}}){
-				$var = $self->getSampleVariant($sample);
-				my $call = (split ":", $var)[0];
-				if ($call =~ /(\d+)[\/\|](\d+)/){
-					if ($args{return_alleles_only}){
-						push (@sample_alleles, ($alleles[$1], $alleles[$2]));
-					}else{
-						$multiple{$sample} = "$alleles[$1]/$alleles[$2]";
-					}
-				}else{
-					if (not $args{return_alleles_only}){
-						$multiple{$sample} = "-/-";
-					}
-				}
-			}
-			if ($args{return_alleles_only}){
-				my %seen = ();
-				@sample_alleles = grep {!$seen{$_}++} @sample_alleles;#remove duplicates
-				return @sample_alleles;
-			}else{
-				return %multiple;
-			}
-		}elsif($args{multiple}){
-			croak "multiple argument must be an array reference " if ref $args{multiple} ne 'ARRAY';
-			foreach my $sample (@{$args{multiple}}){
-				$var = $self->getSampleVariant($sample);
-				my $call = (split ":", $var)[0];
-				if ($call =~ /(\d+)[\/\|](\d+)/){
-					if ($args{return_alleles_only}){
-						push (@sample_alleles, ($alleles[$1], $alleles[$2]));
-					}else{
-						$multiple{$sample} = "$alleles[$1]/$alleles[$2]";
-					}
-				}else{
-					if (not $args{return_alleles_only}){
-						$multiple{$sample} = "-/-";
-					}
-				}
-			}
-			if ($args{return_alleles_only}){
-				my %seen = ();
-				@sample_alleles = grep {!$seen{$_}++} @sample_alleles;#remove duplicates
-				return @sample_alleles;
-			}else{
-				return %multiple;
-			}
-		}elsif ($args{sample}){
-			$var = $self->getSampleVariant($args{sample});
-		}else{
-			$var = $self->getSampleVariant();
-		}
-		my $call = (split ":", $var)[0];
-		if ($call =~ /(\d+)[\/\|](\d+)/){
-			if ($args{return_alleles_only}){
-				push (@sample_alleles, ($alleles[$1], $alleles[$2]));
-				my %seen = ();
-				@sample_alleles = grep {!$seen{$_}++} @sample_alleles;#remove duplicates
-				return @sample_alleles;
-				
-			}else{
-				$genotype = "$alleles[$1]/$alleles[$2]";
-			}
-		}else{
-			$genotype = "-/-";
-		}
-		return if $args{return_alleles_only};
-		return $genotype 
-	}
+    my ($self, %args) = @_;
+    croak "Can't invoke getSampleActualGenotypes method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
+    carp "WARNING Both multiple and sample arguments supplied to getSampleActualGenotypes method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
+    $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
+    my @alleles = $self -> readAlleles;
+    my %multiple = ();
+    my $genotype;
+    if (defined $self->{_currentVar}){
+        my @sample_alleles = ();
+        my $var;
+        if ($args{all}){
+            foreach my $sample (keys %{$self->{_samples}}){
+                $var = $self->getSampleVariant($sample);
+                my $call = (split ":", $var)[0];
+                if ($call =~ /(\d+)[\/\|](\d+)/){
+                    if ($args{return_alleles_only}){
+                        push (@sample_alleles, ($alleles[$1], $alleles[$2]));
+                    }else{
+                        $multiple{$sample} = "$alleles[$1]/$alleles[$2]";
+                    }
+                }else{
+                    if (not $args{return_alleles_only}){
+                        $multiple{$sample} = "-/-";
+                    }
+                }
+            }
+            if ($args{return_alleles_only}){
+                my %seen = ();
+                @sample_alleles = grep {!$seen{$_}++} @sample_alleles;#remove duplicates
+                return @sample_alleles;
+            }else{
+                return %multiple;
+            }
+        }elsif($args{multiple}){
+            croak "multiple argument must be an array reference " if ref $args{multiple} ne 'ARRAY';
+            foreach my $sample (@{$args{multiple}}){
+                $var = $self->getSampleVariant($sample);
+                my $call = (split ":", $var)[0];
+                if ($call =~ /(\d+)[\/\|](\d+)/){
+                    if ($args{return_alleles_only}){
+                        push (@sample_alleles, ($alleles[$1], $alleles[$2]));
+                    }else{
+                        $multiple{$sample} = "$alleles[$1]/$alleles[$2]";
+                    }
+                }else{
+                    if (not $args{return_alleles_only}){
+                        $multiple{$sample} = "-/-";
+                    }
+                }
+            }
+            if ($args{return_alleles_only}){
+                my %seen = ();
+                @sample_alleles = grep {!$seen{$_}++} @sample_alleles;#remove duplicates
+                return @sample_alleles;
+            }else{
+                return %multiple;
+            }
+        }elsif ($args{sample}){
+            $var = $self->getSampleVariant($args{sample});
+        }else{
+            $var = $self->getSampleVariant();
+        }
+        my $call = (split ":", $var)[0];
+        if ($call =~ /(\d+)[\/\|](\d+)/){
+            if ($args{return_alleles_only}){
+                push (@sample_alleles, ($alleles[$1], $alleles[$2]));
+                my %seen = ();
+                @sample_alleles = grep {!$seen{$_}++} @sample_alleles;#remove duplicates
+                return @sample_alleles;
+                
+            }else{
+                $genotype = "$alleles[$1]/$alleles[$2]";
+            }
+        }else{
+            $genotype = "-/-";
+        }
+        return if $args{return_alleles_only};
+        return $genotype 
+    }
 }
 
 sub sampleIsHomozygous{
@@ -1363,211 +1363,211 @@ sub sampleIsHomozygous{
 # use variants => 1 to only include homozygous variants, not homozygous variants
 #returns 1 if all samples are homozygous or a mixture of homozygous and no calls
 #returns 0 if any sample is homozygous or all are no calls - we should improve this for multiple samples.
-	my ($self, %args) = @_;
-	croak "Can't invoke sampleIsHomozygous method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
-	$self->{_currentLine} ||= $self->readLine; #get line if we haven't already
-	carp "WARNING Both multiple and sample arguments supplied to sampleIsHomozygous method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
-	if (defined $self->{_currentVar}){
-		my $var;
-		if ($args{all}){
-			my $no_call = 0;
-			foreach my $sample (keys %{$self->{_samples}}){
-				if ($args{minGQ}){
-					my $gq = $self->getSampleGenotypeField(sample=>$sample, field=>'GQ');
-					if (defined $gq && $gq < $args{minGQ}){
-						$no_call++;
-						next;
-					}
-				}
-				$var = $self->getSampleVariant($sample);
-				my $call = (split ":", $var)[0];
-				if ($call =~ /(\d+)[\/\|](\d+)/){
-					return 0 if $1 != $2;
-					if ($args{variants}){
-						return 0 if ($1 == 0 and $2 == 0);
-					}
-				}else{
-					$no_call++;
-				}
-			}
-			return 0 if $no_call == keys %{$self->{_samples}};#i.e. return 0 if all our samples are no calls
-			return 1;
-		}elsif(defined $args{multiple}){
-			croak "multiple argument must be an array reference " if ref $args{multiple} ne 'ARRAY';
-			my $no_call = 0;
-			foreach my $sample (@{$args{multiple}}){
-				if ($args{minGQ}){
-					my $gq = $self->getSampleGenotypeField(sample=>$sample, field=>'GQ');
-					if (defined $gq && $gq < $args{minGQ}){
-						$no_call++;
-						next;
-					}
-				}
-				$var = $self->getSampleVariant($sample);
-				my $call = (split ":", $var)[0];
-				if ($call =~ /(\d+)[\/\|](\d+)/){
-					return 0 if $1 != $2;
-					if ($args{variants}){
-						return 0 if ($1 == 0 and $2 == 0);
-					}
-				}else{
-					$no_call++;
-				}
-			}
-			return 0 if $no_call == @{$args{multiple}};#i.e. return 0 if all our samples are no calls
-			return 1;
-		}elsif (defined $args{sample}){
-			if ($args{minGQ}){
-				my $gq = $self->getSampleGenotypeField(sample=>$args{sample}, field=>'GQ');
-				if (defined $gq && $gq < $args{minGQ}){
-					return 0;
-				}
-			}
-			$var = $self->getSampleVariant($args{sample});
-		}else{ 
-			if ($args{minGQ}){
-				my $gq = $self->getSampleGenotypeField(field=>'GQ');
-				if (defined $gq && $gq < $args{minGQ}){
-					return 0;
-				}
-			}
-			$var = $self->getSampleVariant();
-		}
-		my $call = (split ":", $var)[0];
-		if ($call =~ /(\d+)[\/\|](\d+)/){
-			if ($args{variants}){
-				return 0 if ($1 == 0 and $2 == 0);
-			}
-			return 1 if $1 == $2;
-			return 0;
-		}
-		return 0;
-	}
+    my ($self, %args) = @_;
+    croak "Can't invoke sampleIsHomozygous method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
+    $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
+    carp "WARNING Both multiple and sample arguments supplied to sampleIsHomozygous method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
+    if (defined $self->{_currentVar}){
+        my $var;
+        if ($args{all}){
+            my $no_call = 0;
+            foreach my $sample (keys %{$self->{_samples}}){
+                if ($args{minGQ}){
+                    my $gq = $self->getSampleGenotypeField(sample=>$sample, field=>'GQ');
+                    if (defined $gq && $gq < $args{minGQ}){
+                        $no_call++;
+                        next;
+                    }
+                }
+                $var = $self->getSampleVariant($sample);
+                my $call = (split ":", $var)[0];
+                if ($call =~ /(\d+)[\/\|](\d+)/){
+                    return 0 if $1 != $2;
+                    if ($args{variants}){
+                        return 0 if ($1 == 0 and $2 == 0);
+                    }
+                }else{
+                    $no_call++;
+                }
+            }
+            return 0 if $no_call == keys %{$self->{_samples}};#i.e. return 0 if all our samples are no calls
+            return 1;
+        }elsif(defined $args{multiple}){
+            croak "multiple argument must be an array reference " if ref $args{multiple} ne 'ARRAY';
+            my $no_call = 0;
+            foreach my $sample (@{$args{multiple}}){
+                if ($args{minGQ}){
+                    my $gq = $self->getSampleGenotypeField(sample=>$sample, field=>'GQ');
+                    if (defined $gq && $gq < $args{minGQ}){
+                        $no_call++;
+                        next;
+                    }
+                }
+                $var = $self->getSampleVariant($sample);
+                my $call = (split ":", $var)[0];
+                if ($call =~ /(\d+)[\/\|](\d+)/){
+                    return 0 if $1 != $2;
+                    if ($args{variants}){
+                        return 0 if ($1 == 0 and $2 == 0);
+                    }
+                }else{
+                    $no_call++;
+                }
+            }
+            return 0 if $no_call == @{$args{multiple}};#i.e. return 0 if all our samples are no calls
+            return 1;
+        }elsif (defined $args{sample}){
+            if ($args{minGQ}){
+                my $gq = $self->getSampleGenotypeField(sample=>$args{sample}, field=>'GQ');
+                if (defined $gq && $gq < $args{minGQ}){
+                    return 0;
+                }
+            }
+            $var = $self->getSampleVariant($args{sample});
+        }else{ 
+            if ($args{minGQ}){
+                my $gq = $self->getSampleGenotypeField(field=>'GQ');
+                if (defined $gq && $gq < $args{minGQ}){
+                    return 0;
+                }
+            }
+            $var = $self->getSampleVariant();
+        }
+        my $call = (split ":", $var)[0];
+        if ($call =~ /(\d+)[\/\|](\d+)/){
+            if ($args{variants}){
+                return 0 if ($1 == 0 and $2 == 0);
+            }
+            return 1 if $1 == $2;
+            return 0;
+        }
+        return 0;
+    }
 }
 
 sub sampleIsHeterozygous{
 # use minGQ => 30 to count any sample with less than GQ = 30 as a no call
 #returns 1 if all samples are heterozygous or a mix of hets and no calls
 #returns 0 if any sample is homozygous or all are no calls - we should improve this for multiple samples.
-	my ($self, %args) = @_;
-	croak "Can't invoke sampleIsHeterozygous method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
-	$self->{_currentLine} ||= $self->readLine; #get line if we haven't already
-	carp "WARNING Both multiple and sample arguments supplied to sampleIsHomozygous method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
-	if (defined $self->{_currentVar}){
-		my $var;
-		if ($args{all}){
-			my $no_call = 0;
-			foreach my $sample (keys %{$self->{_samples}}){
-				if ($args{minGQ}){
-					my $gq = $self->getSampleGenotypeField(sample=>$sample, field=>'GQ');
-					if (defined $gq && $gq < $args{minGQ}){
-						$no_call++;
-						next;
-					}
-				}
-				$var = $self->getSampleVariant($sample);
-				my $call = (split ":", $var)[0];
-				if ($call =~ /(\d+)[\/\|](\d+)/){
-					return 0 if $1 == $2;
-				}else{
-					$no_call++;
-				}
-			}
-			return 0 if $no_call == keys%{$self->{_samples}};#i.e. return 0 if all our samples are no calls
-			return 1;#otherwise return 1
-		}elsif(defined $args{multiple}){
-			my $no_call = 0;
-			croak "multiple argument must be an array reference " if ref $args{multiple} ne 'ARRAY';
-			foreach my $sample (@{$args{multiple}}){
-				if ($args{minGQ}){
-					my $gq = $self->getSampleGenotypeField(sample=>$sample, field=>'GQ');
-					if (defined $gq && $gq < $args{minGQ}){
-						$no_call++;
-						next;
-					}
-				}
-				$var = $self->getSampleVariant($sample);
-				my $call = (split ":", $var)[0];
-				if ($call =~ /(\d+)[\/\|](\d+)/){
-					return 0 if $1 == $2;
-				}else{
-					$no_call++;
-				}
-			}
-			return 0 if $no_call == @{$args{multiple}};#i.e. return 0 if all our samples are no calls
-			return 1;#otherwise return 1
-		}elsif (defined $args{sample}){
-			if ($args{minGQ}){
-				my $gq = $self->getSampleGenotypeField(sample=>$args{sample}, field=>'GQ');
-				if (defined $gq && $gq < $args{minGQ}){
-					return 0;
-				}
-			}
-			$var = $self->getSampleVariant($args{sample});
-		}else{	
-			if ($args{minGQ}){
-				my $gq = $self->getSampleGenotypeField(field=>'GQ');
-				if (defined $gq && $gq < $args{minGQ}){
-					return 0;
-				}
-			} 
-			$var = $self->getSampleVariant();
-		}
-		my $call = (split ":", $var)[0];
-		if ($call =~ /(\d+)[\/\|](\d+)/){
-			return 1 if $1 != $2;
-			return 0;
-		}
-		return 0;
-	}
+    my ($self, %args) = @_;
+    croak "Can't invoke sampleIsHeterozygous method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
+    $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
+    carp "WARNING Both multiple and sample arguments supplied to sampleIsHomozygous method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
+    if (defined $self->{_currentVar}){
+        my $var;
+        if ($args{all}){
+            my $no_call = 0;
+            foreach my $sample (keys %{$self->{_samples}}){
+                if ($args{minGQ}){
+                    my $gq = $self->getSampleGenotypeField(sample=>$sample, field=>'GQ');
+                    if (defined $gq && $gq < $args{minGQ}){
+                        $no_call++;
+                        next;
+                    }
+                }
+                $var = $self->getSampleVariant($sample);
+                my $call = (split ":", $var)[0];
+                if ($call =~ /(\d+)[\/\|](\d+)/){
+                    return 0 if $1 == $2;
+                }else{
+                    $no_call++;
+                }
+            }
+            return 0 if $no_call == keys%{$self->{_samples}};#i.e. return 0 if all our samples are no calls
+            return 1;#otherwise return 1
+        }elsif(defined $args{multiple}){
+            my $no_call = 0;
+            croak "multiple argument must be an array reference " if ref $args{multiple} ne 'ARRAY';
+            foreach my $sample (@{$args{multiple}}){
+                if ($args{minGQ}){
+                    my $gq = $self->getSampleGenotypeField(sample=>$sample, field=>'GQ');
+                    if (defined $gq && $gq < $args{minGQ}){
+                        $no_call++;
+                        next;
+                    }
+                }
+                $var = $self->getSampleVariant($sample);
+                my $call = (split ":", $var)[0];
+                if ($call =~ /(\d+)[\/\|](\d+)/){
+                    return 0 if $1 == $2;
+                }else{
+                    $no_call++;
+                }
+            }
+            return 0 if $no_call == @{$args{multiple}};#i.e. return 0 if all our samples are no calls
+            return 1;#otherwise return 1
+        }elsif (defined $args{sample}){
+            if ($args{minGQ}){
+                my $gq = $self->getSampleGenotypeField(sample=>$args{sample}, field=>'GQ');
+                if (defined $gq && $gq < $args{minGQ}){
+                    return 0;
+                }
+            }
+            $var = $self->getSampleVariant($args{sample});
+        }else{    
+            if ($args{minGQ}){
+                my $gq = $self->getSampleGenotypeField(field=>'GQ');
+                if (defined $gq && $gq < $args{minGQ}){
+                    return 0;
+                }
+            } 
+            $var = $self->getSampleVariant();
+        }
+        my $call = (split ":", $var)[0];
+        if ($call =~ /(\d+)[\/\|](\d+)/){
+            return 1 if $1 != $2;
+            return 0;
+        }
+        return 0;
+    }
 }
 
 sub countGenotypes{
-	#%genotypes = $obj->countGenotypes(); 
-	#returns count for all samples and all genotypes
-	#%genotypes = $obj->countGenotypes(genotypes => ['0/1', '0/2']);
-	#%genotypes = $obj->countGenotypes(samples=>["sample1","sample2"], genotypes => ['0/1', '0/2']);
-	#$count = $obj->countGenotypes(samples=>["sample1","sample2"], genotypes => '0/1');
-	my ($self, %args) = @_;
-	croak "Can't invoke countGenotypes method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
-	if ($args{minGQ}){
-		croak "minGQ argument must be a number " if not looks_like_number($args{minGQ});
-	}
-	$self->{_currentLine} ||= $self->readLine; #get line if we haven't already
-	my %genotypes = ();
-	if(defined $args{samples}){
-		croak "samples argument must be an array reference " if ref $args{samples} ne 'ARRAY';
-		foreach my $sample (@{$args{samples}}){
-			my $call = $self->getSampleCall(sample=>$sample);
-			$genotypes{$call}++;
-		}
-	}else{
-		foreach my $sample (keys %{$self->{_samples}}){
-			my $call = $self->getSampleCall(sample=>$sample);
-			$genotypes{$call}++;
-		}
-	}
-	if (defined $args{genotypes}){
-		my %user_gts = ();
-		if (ref $args{genotypes} eq 'ARRAY'){
-			foreach my $gt (@{$args{genotypes}}){
-				if (exists $genotypes{$gt}){
-					$user_gts{$gt} =  $genotypes{$gt};
-				}else{
-					$user_gts{$gt} = 0;
-				}
-			}
-			return %user_gts;
-		}else{
-			if (exists $genotypes{$args{genotypes}}){
-				return $genotypes{$args{genotypes}};
-			}else{
-				return 0;
-			}
-		}
-	}
-		
-	return %genotypes;
+    #%genotypes = $obj->countGenotypes(); 
+    #returns count for all samples and all genotypes
+    #%genotypes = $obj->countGenotypes(genotypes => ['0/1', '0/2']);
+    #%genotypes = $obj->countGenotypes(samples=>["sample1","sample2"], genotypes => ['0/1', '0/2']);
+    #$count = $obj->countGenotypes(samples=>["sample1","sample2"], genotypes => '0/1');
+    my ($self, %args) = @_;
+    croak "Can't invoke countGenotypes method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
+    if ($args{minGQ}){
+        croak "minGQ argument must be a number " if not looks_like_number($args{minGQ});
+    }
+    $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
+    my %genotypes = ();
+    if(defined $args{samples}){
+        croak "samples argument must be an array reference " if ref $args{samples} ne 'ARRAY';
+        foreach my $sample (@{$args{samples}}){
+            my $call = $self->getSampleCall(sample=>$sample);
+            $genotypes{$call}++;
+        }
+    }else{
+        foreach my $sample (keys %{$self->{_samples}}){
+            my $call = $self->getSampleCall(sample=>$sample);
+            $genotypes{$call}++;
+        }
+    }
+    if (defined $args{genotypes}){
+        my %user_gts = ();
+        if (ref $args{genotypes} eq 'ARRAY'){
+            foreach my $gt (@{$args{genotypes}}){
+                if (exists $genotypes{$gt}){
+                    $user_gts{$gt} =  $genotypes{$gt};
+                }else{
+                    $user_gts{$gt} = 0;
+                }
+            }
+            return %user_gts;
+        }else{
+            if (exists $genotypes{$args{genotypes}}){
+                return $genotypes{$args{genotypes}};
+            }else{
+                return 0;
+            }
+        }
+    }
+        
+    return %genotypes;
 }
 
 sub countZygosity{
@@ -1578,75 +1578,75 @@ sub countZygosity{
 # use return => nocall to return no. of no calls 
 # use return => both to return 2 element array of het calls and hom calls
 # use return => all to return 3 element array of het calls, hom calls and no calls
-	my ($self, %args) = @_;
-	croak "Can't invoke countZygosity method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
-	if (not defined $args{return}){
-		$args{return} = "all";
-	}else{
-		my @valid_types = qw(het hom nocall both all);
-		croak "argument return value $args{return} not recognised in countZygosity method " if not grep { /$args{return}/ } @valid_types;
-	}
-	$self->{_currentLine} ||= $self->readLine; #get line if we haven't already
-	my $hets = 0;
-	my $homs = 0;
-	my $no_calls = 0;
-	if (defined $self->{_currentVar}){
-		if(defined $args{samples}){
-			croak "samples argument must be an array reference " if ref $args{samples} ne 'ARRAY';
-			foreach my  $sample (@{$args{samples}}){
-				my $var = $self->getSampleVariant($sample);
-				if ($args{minGQ}){
-					my $gq = $self->getSampleGenotypeField(sample=>$sample, field=>'GQ');
-					if (defined $gq && $gq < $args{minGQ}){
-						$no_calls++;
-						next;
-					}
-				} 
-				my $call = (split ":", $var)[0];
-					if ($call =~ /(\d+)[\/\|](\d+)/){
-						$hets++ if $1 != $2;
-						$homs++ if $1 == $2;
-					}else{
-						$no_calls++;
-					}
-				}
-		}else{
-			foreach my $sample (keys %{$self->{_samples}}){
-				my $var = $self->getSampleVariant($sample);
-				if ($args{minGQ}){
-					my $gq = $self->getSampleGenotypeField(sample=>$sample, field=>'GQ');
-					if (defined $gq && $gq < $args{minGQ}){
-						$no_calls++;
-						next;
-					}
-				} 
-				my $call = (split ":", $var)[0];
-				if ($call =~ /(\d+)[\/\|](\d+)/){
-					$hets++ if $1 != $2;
-					$homs++ if $1 == $2;
-				}else{
-					$no_calls++;
-				}
-			}
-				
-		}
-	}
-	if ($args{return} eq "all"){
-		return ($hets, $homs, $no_calls);
-		carp "countZygosity method called in void context ";
-	}elsif ($args{return} eq "het"){
-		return $hets;
-		carp "countZygosity method called in void context ";
-	}elsif ($args{return} eq "hom"){
-		return $homs;
-		carp "countZygosity method called in void context ";
-	}elsif ($args{return} eq "nocall"){
-		return $no_calls;
-		carp "countZygosity method called in void context ";
-	}elsif ($args{return} eq "both"){
-		return ($hets, $homs);
-		carp "countZygosity method called in void context ";
-	}
+    my ($self, %args) = @_;
+    croak "Can't invoke countZygosity method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
+    if (not defined $args{return}){
+        $args{return} = "all";
+    }else{
+        my @valid_types = qw(het hom nocall both all);
+        croak "argument return value $args{return} not recognised in countZygosity method " if not grep { /$args{return}/ } @valid_types;
+    }
+    $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
+    my $hets = 0;
+    my $homs = 0;
+    my $no_calls = 0;
+    if (defined $self->{_currentVar}){
+        if(defined $args{samples}){
+            croak "samples argument must be an array reference " if ref $args{samples} ne 'ARRAY';
+            foreach my  $sample (@{$args{samples}}){
+                my $var = $self->getSampleVariant($sample);
+                if ($args{minGQ}){
+                    my $gq = $self->getSampleGenotypeField(sample=>$sample, field=>'GQ');
+                    if (defined $gq && $gq < $args{minGQ}){
+                        $no_calls++;
+                        next;
+                    }
+                } 
+                my $call = (split ":", $var)[0];
+                    if ($call =~ /(\d+)[\/\|](\d+)/){
+                        $hets++ if $1 != $2;
+                        $homs++ if $1 == $2;
+                    }else{
+                        $no_calls++;
+                    }
+                }
+        }else{
+            foreach my $sample (keys %{$self->{_samples}}){
+                my $var = $self->getSampleVariant($sample);
+                if ($args{minGQ}){
+                    my $gq = $self->getSampleGenotypeField(sample=>$sample, field=>'GQ');
+                    if (defined $gq && $gq < $args{minGQ}){
+                        $no_calls++;
+                        next;
+                    }
+                } 
+                my $call = (split ":", $var)[0];
+                if ($call =~ /(\d+)[\/\|](\d+)/){
+                    $hets++ if $1 != $2;
+                    $homs++ if $1 == $2;
+                }else{
+                    $no_calls++;
+                }
+            }
+                
+        }
+    }
+    if ($args{return} eq "all"){
+        return ($hets, $homs, $no_calls);
+        carp "countZygosity method called in void context ";
+    }elsif ($args{return} eq "het"){
+        return $hets;
+        carp "countZygosity method called in void context ";
+    }elsif ($args{return} eq "hom"){
+        return $homs;
+        carp "countZygosity method called in void context ";
+    }elsif ($args{return} eq "nocall"){
+        return $no_calls;
+        carp "countZygosity method called in void context ";
+    }elsif ($args{return} eq "both"){
+        return ($hets, $homs);
+        carp "countZygosity method called in void context ";
+    }
 }
 
 1;
@@ -1675,7 +1675,7 @@ my $line_count = $obj ->  countLines;
 #(get length of VCF file)
 
 while (my $var_line = $obj ->  readLine){
-	#(do something with each variant)
+    #(do something with each variant)
 }
 
 my $rs_id = $obj ->  getVariantField('ID');

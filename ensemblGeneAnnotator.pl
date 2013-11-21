@@ -140,31 +140,31 @@ $genedir = "$script_dir/gene_ref_files" if (not $genedir);
 $genedir =~ s/\/$//;
 my $OUT;
 if ($out){
-	open ($OUT, ">$out") || die "Can't open $out for writing: $!\n";
+    open ($OUT, ">$out") || die "Can't open $out for writing: $!\n";
 }else{
-	$OUT = \*STDOUT;
+    $OUT = \*STDOUT;
 }
 my %file_lengths = ();
 my %database = (
-	ensemblToEntrez
+    ensemblToEntrez
 => {localfile => "$genedir/ensemblToEntrez",  col => 0, delimiter => "\t", url => undef, dir => undef, file => undef},#create this one on the fly from human_summary
-	orthologs 
+    orthologs 
 => {localfile => "$genedir/HMD_Human5.rpt",  col => 1, delimiter => "\t", url => "ftp.informatics.jax.org", dir => "pub/reports/", file => "HMD_Human5.rpt"},
-	human_summary 
+    human_summary 
 => {localfile => "$genedir/Homo_sapiens_ncbi_gene_all_summaries.txt", col => 0, delimiter => "\t", url => "ftp.ncbi.nlm.nih.gov", dir => "gene/DATA/ASN_BINARY/Mammalia", file => "Homo_sapiens.ags.gz"},
-	mouse_phenotype_acc
+    mouse_phenotype_acc
 => {localfile => "$genedir/MGI_PhenotypicAllele.rpt", col => 5, delimiter => "\t", url => "ftp.informatics.jax.org", dir => "pub/reports/", file => "MGI_PhenotypicAllele.rpt"},
-	mouse_phenotype_desc 
+    mouse_phenotype_desc 
 =>  {localfile => "$genedir/VOC_MammalianPhenotype.rpt", col => 0, delimiter => "\t", url =>"ftp.informatics.jax.org", dir => "pub/reports/", file => "VOC_MammalianPhenotype.rpt"},
-	mgi2entrez
+    mgi2entrez
 => {localfile => "$genedir/MGI_EntrezGene.rpt", col => 8, delimiter => "\t", url => "ftp.informatics.jax.org", dir => "pub/reports/", file => "MGI_EntrezGene.rpt"},
-	mim_morbid
+    mim_morbid
 => {localfile => "$genedir/morbidmap", col => 2, delimiter => "\\|", url => "grcf.jhmi.edu", dir => "OMIM", file => "morbidmap"},
 );
 
 my @ref_files = ();
 foreach my $k (keys %database){
-	push @ref_files, $database{$k};
+    push @ref_files, $database{$k};
 }
 my @missing = ();
 foreach (@ref_files){
@@ -177,10 +177,10 @@ if ($downdb){
     prepare_database(\%database, "repair");
     exit if not $vcf;
 }else{
-	my @missing_files = ();
-	foreach my $m (@missing){
-		push @missing_files, $m->{localfile};
-	}
+    my @missing_files = ();
+    foreach my $m (@missing){
+        push @missing_files, $m->{localfile};
+    }
     display_error_and_exit("Missing database files - --DOWNLOAD_NEW option to correct this.", "Can't find following files:\n" . join("\n", @missing_files) ."\n") if @missing;
 }
 if ($prep){
@@ -191,17 +191,17 @@ if ($prep){
 @missing = ();
 
 CHECK_INDEXES:  foreach my $file (@ref_files){
-	if (not -e $file->{localfile}.".idx"){
-		#print STDERR "Can't find index for $file\n";
-		push (@missing, $file);
-	}
+    if (not -e $file->{localfile}.".idx"){
+        #print STDERR "Can't find index for $file\n";
+        push (@missing, $file);
+    }
 }
 
 if (@missing){
-		my @files_to_index = ();
-		foreach (@missing){
-			push @files_to_index, $_->{localfile};
-		}
+        my @files_to_index = ();
+        foreach (@missing){
+            push @files_to_index, $_->{localfile};
+        }
         display_error_and_continue("Missing Indexes", "Need to make indexes for files:\n" . join("\n", @files_to_index) ."\n");
         prepare_files(\@missing, \%database);
 }
@@ -213,7 +213,7 @@ my $pre_progress = 0;
 my $vcf_obj = ParseVCF->new(file=> $vcf);
 my $vep_header = $vcf_obj->readVepHeader();
 die "No 'GENE' field identified in header for file $vcf - " .
-	"please annotate with Ensembl's variant_effect_precictor.pl script.\n" if (not exists $vep_header->{gene});
+    "please annotate with Ensembl's variant_effect_precictor.pl script.\n" if (not exists $vep_header->{gene});
 $next_update = $pre_progressbar->update($pre_progress) if $pre_progress >= $next_update;
 
 
@@ -281,18 +281,18 @@ foreach my $class (@classes){
 
 
 foreach my $k (keys %database){
-	open (my $IN, $database{$k}->{localfile}) || die "Can't open reference file $database{$k}->{localfile}: $!\n";
-	$database{$k}->{fh} = $IN;
+    open (my $IN, $database{$k}->{localfile}) || die "Can't open reference file $database{$k}->{localfile}: $!\n";
+    $database{$k}->{fh} = $IN;
 }
 foreach my $k (keys %database){
-	open ($database{$k}->{idx}, $database{$k}->{localfile}.".idx") || die "Can't open reference index file $database{$k}->{localfile}.idx: $!\n";
-	binmode $database{$k}->{idx};
-	$database{$k}->{length} = get_file_length_from_index($database{$k}->{idx}); 
-	close $database{$k}->{idx};
-	open ($database{$k}->{idx}, $database{$k}->{localfile}.".idx") || die "Can't open reference index file $database{$k}->{localfile}.idx: $!\n";
-	binmode $database{$k}->{idx};
-	$pre_progress++;
-	$next_update = $pre_progressbar->update($pre_progress) if $pre_progress >= $next_update;
+    open ($database{$k}->{idx}, $database{$k}->{localfile}.".idx") || die "Can't open reference index file $database{$k}->{localfile}.idx: $!\n";
+    binmode $database{$k}->{idx};
+    $database{$k}->{length} = get_file_length_from_index($database{$k}->{idx}); 
+    close $database{$k}->{idx};
+    open ($database{$k}->{idx}, $database{$k}->{localfile}.".idx") || die "Can't open reference index file $database{$k}->{localfile}.idx: $!\n";
+    binmode $database{$k}->{idx};
+    $pre_progress++;
+    $next_update = $pre_progressbar->update($pre_progress) if $pre_progress >= $next_update;
 }
 
 my $progressbar = Term::ProgressBar->new({name => "Annotating", count => $vcf_obj->get_totalLines, ETA => "linear", });
@@ -303,39 +303,39 @@ my $header = $vcf_obj->getHeader(1);
 my @split_header= split("\t", $header);
 print $OUT "#ENTREZ_ID\tSymbol\tGO_Accession\tGO_description\tGeneRIFs\tSummary\tOMIM\tMGI_Phenotype\t" . $header;
 LINE: while (my $line = $vcf_obj->readLine){
-	$vcf_line++;
-	my %annot = ();
-	my @csq = $vcf_obj->getVepFields(["Gene", "Consequence"]);
-	die "No consequence field found for line:\n$line\nPlease annotated your VCF file with ensembl's variant effect precictor before running this program.\n" if not @csq;
-	foreach my $c (@csq){
+    $vcf_line++;
+    my %annot = ();
+    my @csq = $vcf_obj->getVepFields(["Gene", "Consequence"]);
+    die "No consequence field found for line:\n$line\nPlease annotated your VCF file with ensembl's variant effect precictor before running this program.\n" if not @csq;
+    foreach my $c (@csq){
         if ($functional){
             next if (not check_consequence(\@classes, $c));
         }
-		my $i = binSearchLineWithIndex($c->{gene}, $database{ensemblToEntrez}->{fh}, $database{ensemblToEntrez}->{idx}, $database{ensemblToEntrez}->{length}, $database{ensemblToEntrez}->{col});
-		next if ($i < 1);
-		for (my $j = $i -1; $j > 0; $j--){
-			my @ens_line = split("\t", line_with_index($database{ensemblToEntrez}->{fh}, $database{ensemblToEntrez}->{idx}, $j));			
-			chomp @ens_line;
-			if ($ens_line[$database{ensemblToEntrez}->{col}] eq $c->{gene}){
-				push @{$annot{$ens_line[1]}->{ids}}, $c->{gene};
-			}else{
-				last;
-			}
-		}
-		my @ens_line = split("\t", line_with_index($database{ensemblToEntrez}->{fh}, $database{ensemblToEntrez}->{idx}, $i));
-		chomp @ens_line;
-		push @{$annot{$ens_line[1]}->{ids}}, $c->{gene};
-		for (my $j = $i +1; $j <= $database{ensemblToEntrez}->{length}; $j++){
-			my @ens_line = split("\t", line_with_index($database{ensemblToEntrez}->{fh}, $database{ensemblToEntrez}->{idx}, $j));			
-			chomp @ens_line;
-			if ($ens_line[$database{ensemblToEntrez}->{col}] eq $c->{gene}){
-				push @{$annot{$ens_line[1]}->{ids}}, $c->{gene};
-			}else{
-				last;
-			}
-		}
-	}
-	if (not keys %annot){
+        my $i = binSearchLineWithIndex($c->{gene}, $database{ensemblToEntrez}->{fh}, $database{ensemblToEntrez}->{idx}, $database{ensemblToEntrez}->{length}, $database{ensemblToEntrez}->{col});
+        next if ($i < 1);
+        for (my $j = $i -1; $j > 0; $j--){
+            my @ens_line = split("\t", line_with_index($database{ensemblToEntrez}->{fh}, $database{ensemblToEntrez}->{idx}, $j));            
+            chomp @ens_line;
+            if ($ens_line[$database{ensemblToEntrez}->{col}] eq $c->{gene}){
+                push @{$annot{$ens_line[1]}->{ids}}, $c->{gene};
+            }else{
+                last;
+            }
+        }
+        my @ens_line = split("\t", line_with_index($database{ensemblToEntrez}->{fh}, $database{ensemblToEntrez}->{idx}, $i));
+        chomp @ens_line;
+        push @{$annot{$ens_line[1]}->{ids}}, $c->{gene};
+        for (my $j = $i +1; $j <= $database{ensemblToEntrez}->{length}; $j++){
+            my @ens_line = split("\t", line_with_index($database{ensemblToEntrez}->{fh}, $database{ensemblToEntrez}->{idx}, $j));            
+            chomp @ens_line;
+            if ($ens_line[$database{ensemblToEntrez}->{col}] eq $c->{gene}){
+                push @{$annot{$ens_line[1]}->{ids}}, $c->{gene};
+            }else{
+                last;
+            }
+        }
+    }
+    if (not keys %annot){
         #IF FOR SOME REASON WE HAVEN'T FOUND ANY ENTREZ IDs THEN WE'RE FINISHED WITH THIS LINE
                 print $OUT "-\t-\t-\t-\t-\t-\t-\t-\t$line\n";
                 next LINE;
@@ -376,7 +376,7 @@ MIM_DOWN:                               for (my $line_no = $j+1; $line_no <= $da
                                         push (@{$annot{$entrez_id}->{mim}}, "-");
                                 }
                         }else{
-							push (@{$annot{$entrez_id}->{mim}}, "-");
+                            push (@{$annot{$entrez_id}->{mim}}, "-");
                         }
                 }else{
                         $annot{$entrez_id}->{symbol} = "-";
@@ -388,53 +388,53 @@ MIM_DOWN:                               for (my $line_no = $j+1; $line_no <= $da
                         push (@{$annot{$entrez_id}->{mim}}, "-");
                 }
                 my $ortholog = getMouseOrtholog ($entrez_id, $database{orthologs}->{fh}, $database{orthologs}->{idx}, $database{orthologs}->{length} );
-				if ($ortholog){
+                if ($ortholog){
                         push (my @mgi, get_MGI_phenotype($ortholog, $database{mouse_phenotype_acc}->{fh}, $database{mouse_phenotype_acc}->{idx}, $database{mouse_phenotype_acc}->{length}, $database{mouse_phenotype_desc}->{fh},  $database{mouse_phenotype_desc}->{idx}, $database{mouse_phenotype_desc}->{length}, $database{mgi2entrez}->{fh}, $database{mgi2entrez}->{idx}, $database{mgi2entrez}->{length}));
                         @mgi ? push @{$annot{$entrez_id}->{mgi}},  @mgi : push @{$annot{$entrez_id}->{mgi}},  "-";
                 }else{
                         push (@{$annot{$entrez_id}->{mgi}}, "-");
                 }
         }
-		if ($separate){
-			my $info = $vcf_obj->getVariantField("INFO");
-			my @info_field = split(';', $info);
-			my @non_csq_fields = grep {! /^CSQ/} @info_field;
-			my $quote_info = quotemeta($info);
-			my @all_csq = $vcf_obj->getVepFields("All");
-        	foreach my $entrez_id (keys %annot){
-				foreach my $c (@all_csq){
-					my @out_line = ();
-					if (grep {/^$c->{gene}$/} @{$annot{$entrez_id}->{ids}}){
-						#foreach my $field ( qw (symbol go_id go_desc rif interactants summary ) ){
-						foreach my $field ( qw (symbol go_id go_desc rif summary ) ){
-                        	push (@out_line, $annot{$entrez_id}->{$field});
+        if ($separate){
+            my $info = $vcf_obj->getVariantField("INFO");
+            my @info_field = split(';', $info);
+            my @non_csq_fields = grep {! /^CSQ/} @info_field;
+            my $quote_info = quotemeta($info);
+            my @all_csq = $vcf_obj->getVepFields("All");
+            foreach my $entrez_id (keys %annot){
+                foreach my $c (@all_csq){
+                    my @out_line = ();
+                    if (grep {/^$c->{gene}$/} @{$annot{$entrez_id}->{ids}}){
+                        #foreach my $field ( qw (symbol go_id go_desc rif interactants summary ) ){
+                        foreach my $field ( qw (symbol go_id go_desc rif summary ) ){
+                            push (@out_line, $annot{$entrez_id}->{$field});
                         }
                         foreach my $field ( qw ( mim mgi ) ){
-                        	push (@out_line, join("|", @{$annot{$entrez_id}->{$field}}));
+                            push (@out_line, join("|", @{$annot{$entrez_id}->{$field}}));
                         }
-						my $edited_info = join(";", @non_csq_fields) .";CSQ=" . $vcf_obj->vepFieldToString($c);
-						(my $sep_line = $line) =~ s/$quote_info/$edited_info/;
+                        my $edited_info = join(";", @non_csq_fields) .";CSQ=" . $vcf_obj->vepFieldToString($c);
+                        (my $sep_line = $line) =~ s/$quote_info/$edited_info/;
                         print $OUT "$entrez_id\t" . join("\t", @out_line);
-						print $OUT "\t$sep_line\n";
-					}
-				}
-			}
-		}else{
-			my @symbols = ();
-			my @go_acc = ();
-        	my @go_desc = ();
-        	my @rif = ();
-        	my @sum = ();
-        	#my @interactants = ();
-        	my @omim = ();
-        	my @mgi = ();
-        	foreach my $entrez_id (keys %annot){
-        	       if (exists $annot{$entrez_id}->{symbol}){
-        	           push @symbols, split(/\|/, $annot{$entrez_id}->{symbol});
-        	       }
-        	        if (exists $annot{$entrez_id}->{go_id}){
-        	        	push @go_acc, split(/\|/, $annot{$entrez_id}->{go_id});
-        	        }
+                        print $OUT "\t$sep_line\n";
+                    }
+                }
+            }
+        }else{
+            my @symbols = ();
+            my @go_acc = ();
+            my @go_desc = ();
+            my @rif = ();
+            my @sum = ();
+            #my @interactants = ();
+            my @omim = ();
+            my @mgi = ();
+            foreach my $entrez_id (keys %annot){
+                   if (exists $annot{$entrez_id}->{symbol}){
+                       push @symbols, split(/\|/, $annot{$entrez_id}->{symbol});
+                   }
+                    if (exists $annot{$entrez_id}->{go_id}){
+                        push @go_acc, split(/\|/, $annot{$entrez_id}->{go_id});
+                    }
                     if (exists $annot{$entrez_id}->{go_desc}){
                         push @go_desc,  split(/\|/, $annot{$entrez_id}->{go_desc});
                     }
@@ -453,26 +453,26 @@ MIM_DOWN:                               for (my $line_no = $j+1; $line_no <= $da
                     if (exists $annot{$entrez_id}->{mgi}){
                         push (@mgi, @{$annot{$entrez_id}->{mgi}});
                     }
-        	}
-	        #remove_duplicates(\@symbols, \@go_acc, \@go_desc, \@rif, \@interactants, \@sum, \@omim, \@mgi);
-	        remove_duplicates(\@symbols, \@go_acc, \@go_desc, \@rif, \@sum, \@omim, \@mgi);
-	        keys%annot ? print $OUT join("|", sort {$a<=>$b} keys %annot) ."\t" : print $OUT "-\t";
-    	    @symbols ? print $OUT join("|", @symbols) ."\t" : print $OUT "-\t";
-    	    @go_acc ? print $OUT join("|", @go_acc) ."\t" : print $OUT "-\t";
-        	@go_desc ? print $OUT join("|", @go_desc) ."\t" : print $OUT "-\t";
-        	@rif ? print $OUT join("|", @rif) ."\t" : print $OUT "-\t";
-	#        @interactants ? print $OUT join("|", @interactants) ."\t" : print $OUT "-\t";
-			@sum ? print $OUT join("|", @sum) ."\t" : print $OUT "-\t";
-        	@omim ? print $OUT join("|", @omim) ."\t" : print $OUT "-\t";
-   	        @mgi ? print $OUT join("|", @mgi) ."\t" : print $OUT "-\t";
-        	print $OUT "$line\n";
-	}
+            }
+            #remove_duplicates(\@symbols, \@go_acc, \@go_desc, \@rif, \@interactants, \@sum, \@omim, \@mgi);
+            remove_duplicates(\@symbols, \@go_acc, \@go_desc, \@rif, \@sum, \@omim, \@mgi);
+            keys%annot ? print $OUT join("|", sort {$a<=>$b} keys %annot) ."\t" : print $OUT "-\t";
+            @symbols ? print $OUT join("|", @symbols) ."\t" : print $OUT "-\t";
+            @go_acc ? print $OUT join("|", @go_acc) ."\t" : print $OUT "-\t";
+            @go_desc ? print $OUT join("|", @go_desc) ."\t" : print $OUT "-\t";
+            @rif ? print $OUT join("|", @rif) ."\t" : print $OUT "-\t";
+    #        @interactants ? print $OUT join("|", @interactants) ."\t" : print $OUT "-\t";
+            @sum ? print $OUT join("|", @sum) ."\t" : print $OUT "-\t";
+            @omim ? print $OUT join("|", @omim) ."\t" : print $OUT "-\t";
+               @mgi ? print $OUT join("|", @mgi) ."\t" : print $OUT "-\t";
+            print $OUT "$line\n";
+    }
     $next_update = $progressbar->update($vcf_line) if $vcf_line >= $next_update;
 }
 $progressbar->update($vcf_obj->get_totalLines) if $vcf_obj->get_totalLines >= $next_update;
 for my $k (keys %database){
-	close $database{$k}->{fh};
-	close $database{$k}->{idx};
+    close $database{$k}->{fh};
+    close $database{$k}->{idx};
 }
 
 
@@ -486,8 +486,8 @@ CLASS: foreach my $class (@$classes){
         if (grep {/NMD_transcript_variant/i} @anno_csq){
             return 0;
         }else{
-   	        foreach my $ac (@anno_csq){
-              	if (lc$ac eq lc$class){
+               foreach my $ac (@anno_csq){
+                  if (lc$ac eq lc$class){
                     return 1;
                 }
             }
@@ -499,10 +499,10 @@ CLASS: foreach my $class (@$classes){
 ########################################
 sub prepare_files{
         my ($file_array_ref, $database_ref) = @_;
-	my $increment = 100/@$file_array_ref;
-	my $prep_percent = 0;
-	my $next_update = 0;
-	my $prep_bar = Term::ProgressBar->new({name => "Preparing Database", count => 100, ETA => "linear", });
+    my $increment = 100/@$file_array_ref;
+    my $prep_percent = 0;
+    my $next_update = 0;
+    my $prep_bar = Term::ProgressBar->new({name => "Preparing Database", count => 100, ETA => "linear", });
     foreach my $file (@$file_array_ref){
         sort_and_index_gene_files($file->{localfile}, $file->{col}, \$prep_percent, $increment, \$prep_bar, \$next_update, $file->{delimiter});
     }
@@ -512,7 +512,7 @@ sub prepare_files{
 sub prepare_database{
         my ($database_ref, $mode) = @_;
         $mode = "replace" if not $mode;
-	my $dir = getcwd();
+    my $dir = getcwd();
         my @files;
         my $oldest = 0;
         if ($mode eq "replace"){
@@ -522,7 +522,7 @@ sub prepare_database{
         }elsif  ($mode eq "repair"){
                 foreach my $k (keys %$database_ref){
                         if (not -e $database_ref->{$k}->{localfile}){
-                        	push @files,  $database_ref->{$k};
+                            push @files,  $database_ref->{$k};
                         }else{
                                 my $age = -M $database_ref->{$k}->{localfile};
                                 $oldest < $age ? $oldest = $age : ();
@@ -541,19 +541,19 @@ sub prepare_database{
                 die "Unrecognised mode ($mode) for prepare_database subroutine\n";
         }
         my $db_percent = 0;
-	my $next_update = 0;
-	my $progressbar = Term::ProgressBar->new({name => "Prep Database", count => 100, ETA => "linear", });
+    my $next_update = 0;
+    my $progressbar = Term::ProgressBar->new({name => "Prep Database", count => 100, ETA => "linear", });
         if (not -e $genedir){
                 mkdir $genedir || display_error_and_exit ("Permissions Error", "Can't create directory $genedir for database files - please check permissions") ;
         }
         foreach my $file (@files){
-			my ($file_name, $file_dir) = fileparse($file->{localfile}); 
-			if ($file_name =~ /ensemblToEntrez/){#we create this one when processing the human summaries
-				if (! grep{/Homo_sapiens_ncbi_gene_all_summaries\.txt/} @files){
-					push @files, $database_ref->{human_summary};
-				}
-				next;
-			}
+            my ($file_name, $file_dir) = fileparse($file->{localfile}); 
+            if ($file_name =~ /ensemblToEntrez/){#we create this one when processing the human summaries
+                if (! grep{/Homo_sapiens_ncbi_gene_all_summaries\.txt/} @files){
+                    push @files, $database_ref->{human_summary};
+                }
+                next;
+            }
                 my $increment = 100/@files;
                 $increment /=10;
                 chdir $genedir || display_error_and_exit("Directory Error", "Can't move to directory $genedir",) ;
@@ -562,13 +562,13 @@ sub prepare_database{
                         move($file, "$file.bkup") || display_error_and_exit("File Error", "Error creating file backup of $file->{localfile}", "Check permissions and/or disk space.") ;
                         $file_exists++;
                 }
-		my $ftpobj = Net::FTP -> new($file -> {url}) || restore_file($file_exists, $file) && display_error_and_exit("Can't connect to site $file->{url}", "Could not download $file->{url}/$file->{dir}/$file->{file}");
+        my $ftpobj = Net::FTP -> new($file -> {url}) || restore_file($file_exists, $file) && display_error_and_exit("Can't connect to site $file->{url}", "Could not download $file->{url}/$file->{dir}/$file->{file}");
                 $ftpobj -> login("anonymous", "") || restore_file($file_exists, $file) && display_error_and_exit ("Can't login to $file->{url}", "Could not download $file->{url}/$file->{dir}/$file->{file}");
                 $ftpobj -> cwd($file -> {dir}) || restore_file($file_exists, $file) && display_error_and_exit("Can't locate directory $file->{dir} at $file->{url}", "Could not download $file->{url}/$file->{dir}/$file->{file}") ;
                 $ftpobj -> binary();
                 $ftpobj -> get($file->{file}) || restore_file($file_exists, $file) && display_error_and_exit("Download error", "Could not download $file->{url}/$file->{dir}/$file->{file}") ;
                 $db_percent += $increment;
-		$next_update = $progressbar->update($db_percent) if $db_percent >= $next_update;
+        $next_update = $progressbar->update($db_percent) if $db_percent >= $next_update;
                 $increment *= 9;
                 if($file->{file} =~ /\.gz$/){
                         $increment/= 3;
@@ -585,37 +585,37 @@ sub prepare_database{
                                         print $ZOUT $buffer;
                                 }
                                 $db_percent += $increment;
-				$next_update = $progressbar->update($db_percent) if $db_percent >= $next_update;
-				
+                $next_update = $progressbar->update($db_percent) if $db_percent >= $next_update;
+                
                         }else{
                                 gunzip($file->{file} => $output) || restore_file($file_exists, $file)
                                 && display_error_and_exit("Error decompressing file", "Error decompressing $file->{file}") ;
                                 $db_percent += $increment;
-				$next_update = $progressbar->update($db_percent) if $db_percent >= $next_update;
+                $next_update = $progressbar->update($db_percent) if $db_percent >= $next_update;
                         }
                         #$file_name = $output unless $file->{file} =~ /\.ags/;
-			$next_update = $progressbar->update($db_percent) if $db_percent >= $next_update;
-			$increment *= 2;
+            $next_update = $progressbar->update($db_percent) if $db_percent >= $next_update;
+            $increment *= 2;
                 }
                 if ($file->{file} =~ /\.ags/){
                         $increment /= 2;
                         #use gene2xml script to extract summaries...
                         #my $gene2xml = "$dir/gene2xml.exe";
                         my $gene2xml = "$genedir/gene2xml";
-			if (not -e $gene2xml){
-				download_gene2xml("$genedir");
-			}
+            if (not -e $gene2xml){
+                download_gene2xml("$genedir");
+            }
                         (my $decomp_file = $file->{file}) =~ s/\.gz$//;
                         #my $command = "\"$gene2xml\" -i \"$decomp_file\" -b -o \"$xml_out\"";
-			#my $exit_status = `$command`;
-			#display_error_and_continue("Error processing gene2xml command", "Exit status of $exit_status from $command") if $exit_status;
+            #my $exit_status = `$command`;
+            #display_error_and_continue("Error processing gene2xml command", "Exit status of $exit_status from $command") if $exit_status;
                         $db_percent += $increment/2;
-			$next_update = $progressbar->update($db_percent) if $db_percent >= $next_update;
+            $next_update = $progressbar->update($db_percent) if $db_percent >= $next_update;
                         #unlink $file->{file} || display_error_and_exit( "Can't delete xml output ($file->{file})", "Check permissions - it is safe to manually delete this file now");
                         extract_ncbi_summaries($gene2xml, $decomp_file, $file_name, $database_ref->{ensemblToEntrez}->{localfile});
-						sort_and_index_gene_files("$file_dir/$file_name", $database_ref->{ensemblToEntrez}->{col}, \$db_percent, $increment, $progressbar, $next_update, $database_ref->{ensemblToEntrez}->{delimiter});
+                        sort_and_index_gene_files("$file_dir/$file_name", $database_ref->{ensemblToEntrez}->{col}, \$db_percent, $increment, $progressbar, $next_update, $database_ref->{ensemblToEntrez}->{delimiter});
                         $db_percent += $increment/2;
-						$next_update = $progressbar->update($db_percent) if $db_percent >= $next_update;
+                        $next_update = $progressbar->update($db_percent) if $db_percent >= $next_update;
                         unlink $decomp_file || display_error_and_continue( "Can't delete decompressed ags file ($decomp_file)", "Check permissions - it is safe to manually delete this file now");
                         #unlink $xml_out || display_error_and_exit( "Can't delete xml output ($xml_out)", "Check permissions - it is safe to manually delete this file now");
                 }
@@ -627,9 +627,9 @@ sub prepare_database{
                         while (my $line = <$HMD_DOWN>){
                                 next if $line !~ /^[0-9MXYU]/;
                                 print $HMD_MOD $line;
-			}
-			$db_percent += $increment;
-			$next_update = $progressbar->update($db_percent) if $db_percent >= $next_update;
+            }
+            $db_percent += $increment;
+            $next_update = $progressbar->update($db_percent) if $db_percent >= $next_update;
                         close $HMD_MOD;
                         close $HMD_DOWN;
                         unlink "$file->{file}.bak" || display_error_and_continue( "Can't delete backup file $file->{file}.bak", "Check permissions - it is safe to manually delete this file now");
@@ -639,7 +639,7 @@ sub prepare_database{
                 sort_and_index_gene_files("$file_dir/$file_name", $file->{col}, \$db_percent, $increment, $progressbar, $next_update, $file->{delimiter});
                 unlink "$file.bkup" || display_error_and_continue( "Can't delete backup file \"$file.bkup\"", "Check permissions - it is safe to manually delete this file now");
         }
-	$progressbar->update(100);
+    $progressbar->update(100);
 }
 
 #########################################
@@ -651,7 +651,7 @@ sub sort_and_index_gene_files{
         $delimiter = "\t" if not $delimiter;
         my $line_count = 0;
         $line_count += tr/\n/\n/ while sysread($FILE, $_, 2 ** 16);
-	$line_count ||= 1;
+    $line_count ||= 1;
         #print STDERR "$file has $line_count lines\n";/
         close $FILE;
         my $incr_per_line = ($increment/6)/$line_count;
@@ -659,11 +659,11 @@ sub sort_and_index_gene_files{
         open ($FILE, $file) || die "Can't open $file for sorting and indexing!\n";
         my $check_taxon = 0;
         $check_taxon = 1 if ($file =~ /gene2go/ or $file =~ /generifs/);#for these files we'll ignore non-mouse and non-human genes
-	my $line_counter = 0;
-	my $prev_counter = 0; 
+    my $line_counter = 0;
+    my $prev_counter = 0; 
         while (<$FILE>){
                 $$prog_ref += $incr_per_line;
-				$next_update = $progressbar->update($$prog_ref) if $$prog_ref >= $next_update;
+                $next_update = $progressbar->update($$prog_ref) if $$prog_ref >= $next_update;
                 next if /^#/;
                 if ($check_taxon){
                         my $tax_id = (split "\t")[0];
@@ -674,24 +674,24 @@ sub sort_and_index_gene_files{
                         push(@lines, [$_, (split /$delimiter/)[$sort_column]]);
                 }
         }
-	#$$prog_ref += $increment/6;
-	#print $bar "$$prog_ref";
+    #$$prog_ref += $increment/6;
+    #print $bar "$$prog_ref";
         close $FILE;
         $incr_per_line = ($increment/2)/@lines;
         @lines = sort{ $a -> [1] cmp $b -> [1]} @lines;
         $$prog_ref += $increment/2;
-	$next_update = $progressbar->update($$prog_ref) if $$prog_ref >= $next_update;
+    $next_update = $progressbar->update($$prog_ref) if $$prog_ref >= $next_update;
         my ($tmp, $TEMP);
         ($TEMP, $tmp) = tempfile("$dir/tmp_dharmaXXXX", UNLINK => 1) or die "Can't create temporary sort file\n";
         $incr_per_line = ($increment/6)/@lines;
-	$line_counter = 0;
-	$prev_counter = 0; 
+    $line_counter = 0;
+    $prev_counter = 0; 
         foreach my $line (@lines){
                 $$prog_ref += $incr_per_line;
-		$next_update = $progressbar->update($$prog_ref) if $$prog_ref >= $next_update;
-		$prev_counter = int($line_counter);
+        $next_update = $progressbar->update($$prog_ref) if $$prog_ref >= $next_update;
+        $prev_counter = int($line_counter);
                 print $TEMP "$line->[0]\n";
- 	}
+     }
         close $TEMP;
         move ($tmp, $file);
         #print STDERR "$file replaced with sorted version.\n";
@@ -701,8 +701,8 @@ sub sort_and_index_gene_files{
         open (my $NEWFILE, "$file") || die "Can't open $file for reading ";
         build_index($NEWFILE, $INDEX);
         $$prog_ref += $increment/6;
-	$next_update = $progressbar->update($$prog_ref) if $$prog_ref >= $next_update;
-	
+    $next_update = $progressbar->update($$prog_ref) if $$prog_ref >= $next_update;
+    
 }
 
 #####################################   
@@ -751,7 +751,7 @@ sub binSearchLineWithIndex{
                         if ($x lt $line[$column]){
                                 $u = $i -1;
                         }elsif ($x gt $line[$column]){
-     				$l = $i +1;
+                     $l = $i +1;
                         }else{
                                 return $i;
                         }
@@ -764,12 +764,12 @@ sub binSearchLineWithIndex{
 sub extract_ncbi_summaries{
 #produces file of gene ID plus Summary plus Interactants
         my ($gene2xml, $agsfile, $sum_out, $ensToEntrezout) = @_;
-		open (my $ENSOUT, ">$ensToEntrezout") || die "Can't open $ensToEntrezout for writing\n";
-    	my $io =  Bio::SeqIO->new(-format => 'entrezgene', -file => "$gene2xml -i $agsfile -b -x |");
-	#my $io =  Bio::SeqIO->new(-format => 'entrezgene_interactants', -file => "$gene2xml -i $agsfile -b -x |");
+        open (my $ENSOUT, ">$ensToEntrezout") || die "Can't open $ensToEntrezout for writing\n";
+        my $io =  Bio::SeqIO->new(-format => 'entrezgene', -file => "$gene2xml -i $agsfile -b -x |");
+    #my $io =  Bio::SeqIO->new(-format => 'entrezgene_interactants', -file => "$gene2xml -i $agsfile -b -x |");
         open (my $SUMOUT, ">$sum_out") || die "Can't open $sum_out for writing\n";
-	#while (my ($gene, $genestructure, $uncaptured, $inters)  = $io->next_seq){
-	    while (my ($gene, $genestructure, $uncaptured)  = $io->next_seq){
+    #while (my ($gene, $genestructure, $uncaptured, $inters)  = $io->next_seq){
+        while (my ($gene, $genestructure, $uncaptured)  = $io->next_seq){
                 print $SUMOUT "$gene->{primary_seq}->{accession_number}\t";
                 exists $gene->{primary_seq}->{display_id} ? print $SUMOUT "$gene->{primary_seq}->{display_id}\t" : print $SUMOUT "-\t";
                 exists $gene->{primary_seq}->{desc} ? print $SUMOUT "$gene->{primary_seq}->{desc}\t" : print $SUMOUT "-\t";
@@ -792,7 +792,7 @@ sub extract_ncbi_summaries{
                                 $chrom = $anno->{value};
                         }elsif($anno->tagname eq 'Ensembl'){
                                 push @ensembl, $anno->{value};
-								print $ENSOUT "$anno->{value}\t$gene->{primary_seq}->{accession_number}\n";
+                                print $ENSOUT "$anno->{value}\t$gene->{primary_seq}->{accession_number}\n";
                         }
                 }
                 @annotations= $annotations->get_Annotations('OntologyTerm');
@@ -802,7 +802,7 @@ sub extract_ncbi_summaries{
                         push (@go_descs, $anno->name);
                 }
                 my (@seq_member) = $genestructure->get_members;
-        	    @ensembl ? print $SUMOUT join("|", @ensembl) ."\t"  : print $SUMOUT "-\t";
+                @ensembl ? print $SUMOUT join("|", @ensembl) ."\t"  : print $SUMOUT "-\t";
                 @go_ids ? print $SUMOUT join("|", @go_ids) ."\t"  : print $SUMOUT "-\t";
                 @go_descs ? print $SUMOUT join("|", @go_descs) ."\t"  : print $SUMOUT "-\t";
                 @rifs ? print $SUMOUT join("|", @rifs) ."\t"  : print $SUMOUT "-\t";
@@ -813,9 +813,9 @@ sub extract_ncbi_summaries{
                # }
                # @interactants ? print $SUMOUT join("|", @interactants) ."\t"  : print $SUMOUT "-\t";
                 print $SUMOUT "\n";
-	}
+    }
     close $SUMOUT;
-	close $ENSOUT;
+    close $ENSOUT;
 }
                                                                
 #####################################   
@@ -839,7 +839,7 @@ sub getMouseOrtholog{
         my ($gene, $fh, $index, $u) = @_;
         my $i = binSearchLineWithIndex($gene, $fh, $index, $u, 1);
         if ($i > 0){
-        	return (split "\t", line_with_index($fh, $index, $i))[6];
+            return (split "\t", line_with_index($fh, $index, $i))[6];
         }
 }
 
@@ -886,43 +886,43 @@ sub get_file_length_from_index{
 }
 ######################################################################
 sub remove_duplicates{
-	#remove dups from arrays passed as array references
-	foreach my $array_ref (@_){
-		die "Value passed to remove_duplicates not an array reference!\n" if ref $array_ref ne 'ARRAY';
-		my %seen = ();
-		@$array_ref = grep {! $seen{$_}++ } @$array_ref;
-	}
+    #remove dups from arrays passed as array references
+    foreach my $array_ref (@_){
+        die "Value passed to remove_duplicates not an array reference!\n" if ref $array_ref ne 'ARRAY';
+        my %seen = ();
+        @$array_ref = grep {! $seen{$_}++ } @$array_ref;
+    }
 }
 
 ######################################################################
 sub download_gene2xml{
-	my ($destination) = @_;
-	my $pwd = getcwd();
-	chdir $destination;
-	my $site = "ftp.ncbi.nlm.nih.gov";
-	my $dir = "toolbox/ncbi_tools/converters/by_program/gene2xml";
-	my $ftpobj = Net::FTP -> new($site) || display_error_and_exit("Can't connect to $site ", "Could not download gene2xml");
-	$ftpobj -> login("anonymous", "") || display_error_and_exit("Login to $site failed", "Login failed when attempting to download gene2xml");
-	$ftpobj -> cwd($dir) || display_error_and_exit("Couldn't change directory to $dir at $site", "cwd failed when attempting to download gene2xml");
-	$ftpobj->binary();
-	my $prog = "";
-	if ($^O eq 'darwin'){
-		$prog = "mac.gene2xml.gz";
-	}elsif ($^O eq 'linux'){
-		if ($Config{archname} eq 'x86_64'){
-			$prog = "linux64.gene2xml.gz";
-		}else{
-			$prog = "linux.gene2xml.gz";
-		}
-	}else{
-		display_error_and_exit("Unsupported OS: $^O", "Failed to retrieve gene2xml because your OS is not supported.  If you have a binary place it in your database folder and rerun the database update");
-	}
-	$ftpobj->get($prog) || display_error_and_exit("Failed to retrieve $prog from $site", "$!");
-	my $output = "gene2xml";
+    my ($destination) = @_;
+    my $pwd = getcwd();
+    chdir $destination;
+    my $site = "ftp.ncbi.nlm.nih.gov";
+    my $dir = "toolbox/ncbi_tools/converters/by_program/gene2xml";
+    my $ftpobj = Net::FTP -> new($site) || display_error_and_exit("Can't connect to $site ", "Could not download gene2xml");
+    $ftpobj -> login("anonymous", "") || display_error_and_exit("Login to $site failed", "Login failed when attempting to download gene2xml");
+    $ftpobj -> cwd($dir) || display_error_and_exit("Couldn't change directory to $dir at $site", "cwd failed when attempting to download gene2xml");
+    $ftpobj->binary();
+    my $prog = "";
+    if ($^O eq 'darwin'){
+        $prog = "mac.gene2xml.gz";
+    }elsif ($^O eq 'linux'){
+        if ($Config{archname} eq 'x86_64'){
+            $prog = "linux64.gene2xml.gz";
+        }else{
+            $prog = "linux.gene2xml.gz";
+        }
+    }else{
+        display_error_and_exit("Unsupported OS: $^O", "Failed to retrieve gene2xml because your OS is not supported.  If you have a binary place it in your database folder and rerun the database update");
+    }
+    $ftpobj->get($prog) || display_error_and_exit("Failed to retrieve $prog from $site", "$!");
+    my $output = "gene2xml";
         gunzip($prog => $output) || display_error_and_exit("Extract of $prog failed", "$!");
-	chmod 0755, $output || display_error_and_exit("Could not make $output executable", "$!");
-	chdir $pwd;
+    chmod 0755, $output || display_error_and_exit("Could not make $output executable", "$!");
+    chdir $pwd;
 }
-		
+        
 
 
