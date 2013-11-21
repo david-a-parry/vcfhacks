@@ -86,7 +86,7 @@ Show manual page.
 
 =head1 DESCRIPTION
 
-Not done yet...
+Filter variants from a VCF using one or more other VCFs.  You may specify samples or a number of samples with matching variants to filter with.  You can also use minimum genotype or variant qualities to filter with. 
 
 =head1 AUTHOR
 
