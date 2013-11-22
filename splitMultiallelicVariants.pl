@@ -30,7 +30,8 @@ if ($out){
 
 foreach my $in (@input){
     my $vcf_obj = ParseVCF->new(file=>$in);
-    print $OUT  $vcf_obj->getHeader();
+    print $OUT  $vcf_obj->getHeader(0) ."##split_multiallelic_variants.pl=\"$inputs\"\n";
+    print $OUT "##INFO=<ID=ParseVCF_split_variant-sample_fields_may_be_inaccurate,Number=0,Type=Flag,Description=\"Variant has been split from being a multiallelic variant containing both an SNV and an Indel into separate lines by ParseVCF.pm. Care should be taken when interpreting variant fields.\">\n";
 LINE:    while (my $line = $vcf_obj->readLine){
         my $ref = $vcf_obj->getVariantField("REF");
         my @alts = $vcf_obj->readAlleles(alt_alleles => 1);
