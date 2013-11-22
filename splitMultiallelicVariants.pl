@@ -9,17 +9,17 @@ use FindBin;
 use lib "$FindBin::Bin";
 use ParseVCF;
 
-my @input;
+my $input;
 my $out;
 my $help;
 my $manual;
 
-GetOptions('help' => \$help, 'manual' => \$manual, 'input=s{,}' => \@input, 'output=s' => \$out,
+GetOptions('help' => \$help, 'manual' => \$manual, 'input=s{,}' => \$input, 'output=s' => \$out,
 ) or pod2usage(-exitval => 2, -message => "Syntax error") ;
 
 pod2usage (-verbose => 2) if $manual;
 pod2usage (-verbose => 1) if $help;
-pod2usage(-exitval => 2, -message => "--input argument is required") if not @input;
+pod2usage(-exitval => 2, -message => "--input argument is required") if not $input;
 
 my $OUT;
 if ($out){
@@ -28,30 +28,29 @@ if ($out){
     $OUT = \*STDOUT;
 }
 
-foreach my $in (@input){
-    my $vcf_obj = ParseVCF->new(file=>$in);
-    print $OUT  $vcf_obj->getHeader(0) ."##split_multiallelic_variants.pl=\"$inputs\"\n";
-    print $OUT "##INFO=<ID=ParseVCF_split_variant-sample_fields_may_be_inaccurate,Number=0,Type=Flag,Description=\"Variant has been split from being a multiallelic variant containing both an SNV and an Indel into separate lines by ParseVCF.pm. Care should be taken when interpreting variant fields.\">\n";
+my $vcf_obj = ParseVCF->new(file=>$input);
+print $OUT  $vcf_obj->getHeader(0) ."##split_multiallelic_variants.pl=\"--input $input\"\n";
+print $OUT "##INFO=<ID=ParseVCF_split_variant-sample_fields_may_be_inaccurate,Number=0,Type=Flag,Description=\"Variant has been split from being a multiallelic variant containing both an SNV and an Indel into separate lines by ParseVCF.pm. Care should be taken when interpreting variant fields.\">\n";
 LINE:    while (my $line = $vcf_obj->readLine){
-        my $ref = $vcf_obj->getVariantField("REF");
-        my @alts = $vcf_obj->readAlleles(alt_alleles => 1);
-        my $same_length = 0;
-        my $diff_length = 0;
-        foreach my $alt (@alts){
-            if (length($alt) == length($ref)){
-                $same_length++;
-            }else{
-                $diff_length++;
-            }
-        }
-        if ($same_length and $diff_length){#SNV/MNV and Indel at same site
-            my @splits = $vcf_obj->splitMultiAllelicVariants();
-            print join("\n", @splits) ."\n";
+    my $ref = $vcf_obj->getVariantField("REF");
+    my @alts = $vcf_obj->readAlleles(alt_alleles => 1);
+    my $same_length = 0;
+    my $diff_length = 0;
+    foreach my $alt (@alts){
+        if (length($alt) == length($ref)){
+            $same_length++;
         }else{
-            print "$line\n";
+            $diff_length++;
         }
     }
+    if ($same_length and $diff_length){#SNV/MNV and Indel at same site
+        my @splits = $vcf_obj->splitMultiAllelicVariants();
+        print join("\n", @splits) ."\n";
+    }else{
+        print "$line\n";
+    }
 }
+
 
 
 =head1 NAME
@@ -72,7 +71,7 @@ splitMultiAllelicVariants - annotate and optionally filter SNPs from a VCF file
 
 =item B<-i    --input>
 
-One or more input VCF files
+VCF file input.
 
 =item B<-o    --output>
 
