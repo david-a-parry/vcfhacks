@@ -24,13 +24,13 @@ our $AUTOLOAD;
 {
         my $_count = 0;
         my %_attrs = (
-                _file => ["", "read/required"],
-                _header => ["", "read/write"],
-                _metaHeader => [[], "read/write"],
+        _file => ["", "read/required"],
+        _header => ["", "read/write"],
+        _metaHeader => [[], "read/write"],
         _variantCount => [0, "read"],
         _totalLines => [0, "read"],
         _inputIsStdin => [0, "read"],
-        _sampleOrder => [[], "read"],
+       # _sampleOrder => [[], "read"],
         _currentLine => ["", "read"],
         _index => ["", "read"],
         _noHeaderCheck => [0, "read/write"],
@@ -1791,10 +1791,6 @@ Number of variants processed so far. Read only.
 =item B<totalLines>
 
 Total number of lines in VCF file. Read only.
-
-=item B<sampleOrder> 
-
-Order of samples in header. Read only.
 
 =item B<noHeaderCheck>
 

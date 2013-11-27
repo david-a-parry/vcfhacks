@@ -55,13 +55,13 @@ LINE:    while (my $line = $vcf_obj->readLine){
 
 =head1 NAME
 
-splitMultiAllelicVariants - annotate and optionally filter SNPs from a VCF file 
+splitMultiAllelicVariants.pl - split indels and SNVs/MNVs present on the same line in a VCF
 
 =head1 SYNOPSIS
 
-        splitMultiAllelicVariants -i [vcf file] [options]
-        splitMultiAllelicVariants -h (display help message)
-        splitMultiAllelicVariants -m (display manual page)
+        splitMultiAllelicVariants.pl -i [vcf file] [options]
+        splitMultiAllelicVariants.pl -h (display help message)
+        splitMultiAllelicVariants.pl -m (display manual page)
 
 =cut
 

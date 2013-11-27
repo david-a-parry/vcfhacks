@@ -32,9 +32,6 @@ GetOptions(\%opts,
 pod2usage (-verbose => 2) if $opts{manual};
 pod2usage (-verbose => 1) if $opts{help};
 
-#for local convenience
-$opts{dir} = '/home/david/ref/evsVcfs/';
-
 pod2usage(-exitval => 2, -message => "Syntax error") if not $opts{input} or (not $opts{dir} and not @{$opts{evs_file}});
 if (defined $freq){
         pod2usage(-exitval => 2, -message => "value for --freq argument must be greater than 0 and less than 50") if $freq > 50 or $freq <= 0;
@@ -337,7 +334,7 @@ Use this flag to print % progress to STDERR.
 
 Use this flag to supress warnings if any variants in the SNP reference file do not have IDs.
 
-=item B<-s    --strict>
+=item B<--strict>
 
 Use this flag to complain and exit if any variants in the SNP reference file do not have IDs.
 

@@ -42,7 +42,7 @@ One or more VCF files to use as to filter input. Variants that match from the in
 
 One or more directories containing VCF files to use to filter input. Only files with a ".vcf" or ".vcf.gz" extension will be used.
 
-=item B<-x    --expression>
+=item B<-e    --expression>
 
 Perl style regular expression to use to match VCF files when using --directories argument.
 
@@ -53,6 +53,10 @@ Samples from input file to check. If specified only variant alleles from these s
 =item B<-r    --reject>
 
 Samples from filter VCF files to use for filtering.  If specified only variant alleles from these samples will be used to compare with the input VCF. Default is to look at all alleles.
+
+=item B<-x    --not_samples>
+
+Samples from filter VCF files to ignore.  If specified variant alleles from all samples except these will be used to compare with the input VCF. Default is to look at all alleles.
 
 =item B<-t    --threshold>
 
@@ -109,6 +113,7 @@ my @filter_vcfs;
 my @dirs;
 my @samples;#samples in vcf input to check calls for - filter only if they contain same allele as in filter_vcf. Default is to simply check alleles in ALT field and ignore samples.
 my @reject;#if specified will only check alleles for these samples in filter_vcfs
+my @ignore_samples; #these samples will be ignored in either VCF 
 my $threshold = 0;#only filter if we see the allele this many times in filter_vcfs
 my $print_matching = 0;#flag telling the script to invert so we print matching lines and filter non-matching lines
 my $out;
@@ -118,12 +123,17 @@ my $help;
 my $man;
 my $progress;
 my $regex; #match this regex if looking in dir
-GetOptions('x|expression=s' => \$regex, 'input=s' => \$vcf, 'output=s' => \$out, 'filter=s{,}' => \@filter_vcfs, 'directories=s{,}' => \@dirs, 'samples=s{,}' => \@samples, 'reject=s{,}' => \@reject, 'threshold=i' => \$threshold, 'quality=f' => \$min_qual,'genotype_quality=f' => \$minGQ, 'bar' => \$progress, 'help' => \$help, 'manual' => \$man, 'print_matching' => \$print_matching) or pod2usage(-message => "Syntax error.", exitval => 2);
+GetOptions('x|not_samples=s{,}' => \@ignore_samples, 'expression=s' => \$regex, 'input=s' => \$vcf, 'output=s' => \$out, 'filter=s{,}' => \@filter_vcfs, 'directories=s{,}' => \@dirs, 'samples=s{,}' => \@samples, 'reject=s{,}' => \@reject, 'threshold=i' => \$threshold, 'quality=f' => \$min_qual,'genotype_quality=f' => \$minGQ, 'bar' => \$progress, 'help' => \$help, 'manual' => \$man, 'print_matching' => \$print_matching) or pod2usage(-message => "Syntax error.", exitval => 2);
 
 pod2usage(-verbose => 2) if $man;
 pod2usage(-verbose => 1) if $help;
 pod2usage(-message => "Syntax error", exitval => 2) if (not $vcf or (not @filter_vcfs and not @dirs));
+pod2usage(-message => "Syntax error - cannot use --reject and --not_samples argument together", exitval => 2) if (@reject and @ignore_samples);
 
+my %ignores = ();
+if (@ignore_samples){
+    %ignores = map {$_ => 1 } @ignore_samples;
+}
 push @filter_vcfs, get_vcfs_from_directories(\@dirs, $regex) if @dirs;
 die "No VCFs found to use as filters.\n" if not @filter_vcfs;
 print STDERR "Initializing input VCF\n";
@@ -164,7 +174,7 @@ LINE: while (my $line = $vcf_obj->readLine){
     $n++;
     if ($progress){
                 $next_update = $progressbar->update($n) if $n >= $next_update;
-        }
+    }
     my $qual = $vcf_obj->getVariantField('QUAL');
     my $chrom = $vcf_obj->getVariantField('CHROM');
     my $pos = $vcf_obj->getVariantField('POS');
@@ -190,6 +200,10 @@ FILTER_LINE:    while (my $filter_line = $filter_obj->readPosition()){
                 my @f_alts = ();
                 if (@reject){
                     @f_alts = $filter_obj->getSampleActualGenotypes(multiple => \@reject, return_alleles_only => 1);
+                }elsif(@ignore_samples){
+                    my @temp_reject = $filter_obj->getSampleNames() ;            
+                    @temp_reject = grep {! $ignores{$_} } @temp_reject;
+                    @f_alts = $filter_obj->getSampleActualGenotypes(multiple => \@temp_reject, return_alleles_only => 1);
                 }else{
                     @f_alts = $filter_obj->readAlleles(alt_alleles=>1);
                 }
