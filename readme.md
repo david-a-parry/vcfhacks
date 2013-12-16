@@ -4,7 +4,11 @@ This project comprises a set of perl scripts and modules that may be useful for 
 
 __UPDATE__
 
-16/12/13 - fixed issues with splitMultiallelicVariants.pl always printing to STDOUT and missing out final header line. Updated location of HMD_human5.rpt reference file for ensemblGeneAnnotator.  Bio::SeqIO::entrezgene no longer parses all entrez gene asn.1 records correctly for creating the database - bug reported but an acceptable workaround needed so it is recommended to only use existing databases at this time.
+16/12/13 
+
+-added sortVcf.pl program
+-fixed issues with splitMultiallelicVariants.pl always printing to STDOUT and missing out final header line. 
+-Updated location of HMD_human5.rpt reference file for ensemblGeneAnnotator.  Bio::SeqIO::entrezgene no longer parses all entrez gene asn.1 records correctly for creating the database - bug reported but an acceptable workaround needed so it is recommended to only use existing databases at this time.
 
 __INSTALLATION__
 
