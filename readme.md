@@ -2,6 +2,10 @@ __vcfhacks__
 
 This project comprises a set of perl scripts and modules that may be useful for VCF manipulation when trying to discover disease-causing variants in sequencing data. Although more biologists are taking to the commandline many do not have the time or inclination to really get to grips with the more obtuse programs used in the field of bioinformatics. The aim of this project is to provide conceptually simple programs that perform common useful tasks. 
 
+__UPDATE__
+
+16/12/13 - fixed issues with splitMultiallelicVariants.pl always printing to STDOUT and missing out final header line. Updated location of HMD_human5.rpt reference file for ensemblGeneAnnotator.  Bio::SeqIO::entrezgene no longer parses all entrez gene asn.1 records correctly for creating the database - bug reported but an acceptable workaround needed so it is recommended to only use existing databases at this time.
+
 __INSTALLATION__
 
 Unzip the downloaded file and ensure you keep the .pl scripts in the same directory as the .pm module files.  The exceptions to this are the two Variant Effect Predictor (VEP) plugin modules (SpliceConsensus.pm and SpliceConsensusFilter.pm) which should be installed in your VEP cache 'Plugins' folder if you want to use them. The SpliceConsensus.pm annotations are not yet integrated into the other scripts but shall be shortly.
