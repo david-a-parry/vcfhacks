@@ -143,14 +143,8 @@ my $time = strftime("%H:%M:%S", localtime);
 print STDERR "Time started: $time\n";
 $offset = 0 if not $offset;
 my $vcf_obj = ParseVCF->new( file=> $vcf_file);
-my $progressbar ;
-if ($progress){
-    $total_lines = $vcf_obj->countLines("variants");
-    print STDERR "vcf file has $total_lines variants\n";
-        $progressbar = Term::ProgressBar->new({name => "Filtering", count => $total_lines, ETA => "linear", });    
-}
+print STDERR "Preparing regions...\n";
 my @regions = ();
-
 if (@bedfile){
     foreach my $bedfile (@bedfile){
         open (BED, $bedfile) || die "can't open $bedfile";
@@ -185,6 +179,12 @@ if ($outfile){
     open ($OUT, ">$outfile") || die "Can't open $outfile for writing\n";
 }else{
     $OUT = *STDOUT;
+}
+my $progressbar ;
+if ($progress){
+    $total_lines = $vcf_obj->countLines("variants");
+    print STDERR "vcf file has $total_lines variants\n";
+    $progressbar = Term::ProgressBar->new({name => "Filtering", count => $total_lines, ETA => "linear", });    
 }
 my $lines = 0;
 my $next_update = 0;
