@@ -1328,7 +1328,7 @@ sub download_gene2xml {
         $prog = "mac.gene2xml.gz";
     }
     elsif ( $^O eq 'linux' ) {
-        if ( $Config{archname} eq 'x86_64' ) {
+        if ( $Config{archname} =~ 'x86_64' ) {
             $prog = "linux64.gene2xml.gz";
         }
         else {
