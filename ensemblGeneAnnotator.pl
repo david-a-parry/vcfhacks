@@ -877,10 +877,9 @@ sub prepare_database {
             $increment /= 2;
 
             #use gene2xml script to extract summaries...
-            #my $gene2xml = "$dir/gene2xml.exe";
-            my $gene2xml = "$genedir/gene2xml";
+            my $gene2xml = "gene2xml";
             if ( not -e $gene2xml ) {
-                download_gene2xml("$genedir");
+                download_gene2xml("./");
             }
             ( my $decomp_file = $file->{file} ) =~ s/\.gz$//;
 
