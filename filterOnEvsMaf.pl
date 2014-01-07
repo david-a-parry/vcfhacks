@@ -314,7 +314,7 @@ Output snp filtered file. Optional - default is STDOUT.
 
 Directory containing ESP VCF files.
 
-=item B<-d    --esp_file>
+=item B<-e    --esp_file>
 
 One or more ESP VCF files to use.
 
