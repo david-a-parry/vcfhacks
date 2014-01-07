@@ -877,7 +877,7 @@ sub prepare_database {
             $increment /= 2;
 
             #use gene2xml script to extract summaries...
-            my $gene2xml = "gene2xml";
+            my $gene2xml = "./gene2xml";
             if ( not -e $gene2xml ) {
                 download_gene2xml("./");
             }
@@ -891,20 +891,21 @@ sub prepare_database {
               if $db_percent >= $next_update;
 
 #unlink $file->{file} || display_error_and_exit( "Can't delete xml output ($file->{file})", "Check permissions - it is safe to manually delete this file now");
+            my ( $enstoEntrez_file_name, $file_dir ) = fileparse( $database_ref->{ensemblToEntrez}->{localfile} );
             extract_ncbi_summaries( $gene2xml, $decomp_file, "$file_name.tmp",
-                $database_ref->{ensemblToEntrez}->{localfile} .".tmp" );
+                $enstoEntrez_file_name .".tmp" );
                 move( "$file_name.tmp", $file_name ) || display_error_and_exit(
                 "File Error",
                 "Error creating file $file_name",
                 "Check permissions and/or disk space."
                 );
-                move( $database_ref->{ensemblToEntrez}->{localfile} .".tmp", $database_ref->{ensemblToEntrez}->{localfile}) || display_error_and_exit(
+                move( $enstoEntrez_file_name .".tmp", $enstoEntrez_file_name) || display_error_and_exit(
                 "File Error",
                 "Error creating file $database_ref->{ensemblToEntrez}->{localfile}",
                 "Check permissions and/or disk space."
                 );
             sort_and_index_gene_files(
-                "$file_dir/$file_name",
+                $enstoEntrez_file_name,
                 $database_ref->{ensemblToEntrez}->{col},
                 \$db_percent,
                 $increment,
