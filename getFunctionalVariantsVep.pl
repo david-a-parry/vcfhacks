@@ -12,7 +12,7 @@ use ParseVCF;
 
 my $help;
 my $manual;
-my @infile;
+my $infile;
 my $outfile;
 my @classes;
 my $no_head;
@@ -30,13 +30,13 @@ my @gene_lists; #array of files containing Ensembl Gene IDs to filter
 my @samples;
 my $in_every_sample;
 my $matching_genes = 0;#will change to '' if user specifies --find_shared_genes but provides no argument, in which case print to STDERR
-my %opts = ("help" => \$help, "manual" => \$manual, "pass" => \$pass, "progress" => \$progress, "input" => \@infile, "output" => \$outfile, "classes" => \@classes, "additional_classes" => \@add, "remove_headers" => \$no_head, "canonical_only" => \$canonical_only, "maf" => \$any_maf, "gmaf" => \$gmaf, 'damaging' => \@damaging, 'keep_any_damaging' => \$keep_any_damaging, 'unpredicted_missense' => \$filter_unpredicted, 'list' => \@gene_lists, 'samples' => \@samples, 'each_sample' => \$in_every_sample, 'find_shared_genes' => \$matching_genes );
-GetOptions(\%opts, "help" , "manual" , "pass" , "progress" , "input=s{,}" , "output=s{,}" , "classes=s{,}" , "additional_classes=s{,}" , "remove_headers" , "canonical_only" , "maf=f" , "gmaf=f" , 'damaging=s{,}' , 'keep_any_damaging' , 'unpredicted_missense' , 'list=s{,}', 'samples=s{,}', 'each_sample', 'find_shared_genes:s' ) or pod2usage(-message => "Syntax error", -exitval => 2);
+my %opts = ("help" => \$help, "manual" => \$manual, "pass" => \$pass, "progress" => \$progress, "input" => \$infile, "output" => \$outfile, "classes" => \@classes, "additional_classes" => \@add, "remove_headers" => \$no_head, "canonical_only" => \$canonical_only, "maf" => \$any_maf, "gmaf" => \$gmaf, 'damaging' => \@damaging, 'keep_any_damaging' => \$keep_any_damaging, 'unpredicted_missense' => \$filter_unpredicted, 'list' => \@gene_lists, 'samples' => \@samples, 'each_sample' => \$in_every_sample, 'find_shared_genes' => \$matching_genes );
+GetOptions(\%opts, "help" , "manual" , "pass" , "progress" , "input=s" , "output=s" , "classes=s{,}" , "additional_classes=s{,}" , "remove_headers" , "canonical_only" , "maf=f" , "gmaf=f" , 'damaging=s{,}' , 'keep_any_damaging' , 'unpredicted_missense' , 'list=s{,}', 'samples=s{,}', 'each_sample', 'find_shared_genes:s' ) or pod2usage(-message => "Syntax error", -exitval => 2);
 pod2usage(-verbose => 2) if ($manual);
 pod2usage(-verbose => 1) if ($help);
 pod2usage(-message => 
-          "Syntax error - at least one input file must be supplied.\n", 
-          -exitval => 2) if (not @infile);
+          "Syntax error - an input file must be supplied.\n", 
+          -exitval => 2) if (not $infile);
 pod2usage(-message => 
         "--gmaf option requires a value between 0.00 and 0.50 to filter on global minor allele frequency.\n", 
         -exitval => 2) if (defined $gmaf && ($gmaf < 0 or $gmaf > 0.5));
@@ -183,166 +183,161 @@ if (@gene_lists){
 my $file = 0;
 my $got = 0;
 my $count = 0 ;
-my $total_files = scalar@infile;
 my %genes_per_sample = (); # will take on the format of $genes_per_sample{sample} = anonymous hash with keys = transcript id values = gene symbol
                             # e.g. $genes_per_sample{sample}->{ENST0012345} = {AGENE}
-foreach my $in(@infile){
-    $file++;
-        my @available_mafs = ();
-    print STDERR "Processing File $file of $total_files...\n" if $progress;
-    my $vcf_obj = ParseVCF->new(file=> $in);
-    my $vep_header = $vcf_obj->readVepHeader();
-    die "No 'consequence' field identified in header for file $in - " .
-    "please annotate with Ensembl's variant_effect_precictor.pl script.\n" if (not exists $vep_header->{consequence});
-    die "No GMAF field in header for file $in - please annotate GMAF with Ensembl's variant_effect_precictor.pl script.\n"
-        if (defined $gmaf and not exists $vep_header->{gmaf});
-        if (defined $any_maf){
-            foreach my $key (keys %{$vep_header}){
-                if ($key =~ /\w_MAF$/){
-                    push @available_mafs, $key;
-                    push @csq_fields, $key;
-                }
-            }
+my @available_mafs = ();
+my $vcf_obj = ParseVCF->new(file=> $infile);
+my $vep_header = $vcf_obj->readVepHeader();
+die "No 'consequence' field identified in header for file $infile - " .
+"please annotate with Ensembl's variant_effect_precictor.pl script.\n" if (not exists $vep_header->{consequence});
+die "No GMAF field in header for file $infile - please annotate GMAF with Ensembl's variant_effect_precictor.pl script.\n" 
+    if (defined $gmaf and not exists $vep_header->{gmaf});
+if (defined $any_maf){
+    foreach my $key (keys %{$vep_header}){
+        if ($key =~ /\w_MAF$/){
+            push @available_mafs, $key;
+            push @csq_fields, $key;
         }
-    my $progressbar;
-    my $line_count = 0;
-    my $next_update = 0;
-    if ($progress){
-            if ($in eq "-"){
-                    print STDERR "Can't use --progress option when input is from STDIN\n";
-                    $progress = 0;
+    }
+}
+my $progressbar;
+my $line_count = 0;
+my $next_update = 0;
+if ($progress){
+    if ($infile eq "-"){
+        print STDERR "Can't use --progress option when input is from STDIN\n";
+        $progress = 0;
+    }else{
+        $progressbar = Term::ProgressBar->new({name => "Retrieving:", count => $vcf_obj->countLines("variants"), ETA => "linear", });
+    }
+}
+unless ($no_head){
+    print $OUT  $vcf_obj->getHeader(0) ."##getFunctionalVariantsVep.pl=\"";
+    my @opt_string = ();
+    foreach my $k (sort keys %opts){
+        if (not ref $opts{$k}){
+            push @opt_string, "$k=$opts{$k}";
+        }elsif (ref $opts{$k} eq 'SCALAR'){
+            if (defined ${$opts{$k}}){
+                push @opt_string, "$k=${$opts{$k}}";
             }else{
-                    $progressbar = Term::ProgressBar->new({name => "Retrieving ($file of $total_files):", count => $vcf_obj->countLines("variants"), ETA => "linear", });
+                push @opt_string, "$k=undef";
             }
-    }
-    unless ($no_head){
-        print $OUT  $vcf_obj->getHeader(0) ."##getFunctionalVariantsVep.pl=\"";
-        my @opt_string = ();
-        foreach my $k (sort keys %opts){
-            if (not ref $opts{$k}){
-                    push @opt_string, "$k=$opts{$k}";
-            }elsif (ref $opts{$k} eq 'SCALAR'){
-                    if (defined ${$opts{$k}}){
-                            push @opt_string, "$k=${$opts{$k}}";
-                    }else{
-                            push @opt_string, "$k=undef";
-                    }
-            }elsif (ref $opts{$k} eq 'ARRAY'){
-                if (@{$opts{$k}}){
-                    push @opt_string, "$k=" .join(",", @{$opts{$k}});
-                }else{
-                    push @opt_string, "$k=undef";
-                }
+        }elsif (ref $opts{$k} eq 'ARRAY'){
+            if (@{$opts{$k}}){
+                push @opt_string, "$k=" .join(",", @{$opts{$k}});
+            }else{
+                push @opt_string, "$k=undef";
             }
         }
-        print $OUT join(" ", @opt_string) . "\"\n" .  $vcf_obj->getHeader(1);
     }
-LINE:    while (my $line = $vcf_obj->readLine){
+    print $OUT join(" ", @opt_string) . "\"\n" .  $vcf_obj->getHeader(1);
+}
+LINE: while (my $line = $vcf_obj->readLine){
     $count++;
     $line_count++;
-        my $printed_line = 0;
+    my $printed_line = 0;
     if ($progress){
-            $next_update = $progressbar->update($line_count) if $line_count >= $next_update;
-        }
-        if ($pass){
-            next LINE if $vcf_obj->getVariantField("FILTER") ne 'PASS';
-        }
+        $next_update = $progressbar->update($line_count) if $line_count >= $next_update;
+    }
+    if ($pass){
+        next LINE if $vcf_obj->getVariantField("FILTER") ne 'PASS';
+    }
     #get vep consequence fields
     my @csq = $vcf_obj->getVepFields(\@csq_fields); #returns array of hashes e.g. $csq[0]->{Gene} = 'ENSG000012345' ; $csq[0]->{Consequence} = 'missense_variant'
-        die "No consequence field found for line:\n$line\nPlease annotated your VCF file with ensembl's variant effect precictor before running this program.\n" if not @csq;
-        #assign each ALT genotype to a VEP allele (VEP cuts off the first nt of insertion or deletion alt alleles)
-        my %vep_alleles = ();#hash of VEP alleles to VCF's ALT alleles
+    die "No consequence field found for line:\n$line\nPlease annotated your VCF file with ensembl's variant effect precictor before running this program.\n" if not @csq;
+    #assign each ALT genotype to a VEP allele (VEP cuts off the first nt of insertion or deletion alt alleles)
+    my %vep_alleles = ();#hash of VEP alleles to VCF's ALT alleles
     my @alts = $vcf_obj->readAlleles(alt_alleles => 1);
-        my $ref = $vcf_obj->getVariantField("REF");
+    my $ref = $vcf_obj->getVariantField("REF");
     foreach my $alt ( @alts ){
-            my $allele = $vcf_obj->altsToVepAllele(alt => $alt);
-            $vep_alleles{$allele} = $alt; #$vep{$allele} now corresponds to GT value 
-        }
+        my $allele = $vcf_obj->altsToVepAllele(alt => $alt);
+        $vep_alleles{$allele} = $alt; #$vep{$allele} now corresponds to GT value 
+    }
 
-        #START FILTERING on CSQ fields
+    #START FILTERING on CSQ fields
     #check whether canonical transcript
-ANNOT:    foreach my $annot (@csq){
-        #check against gene filter list
-        if (@genes_to_filter){#this will be empty if --list argument wasn't specified
+ANNOT: foreach my $annot (@csq){
+    #check against gene filter list
+    if (@genes_to_filter){#this will be empty if --list argument wasn't specified
         my $i = binsearch($annot->{gene}, \@genes_to_filter);
-            if ($i > -1){
+        if ($i > -1){
             next ANNOT;
         }
-        }
-        if($canonical_only){
-               next if (not $annot->{canonical});
-            }
+    }
+    if($canonical_only){
+       next if (not $annot->{canonical});
+    }
     #check minor allele frequency
-        if (defined $gmaf){
-            if ($annot->{gmaf}){
+    if (defined $gmaf){
+        if ($annot->{gmaf}){
             if ($annot->{gmaf} =~ /\w+:(\d\.\d+)/){
                 next if $1 >= $gmaf;
             }
         }
-        }
-            if (defined $any_maf){
-                foreach my $some_maf (@available_mafs){
-                if ($annot->{$some_maf}){
+    }
+    if (defined $any_maf){
+        foreach my $some_maf (@available_mafs){
+            if ($annot->{$some_maf}){
                 if ($annot->{$some_maf} =~ /\w+:(\d\.\d+)/){
                     next if $1 >= $any_maf;
                 }
-                    }
-                }
-            }   
+            }
+        }
+    }   
                 
-            #check whether annotation is present in @samples if @samples specified
-            my @found_in_sample = ();       
-            foreach my $sample (@samples){
-                my @sample_alleles = $vcf_obj->getSampleActualGenotypes(sample => $sample, return_alleles_only => 1);
-                if ($in_every_sample){
-                    next ANNOT if not grep {/^$vep_alleles{$annot->{allele}}$/} @sample_alleles;
+    #check whether annotation is present in @samples if @samples specified
+    my @found_in_sample = ();       
+    foreach my $sample (@samples){
+        my @sample_alleles = $vcf_obj->getSampleActualGenotypes(sample => $sample, return_alleles_only => 1);
+        if ($in_every_sample){
+            next ANNOT if not grep {/^$vep_alleles{$annot->{allele}}$/} @sample_alleles;
+                push @found_in_sample, $sample;
+            }else{
+                if (grep {/^$vep_alleles{$annot->{allele}}$/} @sample_alleles){
                     push @found_in_sample, $sample;
-                }else{
-                    if (grep {/^$vep_alleles{$annot->{allele}}$/} @sample_alleles){
-                        push @found_in_sample, $sample;
-                    }
                 }
             }
-            if (@samples){
-                next ANNOT if not @found_in_sample; 
-            }
+        }
+        if (@samples){
+            next ANNOT if not @found_in_sample; 
+        }
 
-            #check vep consequence class
-CLASS:      foreach my $class (@classes){
-                 my @anno_csq = split(/\&/, $annot->{consequence});
-                 if (grep {/NMD_transcript_variant/i} @anno_csq){
-                         next ANNOT;
-                 }else{
-                    foreach my $ac (@anno_csq){
-                        if (lc$ac eq lc$class){
-                if (lc$class eq 'missense_variant' and %damage_filters){
+        #check vep consequence class
+CLASS:  foreach my $class (@classes){
+             my @anno_csq = split(/\&/, $annot->{consequence});
+             if (grep {/NMD_transcript_variant/i} @anno_csq){
+                     next ANNOT;
+             }else{
+                foreach my $ac (@anno_csq){
+                    if (lc$ac eq lc$class){
+                        if (lc$class eq 'missense_variant' and %damage_filters){
                             next if (filter_missense($annot, \%damage_filters, $keep_any_damaging, $filter_unpredicted));
-                            }
-                print $OUT "$line\n" if not $printed_line;
-                            $printed_line++;
-                $got++;
-                            #need to cycle through each annotation if checking for matching genes between samples
-                            #otherwise we can skip to next line
-                            if ($matching_genes){
-                                my $symbol ;
-                    if ($annot->{hgnc}){
-                                    $symbol = $annot->{hgnc};
-                                }elsif($annot->{gene}){
-                                    $symbol = $annot->{gene};
-                                }else{
-                                    $symbol = $annot->{feature};
-                                }
-                                foreach my $sample (@found_in_sample){
-                                    $genes_per_sample{$sample}->{$annot->{feature}} = $symbol;
-                                }
+                        }
+                        print $OUT "$line\n" if not $printed_line;
+                        $printed_line++;
+                        $got++;
+                        #need to cycle through each annotation if checking for matching genes between samples
+                        #otherwise we can skip to next line
+                        if ($matching_genes){
+                            my $symbol ;
+                            if ($annot->{hgnc}){
+                                $symbol = $annot->{hgnc};
+                            }elsif($annot->{gene}){
+                                $symbol = $annot->{gene};
                             }else{
-                                next LINE;
+                                $symbol = $annot->{feature};
                             }
+                            foreach my $sample (@found_in_sample){
+                                $genes_per_sample{$sample}->{$annot->{feature}} = $symbol;
+                            }
+                        }else{
+                            next LINE;
                         }
                     }
                 }
             }
-    }
+        }
     }
 }
 
@@ -375,6 +370,7 @@ TRANSCRIPT: foreach my $transcript ( keys %{$genes_per_sample{$samples[0]}}){
         print STDERR "0 matching transcripts found between samples.\n";
     }
 }
+
 ###################
 ###########
 sub filter_missense{
