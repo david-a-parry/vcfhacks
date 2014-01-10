@@ -258,6 +258,11 @@ LINE: while (my $line = $vcf_obj->readLine){
     #START FILTERING on CSQ fields
     #check whether canonical transcript
 ANNOT: foreach my $annot (@csq){
+    my @anno_csq = split(/\&/, $annot->{consequence});
+    #skip NMD transcripts
+    if (grep {/NMD_transcript_variant/i} @anno_csq){
+        next ANNOT;
+    }
     #check against gene filter list
     if (@genes_to_filter){#this will be empty if --list argument wasn't specified
         my $i = binsearch($annot->{gene}, \@genes_to_filter);
@@ -305,35 +310,30 @@ ANNOT: foreach my $annot (@csq){
 
         #check vep consequence class
 CLASS:  foreach my $class (@classes){
-             my @anno_csq = split(/\&/, $annot->{consequence});
-             if (grep {/NMD_transcript_variant/i} @anno_csq){
-                     next ANNOT;
-             }else{
-                foreach my $ac (@anno_csq){
-                    if (lc$ac eq lc$class){
-                        if (lc$class eq 'missense_variant' and %damage_filters){
-                            next if (filter_missense($annot, \%damage_filters, $keep_any_damaging, $filter_unpredicted));
-                        }
-                        print $OUT "$line\n" if not $printed_line;
-                        $printed_line++;
-                        $got++;
-                        #need to cycle through each annotation if checking for matching genes between samples
-                        #otherwise we can skip to next line
-                        if ($matching_genes){
-                            my $symbol ;
-                            if ($annot->{hgnc}){
-                                $symbol = $annot->{hgnc};
-                            }elsif($annot->{gene}){
-                                $symbol = $annot->{gene};
-                            }else{
-                                $symbol = $annot->{feature};
-                            }
-                            foreach my $sample (@found_in_sample){
-                                $genes_per_sample{$sample}->{$annot->{feature}} = $symbol;
-                            }
+            foreach my $ac (@anno_csq){
+                if (lc$ac eq lc$class){
+                    if (lc$class eq 'missense_variant' and %damage_filters){
+                        next if (filter_missense($annot, \%damage_filters, $keep_any_damaging, $filter_unpredicted));
+                    }
+                    print $OUT "$line\n" if not $printed_line;
+                    $printed_line++;
+                    $got++;
+                    #need to cycle through each annotation if checking for matching genes between samples
+                    #otherwise we can skip to next line
+                    if ($matching_genes){
+                        my $symbol ;
+                        if ($annot->{hgnc}){
+                            $symbol = $annot->{hgnc};
+                        }elsif($annot->{gene}){
+                            $symbol = $annot->{gene};
                         }else{
-                            next LINE;
+                            $symbol = $annot->{feature};
                         }
+                        foreach my $sample (@found_in_sample){
+                            $genes_per_sample{$sample}->{$annot->{feature}} = $symbol;
+                        }
+                    }else{
+                        next LINE;
                     }
                 }
             }

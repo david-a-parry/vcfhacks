@@ -290,42 +290,42 @@ LINE: while (my $line = $vcf_obj->readLine){
     }
     my @csq = $vcf_obj->getVepFields(\@csq_fields); #returns array of hashes e.g. $csq[0]->{Gene} = 'ENSG000012345' ; $csq[0]->{Consequence} = 'missense_variant'
     die "No consequence field found for line:\n$line\nPlease annotated your VCF file with ensembl's variant effect precictor before running this program.\n" if not @csq;
-CSQ:    foreach my $annot (@csq){
+CSQ: foreach my $annot (@csq){
+        my @anno_csq = split(/\&/, $annot->{consequence});
+        #skip NMD transcripts
+        if (grep {/NMD_transcript_variant/i} @anno_csq){
+            next CSQ;
+        }
         my $matches_class = 0;
         next if ($annot->{consequence} eq 'intergenic_variant');
         if($canonical_only){
             next if (not $annot->{canonical});
         }
-              if (defined $gmaf){
-                    if ($annot->{gmaf}){
-                        if ($annot->{gmaf} =~ /\w+:(\d\.\d+)/){
-                            next if $1 >= $gmaf;
-                        }
+        if (defined $gmaf){
+            if ($annot->{gmaf}){
+                if ($annot->{gmaf} =~ /\w+:(\d\.\d+)/){
+                    next if $1 >= $gmaf;
+                }
+            }
+        }
+        if (defined $any_maf){
+            foreach my $some_maf (@available_mafs){
+            if ($annot->{$some_maf}){
+            if ($annot->{$some_maf} =~ /\w+:(\d\.\d+)/){
+                next if $1 >= $any_maf;
                     }
                 }
-                if (defined $any_maf){
-                    foreach my $some_maf (@available_mafs){
-                    if ($annot->{$some_maf}){
-                    if ($annot->{$some_maf} =~ /\w+:(\d\.\d+)/){
-                        next if $1 >= $any_maf;
-                            }
-                        }
-                    }
-                }   
+            }
+        }   
 
-CLASS:        foreach my $class (@classes){
-            my @anno_csq = split(/\&/, $annot->{consequence});
-            if (grep {/NMD_transcript_variant/i} @anno_csq){
-                next CSQ;
-            }else{
-ANNO:            foreach my $ac (@anno_csq){
-                    if (lc$ac eq lc$class){ 
-                        if (lc$class eq 'missense_variant' and %damage_filters){
-                            next ANNO if (filter_missense($annot, \%damage_filters, $keep_any_damaging, $filter_unpredicted));
-                        }
-                        $matches_class++;
-                        last CLASS;
+CLASS:  foreach my $class (@classes){
+ANNO:        foreach my $ac (@anno_csq){
+                if (lc$ac eq lc$class){ 
+                    if (lc$class eq 'missense_variant' and %damage_filters){
+                        next ANNO if (filter_missense($annot, \%damage_filters, $keep_any_damaging, $filter_unpredicted));
                     }
+                    $matches_class++;
+                    last CLASS;
                 }
             }
         }
