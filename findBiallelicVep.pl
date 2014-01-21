@@ -35,29 +35,53 @@ my $progress;
 my $check_all_samples;
 my $homozygous_only;
 
-GetOptions(
-    'input=s' =>\$vcf,
-    'output=s' => \$out,
-    'list:s' => \$list_genes,
-    'samples=s{,}' => \@samples,
-    'classes=s{,}' => \@classes,
-    'canonical_only' => \$canonical_only,
-    'pass_filters' => \$pass_filters,
-    'damaging=s{,}' => \@damaging,
-    'keep_any_damaging' => \$keep_any_damaging,
-    'unpredicted_missense' => \$filter_unpredicted,
-    "gmaf=f" => \$gmaf, 
-    "maf=f" => \$any_maf, 
-    'check_all_samples' => \$check_all_samples,
-    'equal_genotypes' => \$identical_genotypes,
-        'quality=i' => \$genotype_quality,
-    'allow_missing_genotypes' => \$allow_missing,
-    'reject=s{,}' => \@reject,
-    'progress' => \$progress,
-    'add_classes=s{,}' => \@add,
-    'homozygous_only' => \$homozygous_only,
-    'help' => \$help,
-    'manual' => \$man)
+my %opts = (
+            'input' => \$vcf,
+            'output' => \$out,
+            'list:s' => \$list_genes,
+            'samples' => \@samples,
+            'classes' => \@classes,
+            'canonical_only' => \$canonical_only,
+            'pass_filters' => \$pass_filters,
+            'damaging' => \@damaging,
+            'keep_any_damaging' => \$keep_any_damaging,
+            'unpredicted_missense' => \$filter_unpredicted,
+            "gmaf=f" => \$gmaf, 
+            "maf=f" => \$any_maf, 
+            'check_all_samples' => \$check_all_samples,
+            'equal_genotypes' => \$identical_genotypes,
+            'quality' => \$genotype_quality,
+            'allow_missing_genotypes' => \$allow_missing,
+            'reject' => \@reject,
+            'progress' => \$progress,
+            'add_classes' => \@add,
+            'homozygous_only' => \$homozygous_only,
+            'help' => \$help,
+            'manual' => \$man);
+GetOptions(\%opts,
+            'input=s' =>\$vcf,
+            'output=s',
+            'list:s',
+            'samples=s{,}',
+            'classes=s{,}',
+            'canonical_only',
+            'pass_filters',
+            'damaging=s{,}',
+            'keep_any_damaging',
+            'unpredicted_missense',
+            "gmaf=f", 
+            "maf=f", 
+            'check_all_samples',
+            'equal_genotypes',
+            'quality=i',
+            'allow_missing_genotypes',
+            'reject=s{,}',
+            'progress',
+            'add_classes=s{,}',
+            'homozygous_only',
+            'help',
+            'manual' => ,
+            )
         or pod2usage(-message => "Syntax error", exitval => 2);
 
 pod2usage(-verbose => 2) if $man;
@@ -211,7 +235,7 @@ if ($out){
 my $LIST;
 if ($list_genes){
     open ($LIST, ">$list_genes") || die "Can't open $list_genes for writing: $!\n";
-}elsif($list_genes eq ''){#user specified --list option but provided no argument
+}elsif($list_genes eq '' or $list_genes == 0){#user specified --list option but provided no argument
     $LIST = \*STDERR;
     $list_genes = 1;
 }
@@ -225,7 +249,26 @@ if ($progress){
     }
 }
 my $next_update = 0;
-print  $OUT $vcf_obj->getHeader;
+print $OUT  $vcf_obj->getHeader(0) ."##findBiallelicVep.pl\"";
+my @opt_string = ();
+foreach my $k (sort keys %opts){
+    if (not ref $opts{$k}){
+        push @opt_string, "$k=$opts{$k}";
+    }elsif (ref $opts{$k} eq 'SCALAR'){
+        if (defined ${$opts{$k}}){
+            push @opt_string, "$k=${$opts{$k}}";
+        }else{
+            push @opt_string, "$k=undef";
+        }
+    }elsif (ref $opts{$k} eq 'ARRAY'){
+        if (@{$opts{$k}}){
+            push @opt_string, "$k=" .join(",", @{$opts{$k}});
+        }else{
+            push @opt_string, "$k=undef";
+        }
+    }
+}
+print $OUT join(" ", @opt_string) . "\"\n" .  $vcf_obj->getHeader(1);
 my $chrom_header = $vcf_obj->getColumnNumber("CHROM");
 my $pos_header = $vcf_obj->getColumnNumber("POS");
 my $prev_chrom = 0;
