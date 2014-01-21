@@ -575,7 +575,9 @@ DbnsfpVcfFilter.pm - read and filter dbNSFP fields added by SnpSift.jar
 use DbnsfpVcfFilter; 
 
 my @expressions = ("1000Gp1_EUR_AFE<lt>=0.01", "Polyphen2=B or SIFT=T");
+
 my @filters = checkAndParseDbnsfpExpressions(\@expressions, $vcf_header_string);
+
 filterDbnsfpExpressions(\@filters, $vcf_line);
 
 =head1 DESCRIPTION
