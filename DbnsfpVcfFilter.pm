@@ -378,14 +378,16 @@ EXPR: foreach my $e (@$expressions){
             foreach (my $j = 0; $j < @vals -1; $j++){
                 next if ($vals[$j] eq '.');
                 
+                #only add multi value operator if we have a previous value
+                push @eval, $operators{$multi_value_operator} if $j > 0 and @eval > 0;
                 push @eval, "\"$vals[$j]\"";
                 push @eval, "$x";
-                push @eval, $operators{$multi_value_operator};
             }
             unless ($vals[-1] eq '.' ){
-                #if this is the only entry and our field had "(" at the beginning
-                #to specify precedence add the "(" to our value
+                #only add multi value operator if we have a previous value
+                push @eval, $operators{$multi_value_operator} if @eval > 0;
                 push @eval, "\"$vals[-1]\"";
+                push @eval, "$x";
             }
             #if @eval is empty then all our values are '.' (i.e. not defined)
             if (@eval == 0){
@@ -398,7 +400,9 @@ EXPR: foreach my $e (@$expressions){
             if ($e->{field}->[$i] =~/^\(/){
                 unshift @eval, "(";#we may have used ( to specify precedence
             }
-            push @eval, "$e->{expression}->[$i]";#if we used brackets in expression this will close them
+            if ($e->{expression}->[$i] =~/\)$/){
+                push @eval, ")";#we may have used ( to specify precedence
+            }
             push @eval, $e->{operator}->[$i] if $i < @{$e->{operator}};
             push @eval_full, @eval;
         }
