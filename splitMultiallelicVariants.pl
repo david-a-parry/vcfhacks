@@ -46,9 +46,9 @@ LINE:    while (my $line = $vcf_obj->readLine){
     }
     if ($same_length and $diff_length){#SNV/MNV and Indel at same site
         my @splits = $vcf_obj->splitMultiAllelicVariants();
-        print join("\n", @splits) ."\n";
+        print $OUT join("\n", @splits) ."\n";
     }else{
-        print "$line\n";
+        print $OUT "$line\n";
     }
 }
 

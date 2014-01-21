@@ -1262,7 +1262,7 @@ sub getSampleCall{
                 my %rev_calls = reverse %calls;
                 my %allele_codes = ();
                 foreach my $g ( keys %rev_calls){
-                    my @al = split(/\/\|/, $g);
+                    my @al = split(/[\/\|]/, $g);
                     foreach my $a (@al){
                         $allele_codes{$a}++;
                     }
@@ -1294,7 +1294,7 @@ sub getSampleCall{
                 my %rev_calls = reverse %calls;
                 my %allele_codes = ();
                 foreach my $g ( keys %rev_calls){
-                    my @al = split(/\/\|/, $g);
+                    my @al = split(/[\/\|]/, $g);
                     foreach my $a (@al){
                         $allele_codes{$a}++;
                     }
@@ -1324,7 +1324,7 @@ sub getSampleCall{
             }
             my $call = $self->getSampleGenotypeField(sample=>$args{sample}, field=>'GT'); 
             if ($args{return_alleles_only}){
-                my @al = split(/\/\|/, $call);
+                my @al = split(/[\/\|]/, $call);
                 return @al if defined wantarray;
             }else{
                 return $call if defined wantarray;
@@ -1347,7 +1347,7 @@ sub getSampleCall{
             }
             my $call = $self->getSampleGenotypeField(field=>'GT');     
             if ($args{return_alleles_only}){
-                my @al = split(/\/\|/, $call);
+                my @al = split(/[\/\|]/, $call);
                 return @al if defined wantarray;
             }else{
                 return $call if defined wantarray;
