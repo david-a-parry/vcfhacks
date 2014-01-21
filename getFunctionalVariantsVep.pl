@@ -202,14 +202,14 @@ my @genes_to_filter;
 if (@gene_lists){
     foreach my $gene_file (@gene_lists){
         open (my $GENE, $gene_file) or die "Can't open gene list file '$gene_file': $!\n";
-        my @head = split("\t", <$GENE>);
+        chomp (my @head = split("\t", <$GENE>));
         no warnings 'uninitialized';
         my $id_field = 0;
         $id_field++ until $head[$id_field] eq 'Ensembl Gene ID' or $id_field > $#head;
         if ($id_field > $#head){
             die "Can't find 'Ensembl Gene ID' field in header of gene list file '$gene_file'.\n";
         }
-        while (my $line = <$GENE>){
+        while (chomp (my $line = <$GENE>)){
             my @split = split("\t", $line);
             push @genes_to_filter, $split[$id_field];
         }
