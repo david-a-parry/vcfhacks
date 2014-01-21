@@ -30,8 +30,46 @@ my @gene_lists; #array of files containing Ensembl Gene IDs to filter
 my @samples;
 my $in_every_sample;
 my $matching_genes = 0;#will change to '' if user specifies --find_shared_genes but provides no argument, in which case print to STDERR
-my %opts = ("help" => \$help, "manual" => \$manual, "pass" => \$pass, "progress" => \$progress, "input" => \$infile, "output" => \$outfile, "classes" => \@classes, "additional_classes" => \@add, "remove_headers" => \$no_head, "canonical_only" => \$canonical_only, "maf" => \$any_maf, "gmaf" => \$gmaf, 'damaging' => \@damaging, 'keep_any_damaging' => \$keep_any_damaging, 'unpredicted_missense' => \$filter_unpredicted, 'list' => \@gene_lists, 'samples' => \@samples, 'each_sample' => \$in_every_sample, 'find_shared_genes' => \$matching_genes );
-GetOptions(\%opts, "help" , "manual" , "pass" , "progress" , "input=s" , "output=s" , "classes=s{,}" , "additional_classes=s{,}" , "remove_headers" , "canonical_only" , "maf=f" , "gmaf=f" , 'damaging=s{,}' , 'keep_any_damaging' , 'unpredicted_missense' , 'list=s{,}', 'samples=s{,}', 'each_sample', 'find_shared_genes:s' ) or pod2usage(-message => "Syntax error", -exitval => 2);
+my %opts = ("help" => \$help,
+			"manual" => \$manual,
+			"pass" => \$pass,
+			"progress" => \$progress,
+			"input" => \$infile,
+			"output" => \$outfile,
+			"classes" => \@classes,
+			"additional_classes" => \@add,
+			"remove_headers" => \$no_head,
+			"canonical_only" => \$canonical_only,
+			"maf" => \$any_maf,
+			"gmaf" => \$gmaf,
+			'damaging' => \@damaging,
+			'keep_any_damaging' => \$keep_any_damaging,
+			'unpredicted_missense' => \$filter_unpredicted,
+			'list' => \@gene_lists,
+			'samples' => \@samples,
+			'each_sample' => \$in_every_sample,
+			'find_shared_genes' => \$matching_genes );
+GetOptions(\%opts,
+			"help" ,
+			"manual" ,
+			"pass" ,
+			"progress" ,
+			"input=s" ,
+			"output=s" ,
+			"classes=s{,}" ,
+			"additional_classes=s{,}" ,
+			"remove_headers" ,
+			"canonical_only" ,
+			"maf=f" ,
+			"gmaf=f" ,
+			'damaging=s{,}' ,
+			'keep_any_damaging' ,
+			'unpredicted_missense' ,
+			'list=s{,}',
+			'samples=s{,}',
+			'each_sample',
+			'find_shared_genes:s', ) 
+                or pod2usage(-message => "Syntax error", -exitval => 2);
 pod2usage(-verbose => 2) if ($manual);
 pod2usage(-verbose => 1) if ($help);
 pod2usage(-message => 
