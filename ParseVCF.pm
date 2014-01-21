@@ -414,6 +414,110 @@ sub getVepFields{
     carp "getVepFields called in void context ";
 }
 
+#implementation of readVepHeader but for snpEff annotations
+sub readSnpEffHeader{
+    my ($self) = @_;
+    if (not @{$self->{_metaHeader}}){
+        croak "Method 'readSnpEffHeader' requires meta header but no meta header lines found ";
+    }
+    my @info = grep{/^##INFO=<ID=EFF/} (@{$self->{_metaHeader}});
+    if (not @info){
+        croak "Method 'readSnpEffHeader' requires EFF INFO field in meta header (e.g. '##INFO=<ID=EFF,Number...') but no matching lines found ";
+    }
+    carp "Warning - multiple EFF fields found, ignoring all but the most recent field " if @info > 1;
+    my $eff_line = $info[-1] ;#assume last applied VEP consequences are what we are looking for 
+    my @eff_fields = ();  
+    if ($eff_line =~ /Format:\s+'Effect\s+\(\s+(.*)\)'\s+">/){
+        @eff_fields = split(/\s*\|\s*/, $1);
+        unshift @eff_fields, 'Effect';
+    }else{
+        croak "Method 'readSnpEffHeader' couldn't properly read the EFF format from the corresponding INFO line: $eff_line ";
+    }
+    if (not @eff_fields){
+        croak "Method 'readSnpEffHeader' didn't find any snpEff fields from the corresponding EFF INFO line: $eff_line ";
+    }
+
+    for (my $i = 0; $i < @eff_fields; $i++){
+        $eff_fields[$i] =~ s/[\s\[\]]//g;
+        $self->{_snpEffHeader}->{$eff_fields[$i]} = $i;
+    }
+
+    $self->{_snpEffArrayField} = \@eff_fields;
+    return $self->{_snpEffHeader} if defined wantarray;
+}
+
+#TO DO - GET EFFECT (before brackets) and TIDY UP OTHER FIELDS
+
+#implementation of getVepFields but for snpEff annotations
+sub getSnpEffFields{
+    my ($self, $fields) = @_;
+    if (not $fields){
+        croak "Method 'getSnpEffFields' requires either an ARRAY reference or a scalar value as an argument";
+    }elsif(ref $fields && ref $fields ne 'ARRAY'){
+        croak "Method 'getSnpEffFields' takes either an ARRAY reference or a scalar value as an argument, not a " . ref $fields ." reference ";
+    }
+    if (not $self->{_snpEffHeader}){#get EFF format from header if we haven't already
+        $self->readSnpEffHeader();
+    }
+    my @info_field = split(';', $self->getVariantField("INFO"));
+    my @csqs = grep{/^EFF/} @info_field;
+    if (not @csqs){
+        carp "No EFF field found in INFO field for line: $self->{_currentLine} ";
+        return;
+    }
+    $csqs[-1]  =~ s/^EFF=//i ;
+    my @eff = split(",", $csqs[-1]);
+    my @return = ();
+    if (not ref $fields){
+        foreach my $e (@eff){
+            if ($e =~ /^(\S+)\((\S+)\)$/){
+                my @e_part = ($1, split(/\|/, $2));
+                if (lc$fields eq 'all'){
+                    my %consequence = ();
+                    foreach my $f (keys %{$self->{_snpEffHeader}}){
+                        my $value = $e_part[$self->{_snpEffHeader}->{$f}];
+                        $consequence{$f} = $value;
+                    }
+                    push @return, \%consequence;
+                }else{
+                    if (exists $self->{_snpEffHeader}->{$fields}){
+                        my $value = $e_part[$self->{_snpEffHeader}->{$fields}] ;
+                        push @return, $value;
+                    }else{
+                        carp "$fields feature does not exist in EFF field ";
+                    }
+                }
+            }else{
+                carp "Unexpected format for SnpEff entry - ignored: $e\n";
+            }
+        }
+    }elsif (ref $fields eq 'ARRAY'){
+        my %warned = ();
+        foreach my $e (@eff){
+            if ($e =~ /^(\S+)\((\S+)\)$/){
+                my @e_part = ($1, split(/\|/, $2));
+                my %consequence = ();
+                foreach my $f (@$fields){
+                    if (exists $self->{_snpEffHeader}->{$f}){
+                        my $value = $e_part[$self->{_snpEffHeader}->{$f}];
+                        $consequence{$f} = $value;
+                    }else{
+                        carp "$f feature does not exist in EFF field " unless $warned{$f};
+                        $consequence{$f} = '';
+                        $warned{$f}++;
+                    }
+                }
+                push @return, \%consequence;
+            }else{
+                carp "Unexpected format for SnpEff entry - ignored: $e\n";
+            }
+        }
+    }
+    return @return if wantarray;
+    return \@return if defined wantarray;
+    carp "getSnpEffFields called in void context ";
+}
+
 #this method is required for finding tabix to allow
 #indexing of vcf if tabix index is not present
 #region retrievals are done using Tabix.pm module
@@ -751,11 +855,11 @@ sub changeHeader{
         open (my $HEAD, $args{file}) or croak "Can't open header file $args{file}: $! ";
         while (my $vcf_line = <$HEAD>){
             if ($vcf_line =~ /^##/){
-                            push(@meta_header, $vcf_line);
-                    }elsif ($vcf_line =~ /^#/){
-                            push(@header, $vcf_line);
-                    }else{
-                if (not @header){
+                push(@meta_header, $vcf_line);
+            }elsif ($vcf_line =~ /^#/){
+                push(@header, $vcf_line);
+            }else{
+               if (not @header){
                     carp "No header found for VCF file $args{file} ";
                     close $HEAD;
                     return 0;
@@ -782,10 +886,10 @@ sub changeHeader{
         my @lines = split("\n", $args{string});
         foreach my $vcf_line (@lines){
             if ($vcf_line =~ /^##/){
-                            push(@meta_header, $vcf_line);
-                    }elsif ($vcf_line =~ /^#/){
-                            push(@header, $vcf_line);
-                    }else{
+                push(@meta_header, $vcf_line);
+            }elsif ($vcf_line =~ /^#/){
+                push(@header, $vcf_line);
+            }else{
                 if (not @header){
                     carp "No header found for string ";
                     return 0;
@@ -807,7 +911,6 @@ sub changeHeader{
     if (@meta_header){
         $self->{_oldHeaderCount} += @{$self->{_metaHeader}} + 1;
         $self->{_metaHeader} = \@meta_header;
-        
     }
     #in case there are multiple header lines we'll assume the last one is the REAL header
     chomp ($self->{_header} = $header[-1]);
@@ -831,7 +934,7 @@ sub getHeader{
 
 sub readLine{
     my ($self) = @_;
-    if ($self->{_inputIsStdin} and $self->{_firstLine}){
+    if (($self->{_inputIsStdin} or $self->{_file} =~ /\.gz$/) and $self->{_firstLine}){
         $self->{_currentLine} = $self->{_firstLine};
         $self->{_firstLine} = '';
     }else{
@@ -1131,6 +1234,7 @@ sub getSampleCall{
 #unless multiple argument is used in which
 #case a hash of sample=>call key/values is returned
 #returns './.' for samples below $args{minGQ}
+#use return_alleles_only => 1 to only return allele codes, not genotypes (always returns an array)
     my ($self, %args) = @_;
     croak "Can't invoke getSampleCall method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
     carp "WARNING Both multiple and sample arguments supplied to getSampleCall method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
@@ -1138,23 +1242,35 @@ sub getSampleCall{
     if (defined $self->{_currentVar}){
         my $var; 
         if ($args{all}){
-                    my %calls = ();
-                    foreach my $sample (keys %{$self->{_samples}}){
-                        if (exists $args{minGQ} and $args{minGQ} > 0){
-                            if (not defined $self->getSampleGenotypeField(sample=>$sample, field=>'GQ')){
-                            #no GQ field - return no call (the above generally means that the call is './.' anyway)
-                           $calls{$sample} = './.';
-                            next;
-                            }
-                if ($self->getSampleGenotypeField(sample=>$sample, field=>'GQ') < $args{minGQ}){
-                                $calls{$sample} = './.';
-                                next;
-                            }
-                        }
+            my %calls = ();
+            foreach my $sample (keys %{$self->{_samples}}){
+                if (exists $args{minGQ} and $args{minGQ} > 0){
+                    if (not defined $self->getSampleGenotypeField(sample=>$sample, field=>'GQ')){
+                        #no GQ field - return no call (the above generally means that the call is './.' anyway)
+                        $calls{$sample} = './.';
+                        next;
+                    }
+                    if ($self->getSampleGenotypeField(sample=>$sample, field=>'GQ') < $args{minGQ}){
+                        $calls{$sample} = './.';
+                        next;
+                    }
+                }
                 my $call = $self->getSampleGenotypeField(sample=>$sample, field=>'GT'); 
                 $calls{$sample} = $call;
             }
-            return %calls if defined wantarray;
+            if ($args{return_alleles_only}){
+                my %rev_calls = reverse %calls;
+                my %allele_codes = ();
+                foreach my $g ( keys %rev_calls){
+                    my @al = split(/\/\|/, $g);
+                    foreach my $a (@al){
+                        $allele_codes{$a}++;
+                    }
+                }
+                 return keys %allele_codes if defined wantarray;
+            }else{
+                return %calls if defined wantarray;
+            }
             carp "getSampleCall called in a void context ";
         }elsif($args{multiple}){
             croak "multiple argument must be an array reference " if ref $args{multiple} ne 'ARRAY';
@@ -1174,24 +1290,68 @@ sub getSampleCall{
                 my $call = $self->getSampleGenotypeField(sample=>$sample, field=>'GT'); 
                 $calls{$sample} = $call;
             }
-            return %calls if defined wantarray;
+            if ($args{return_alleles_only}){
+                my %rev_calls = reverse %calls;
+                my %allele_codes = ();
+                foreach my $g ( keys %rev_calls){
+                    my @al = split(/\/\|/, $g);
+                    foreach my $a (@al){
+                        $allele_codes{$a}++;
+                    }
+                }
+                 return keys %allele_codes if defined wantarray;
+            }else{
+                return %calls if defined wantarray;
+            }
             carp "getSampleCall called in a void context ";
         }elsif (defined $args{sample}){
             if (exists $args{minGQ} and $args{minGQ} > 0){
-                return './.' if (not defined $self->getSampleGenotypeField(sample=>$args{sample}, field=>'GQ') );
+                if (not defined $self->getSampleGenotypeField(sample=>$args{sample}, field=>'GQ') ){
                 #the above generally means that the call is './.' anyway
-                return './.' if ($self->getSampleGenotypeField(sample=>$args{sample}, field=>'GQ') < $args{minGQ});
+                    if ($args{return_alleles_only}){
+                        return '.';
+                    }else{
+                        return './.';
+                    }
+                }
+                if ($self->getSampleGenotypeField(sample=>$args{sample}, field=>'GQ') < $args{minGQ}){
+                    if ($args{return_alleles_only}){
+                        return '.';
+                    }else{
+                        return './.';
+                    }
+                }
             }
             my $call = $self->getSampleGenotypeField(sample=>$args{sample}, field=>'GT'); 
-            return $call if defined wantarray;
+            if ($args{return_alleles_only}){
+                my @al = split(/\/\|/, $call);
+                return @al if defined wantarray;
+            }else{
+                return $call if defined wantarray;
+            }
         }else{#otherwise just look at first sample
             if (exists $args{minGQ} and $args{minGQ} > 0){
-                return './.' if (not defined $self->getSampleGenotypeField(sample=>$args{sample}, field=>'GQ') );
                 #the above generally means that the call is './.' anyway
-                return './.' if ($self->getSampleGenotypeField( field=>'GQ') < $args{minGQ});
+                if ($args{return_alleles_only}){
+                    return '.' if defined wantarray;
+                }else{
+                    return './.' if defined wantarray;
+                }
+            }    
+            if ($self->getSampleGenotypeField( field=>'GQ') < $args{minGQ}){
+                if ($args{return_alleles_only}){
+                    return '.' if defined wantarray;
+                }else{
+                    return './.' if defined wantarray;
+                }
             }
             my $call = $self->getSampleGenotypeField(field=>'GT');     
-            return $call if defined wantarray;
+            if ($args{return_alleles_only}){
+                my @al = split(/\/\|/, $call);
+                return @al if defined wantarray;
+            }else{
+                return $call if defined wantarray;
+            }
         }
     }else{
         return if defined wantarray;
@@ -1218,10 +1378,10 @@ sub getSampleGenotypeField{
         if ($args{all}){
             my %values = ();
             foreach my $sample (keys %{$self->{_samples}}){
-                                my $mvar = $self->getSampleVariant($sample);
-                                my $value = (split ":", $mvar)[$self->{_currentVar}->{varFormat}->{$args{field}}];
-                                $values{$sample} =  $value;
-                        }
+                my $mvar = $self->getSampleVariant($sample);
+                my $value = (split ":", $mvar)[$self->{_currentVar}->{varFormat}->{$args{field}}];
+                $values{$sample} =  $value;
+            }
                         return %values if defined wantarray;
                         carp "getSampleGenotypeField called in a void context ";
         }elsif($args{multiple}){
