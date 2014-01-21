@@ -407,11 +407,11 @@ EXPR: foreach my $e (@$expressions){
             push @eval_full, @eval;
         }
         #DEBUG
-        my $res = eval join(" ", @eval_full);
-        my $error = $@;
-        print "DEBUG: " . join(" ", @eval_full) . " : $res : ";
-        print "\n";
-        print $error if $error;
+      #  my $res = eval join(" ", @eval_full);
+      #  my $error = $@;
+      #  print "DEBUG: " . join(" ", @eval_full) . " : $res : ";
+      #  print "\n";
+      #  print $error if $error;
         #end DEBUG
         my $ev =eval join(" ", @eval_full);
         carp "$@\n" if $@;
