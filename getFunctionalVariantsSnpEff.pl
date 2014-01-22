@@ -16,12 +16,13 @@ my $help;
 my $manual;
 my $infile;
 my $outfile;
-my @classes;
+my @classes;#Effect classes to keep
+my @add;#additional classes if adding to default @classes
+my @effect_impact; #Effect_Impact classes to keep (High, Moderate, Low, Modifier)
 my $no_head;
 my $progress;
 my $pass;
 my $total_lines;
-my @add;
 my @filter_dbnsfp;#array of strings in format "[dbNSFP field][comparator][value] e.g. "1000Gp1_EUR_AF<=0.01" or "genename=MUC4"
 my @match_dbnsfp; #as above
 my $multi_value_operator = 'or';#if a dbNSFP field has more than one value by default we use or to match any
@@ -42,6 +43,7 @@ my %opts = ("help" => \$help,
             "output" => \$outfile,
             "classes" => \@classes,
             "additional_classes" => \@add,
+            "effect_impact" => \@effect_impact,
             "remove_headers" => \$no_head,
             "allele_frequency" => \$any_maf,
             "1000_genomes_allele_frequency" => \$gmaf,
@@ -64,6 +66,7 @@ GetOptions(\%opts,
             "output=s" ,
             "classes=s{,}" ,
             "additional_classes=s{,}" ,
+            "effect_impact=s{,}",
             "remove_headers" ,
             "allele_frequency=f" ,
             "1000_genomes_allele_frequency=f" ,
@@ -109,7 +112,18 @@ my @csq_fields = qw (
                 Transcript_BioType
                 Genotype_Number);#default fields to retrieve from EFF INFO field
 
-checkAndParseClasses(\@classes, \@add);
+if (@effect_impact){
+    checkEffectImpacts(@effect_impact);
+    #if --effect_impact is used we don't use @classes
+    #unless they've been specified by user
+    if (@classes or @add){
+	push @classes, @add;
+        checkAndParseClasses(\@classes);
+    }
+
+}else{
+    checkAndParseClasses(\@classes, \@add);
+}
 my @genes_to_filter = checkGeneList(@gene_lists) if @gene_lists;
 
 my $got = 0;
@@ -295,6 +309,28 @@ CLASS:  foreach my $class (@classes){
                 }
             }
         }
+        CLASS:  foreach my $impact (@effect_impact){
+            if (lc$annot->{Effect_Impact} eq lc$impact){
+                print $OUT "$line\n" if not $printed_line;
+                $printed_line++;
+                $got++;
+                #need to cycle through each annotation if checking for matching genes between samples
+                #otherwise we can skip to next line
+                if ($matching_genes){
+                    my $symbol;
+                    if ($annot->{Gene_Name}){
+                        $symbol = $annot->{Gene_Name};
+                    }else{
+                        $symbol = $annot->{Transcript_ID};
+                    }
+                    foreach my $sample (@found_in_sample){
+                        $genes_per_sample{$sample}->{$annot->{Transcript_ID}} = $symbol;
+                    }
+                }else{
+                    next LINE;
+                }
+            }
+        }
     }
 }
 
@@ -334,7 +370,7 @@ sub checkGeneList{
     my @genes_to_filter = ();
     foreach my $gene_file (@_){
         open (my $GENE, $gene_file) or die "Can't open gene list file '$gene_file': $!\n";
-        my @head = split("\t", <$GENE>);
+        chomp (my @head = split("\t", <$GENE>));
         no warnings 'uninitialized';
         my $id_field = 0;
 
@@ -347,7 +383,7 @@ sub checkGeneList{
             #die "Can't find 'Ensembl Gene ID' field in header of gene list file '$gene_file'.\n";
             die "Can't find 'Associated Gene Name' field in header of gene list file '$gene_file'.\n";
         }
-        while (my $line = <$GENE>){
+        while (chomp(my $line = <$GENE>)){
             my @split = split("\t", $line);
             push @genes_to_filter, $split[$id_field];
         }
@@ -356,7 +392,14 @@ sub checkGeneList{
     @genes_to_filter = grep { ! $seen{$_}++ } @genes_to_filter;
     @genes_to_filter = sort @genes_to_filter;
 }
-
+##################################################
+sub checkEffectImpacts{
+    my @valid = qw (High Moderate Low Modifier);
+    foreach my $impact (@_){
+        die "Error - Effect_Impact '$impact' not recognised.\n" if not grep {/$impact/i} @valid;
+    }
+}
+    
 ##################################################
 sub checkAndParseClasses{
     my ($classes, $additional) = @_;
@@ -386,7 +429,7 @@ sub checkAndParseClasses{
                 STOP_GAINED
                 SYNONYMOUS_STOP
                 STOP_LOST
-                INTRON
+                INTRON               
                 UTR_3_PRIME
                 UTR_3_DELETED
                 DOWNSTREAM
@@ -399,7 +442,6 @@ sub checkAndParseClasses{
     if (not @$classes){
         @$classes = qw (
                 UTR_5_DELETED
-                START_GAINED
                 SPLICE_SITE_ACCEPTOR
                 SPLICE_SITE_DONOR
                 START_LOST
@@ -473,12 +515,11 @@ File to write output. Default is STDOUT.
 
 =item B<--classes>
 
-If you wish to specify a custom set of variant classes to retrieve enter them here separated by spaces.
+If you wish to specify a custom set of variant classes (SnpEff "Effects") to retrieve enter them here separated by spaces.
 
 Default classes are:
 
                 UTR_5_DELETED
-                START_GAINED
                 SPLICE_SITE_ACCEPTOR
                 SPLICE_SITE_DONOR
                 START_LOST
@@ -532,11 +573,25 @@ The user can specify one or more of the following classes instead:
                 RARE_AMINO_ACID
                 NON_SYNONYMOUS_START
 
+For details see http://snpeff.sourceforge.net/SnpEff_manual.html#eff
                 
 =item B<--additional_classes>
 
-Specify one or more classes, separated by spaces, to add to the default mutation classes used.
- 
+Specify one or more additional classes, separated by spaces, to add to the default mutation classes used.
+
+=item B<--effect_impact>
+
+Specify one or more "Effect_Impact" values to only keep variants with a SnpEff "Effect_Impact" matching one of these values. Valid values are:
+
+                High
+                Moderate
+                Low
+                Modifier
+
+For details see http://snpeff.sourceforge.net/SnpEff_manual.html#eff
+
+As suggested by the SnpEff documentation, this is essentially a shortcut for specifying multiple Effect classes with the --classes option. If this option is used no "Effect" values will be used for filtering unless specifically specified using the --classes or --additional_classes options.
+
 =item B<-1    --1000_genomes_allele_frequency>
 
 Use a value between 0.00 and 1.00 to specify allele frequencey filtering from values in the 1000 genomes phase 1 global allele frequency. If the allele frequency is available for a variant allele it will be filtered if equal to or greater than the value specfied here.
@@ -587,7 +642,7 @@ Each expression consists of a dbNSFP annotation (e.g. "dbNSFP_GERP++_RS"), a com
 
 <: less than
 
-<= less than or equal to
+<=: less than or equal to
 
 >: more than
 
@@ -656,7 +711,7 @@ Keep only variants passing filters (i.e. FILTER field is PASS).
 
 Only keep variants present in at least one of these samples.  Can change behaviour to keep only variants present in ALL of these samples using the --each_sample switch.
 
-=item B<-e    --each_sample>
+=item B<--each_sample>
 
 When --samples arguments are specified this switch will cause the program to only return variants present in ALL of the samples specified by the --samples argument.
 
@@ -728,7 +783,7 @@ Show manual page.
 
 =head1 DESCRIPTION
 
-In its simplest form this program will print specific variant classes from a VCF file annotated with Ensembl's SnpEff.jar program and filter out others. Input must be a VCF annotated by the variant_effect_predictor.pl program using the '--vcf' option, annotations are read from the INFO field of the VCF. By default the following classes are kept:
+In its simplest form this program will print specific variant classes (SnpEff "Effect" annotations) from a VCF file annotated with Ensembl's SnpEff.jar program and filter out others. Input must be a VCF annotated by the variant_effect_predictor.pl program using the '--vcf' option, annotations are read from the INFO field of the VCF. By default the following SnpEff "Effect" classes are kept:
                 
                 UTR_5_DELETED
                 START_GAINED
@@ -746,7 +801,9 @@ In its simplest form this program will print specific variant classes from a VCF
                 STOP_LOST
                 UTR_3_DELETED
 
-You can add extra classes using the --add option or specify a totally different set of classes using the --classes option. Options are also available to additionally filter on dbNSFP fields as detailed above.  You may use the following shorter names for the given dbNSFP fields in your --filter_dbnsfp or --match_dbnsfp expressions:
+You can add extra classes using the --add option or specify a totally different set of classes using the --classes option. Alternatively you can use SnpEff "Effect_Impact" shortcuts with the --effect_impact  option to filter on these values.
+
+Options are also available to additionally filter on dbNSFP fields as detailed above.  You may use the following shorter names for the given dbNSFP fields in your --filter_dbnsfp or --match_dbnsfp expressions:
 
                 1000Gp1_AC: dbNSFP_1000Gp1_AC
                 1000Gp1_AF: dbNSFP_1000Gp1_AF
@@ -838,9 +895,7 @@ You can add extra classes using the --add option or specify a totally different 
                 transcriptid: dbNSFP_Ensembl_transcriptid
 
 
-
-
-This program relies on an up to date version of my perl module ParseVCF.pm being present in the same directory as the script (you may prefer to add ParseVCF.pm to your perl library in which case you may remove the 'use FindBin;' and 'use lib "$FindBin::Bin";' lines from the beginning of this script). 
+This program relies on an up to date version of my ParseVCF.pm and DbnsfpVcfFilter.pm perl modules being present in the same directory as the script. 
 
 =head1 AUTHOR
 
