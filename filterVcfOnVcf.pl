@@ -74,7 +74,7 @@ Minimum genotype quality.  Only applicable if --samples,  --reject or --threshol
 
 Use this flag to reverse the script so that only matching lines are printed.
 
-=item B<-b    --bar>
+=item B<-b    --progress>
 
 Show a progress bar.
 
@@ -123,7 +123,7 @@ my $help;
 my $man;
 my $progress;
 my $regex; #match this regex if looking in dir
-GetOptions('x|not_samples=s{,}' => \@ignore_samples, 'expression=s' => \$regex, 'input=s' => \$vcf, 'output=s' => \$out, 'filter=s{,}' => \@filter_vcfs, 'directories=s{,}' => \@dirs, 'samples=s{,}' => \@samples, 'reject=s{,}' => \@reject, 'threshold=i' => \$threshold, 'quality=f' => \$min_qual,'genotype_quality=f' => \$minGQ, 'bar' => \$progress, 'help' => \$help, 'manual' => \$man, 'print_matching' => \$print_matching) or pod2usage(-message => "Syntax error.", exitval => 2);
+GetOptions('x|not_samples=s{,}' => \@ignore_samples, 'expression=s' => \$regex, 'input=s' => \$vcf, 'output=s' => \$out, 'filter=s{,}' => \@filter_vcfs, 'directories=s{,}' => \@dirs, 'samples=s{,}' => \@samples, 'reject=s{,}' => \@reject, 'threshold=i' => \$threshold, 'quality=f' => \$min_qual,'genotype_quality=f' => \$minGQ, 'bar|progress' => \$progress, 'help' => \$help, 'manual' => \$man, 'print_matching' => \$print_matching) or pod2usage(-message => "Syntax error.", exitval => 2);
 
 pod2usage(-verbose => 2) if $man;
 pod2usage(-verbose => 1) if $help;
