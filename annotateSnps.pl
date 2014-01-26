@@ -383,7 +383,7 @@ Use this flag to print % progress to STDERR.
 
 Use this flag to supress warnings if any variants in the SNP reference file do not have IDs.
 
-=item B<-s    --strict>
+=item B<--strict>
 
 Use this flag to complain and exit if any variants in the SNP reference file do not have IDs.
 
