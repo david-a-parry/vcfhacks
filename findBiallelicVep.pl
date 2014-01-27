@@ -364,9 +364,9 @@ CSQ: foreach my $annot (@csq){
         }
         if (defined $any_maf){
             foreach my $some_maf (@available_mafs){
-            if ($annot->{$some_maf}){
-            if ($annot->{$some_maf} =~ /\w+:(\d\.\d+)/){
-                next if $1 >= $any_maf;
+                if ($annot->{$some_maf}){
+                    if ($annot->{$some_maf} =~ /\w+:(\d\.\d+)/){
+                        next if $1 >= $any_maf;
                     }
                 }
             }
