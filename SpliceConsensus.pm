@@ -11,7 +11,7 @@
 
 =head1 NAME
 
- SpliceConsensusFilter
+ SpliceConsensus
 
 =head1 SYNOPSIS
 
