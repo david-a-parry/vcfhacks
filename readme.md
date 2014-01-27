@@ -4,7 +4,7 @@ This project comprises a set of perl scripts and modules that may be useful for 
 
 __UPDATE__
 
-VERSION 0.7.4:
+VERSION 0.1.4:
 
 27/1/14
 
@@ -16,7 +16,7 @@ VERSION 0.7.4:
 -various code tidy-ups, minor optimisations
 
 
-VERSION 0.7.3:
+VERSION 0.1.3:
 
 16/12/13 
 
