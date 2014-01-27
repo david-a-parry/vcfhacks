@@ -246,6 +246,11 @@ if (defined $any_maf){
     }
 }
 
+if (@csq_fields > 1){
+    my %seen = ();
+    @csq_fields = grep { ! $seen{$_}++ } @csq_fields;
+}
+
 foreach my $c (@csq_fields){
     if (not exists $vep_header->{$c}){
         die "Couldn't find '$c' VEP field in header - please ensure your VCF is annotated with " .
@@ -369,7 +374,7 @@ CLASS:  foreach my $class (@classes){
                         next if (filter_missense($annot, \%damage_filters, $keep_any_damaging, $filter_unpredicted));
                     }elsif(lc$class eq 'splice_region_variant' and $splice_consensus){
                         my $consensus = $annot->{splice_consensus};
-                        next if not defined $consensus;
+                        next if not $consensus;
                         if ($consensus !~/SPLICE_CONSENSUS\S+/i){
                             print STDERR "WARNING - SPLICE_CONSENSUS annotation $consensus is".
                             " not recognised as an annotation from the SpliceConsensus VEP plugin.\n";
