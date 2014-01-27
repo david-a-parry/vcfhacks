@@ -34,6 +34,7 @@ my $man;
 my $progress;
 my $check_all_samples;
 my $homozygous_only;
+my $splice_consensus = 0; #use this flag to check for SpliceConsensus VEP plugin annotations
 
 my %opts = (
             'input' => \$vcf,
@@ -46,8 +47,8 @@ my %opts = (
             'damaging' => \@damaging,
             'keep_any_damaging' => \$keep_any_damaging,
             'unpredicted_missense' => \$filter_unpredicted,
-            "gmaf" => \$gmaf, 
-            "maf" => \$any_maf, 
+            'gmaf' => \$gmaf, 
+            'maf' => \$any_maf, 
             'check_all_samples' => \$check_all_samples,
             'equal_genotypes' => \$identical_genotypes,
             'quality' => \$genotype_quality,
@@ -56,6 +57,7 @@ my %opts = (
             'progress' => \$progress,
             'add_classes' => \@add,
             'homozygous_only' => \$homozygous_only,
+            'consensus_splice_site' => \$splice_consensus,
             'help' => \$help,
             'manual' => \$man);
 GetOptions(\%opts,
@@ -69,8 +71,8 @@ GetOptions(\%opts,
             'damaging=s{,}',
             'keep_any_damaging',
             'unpredicted_missense',
-            "gmaf=f", 
-            "maf=f", 
+            'gmaf=f', 
+            'maf=f', 
             'check_all_samples',
             'equal_genotypes',
             'quality=i',
@@ -79,6 +81,7 @@ GetOptions(\%opts,
             'progress',
             'add_classes=s{,}',
             'homozygous_only',
+            'consensus_splice_site',
             'help',
             'manual' => ,
             )
@@ -143,6 +146,7 @@ if (not @classes){
         regulatory_region_amplification);
 }
 push (@classes, @add) if (@add);
+push @classes, "splice_region_variant" if $splice_consensus;
 foreach my $class (@classes){
     die "Error - variant class '$class' not recognised.\n" if not grep {/$class/i} @valid;
 }
@@ -188,6 +192,9 @@ if ($canonical_only){
 
 if (defined $gmaf or defined $any_maf){
         push @csq_fields, 'gmaf';
+}
+if ($splice_consensus){
+    push @csq_fields, 'splice_consensus';
 }
 
 my $vcf_obj = ParseVCF->new(file=> $vcf);
@@ -276,7 +283,7 @@ my $line_count = 0;
 LINE: while (my $line = $vcf_obj->readLine){
     $line_count++;
         if ($progress){
-                $next_update = $progressbar->update($line_count) if $line_count >= $next_update;
+            $next_update = $progressbar->update($line_count) if $line_count >= $next_update;
         }
     if ($pass_filters){
         next if $vcf_obj->getVariantField("FILTER") ne 'PASS';
@@ -366,6 +373,14 @@ ANNO:        foreach my $ac (@anno_csq){
                 if (lc$ac eq lc$class){ 
                     if (lc$class eq 'missense_variant' and %damage_filters){
                         next ANNO if (filter_missense($annot, \%damage_filters, $keep_any_damaging, $filter_unpredicted));
+                    }elsif(lc$class eq 'splice_region_variant' and $splice_consensus){
+                        my $consensus = $annot->{splice_consensus};
+                        next if not defined $consensus;
+                        if ($consensus !~/SPLICE_CONSENSUS\S+/i){
+                            print STDERR "WARNING - SPLICE_CONSENSUS annotation $consensus is".
+                            " not recognised as an annotation from the SpliceConsensus VEP plugin.\n";
+                            next;
+                        }
                     }
                     $matches_class++;
                     last CLASS;
@@ -762,6 +777,10 @@ The user can specify one or more of the following classes instead:
 =item B<--add_classes>
 
 Specify one or more classes, separated by spaces, to add to the default mutation classes used for finding biallelic variants.
+
+=item B<--consensus_splice_site>
+
+Use this flag in order to keep splice_region_variant classes only if they are in a splice consensus region as defined by the SpliceConsensus plugin. You do not need to specify 'splice_region_variant' using --classes or --add_classes options when using this flag. You B<MUST> have used the SpliceConsensus plugin when running the VEP for this option to work correctly.
 
 =item B<--canonical_only>
 
