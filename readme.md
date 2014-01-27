@@ -34,13 +34,15 @@ You will also need to install the Tabix.pm perl module by Heng Li. Download the 
 XSLoader::load('Tabix', $VERSION);
 </code></pre>
 
-with 
+...with... 
 
 <pre><code>{no warnings 'redefine';
 require XSLoader;
 XSLoader::load('Tabix', $VERSION);
 }
 </code></pre>
+
+...in Tabix.pm (and reinstalling). 
 
 Other perl modules required by these scripts are installable via CPAN - perl will complain that they are not available in "@INC" when you attempt to run these programs if they are not on your system. Please see http://www.cpan.org/modules/INSTALL.html for instructions on how to install these modules.
 
