@@ -4,15 +4,25 @@ This project comprises a set of perl scripts and modules that may be useful for 
 
 __UPDATE__
 
-7/1/14
+VERSION 0.7.4:
 
-Following report of the Bio::SeqIO::entrezgene bug the bioperl team have fixed the issue, but at the time of writing the fix will not be in the current version of bioperl.  Instead you will need to replace your local entrezgene.pm module with the one here: https://github.com/bioperl/bioperl-live/blob/master/Bio/SeqIO/entrezgene.pm 
+27/1/14
+
+-added getFunctionalVariantsSnpEff.pl program and DbnsfpVcfFilter.pm module.
+-added SnpEff annotation parsing functions to ParseVcf.pm.
+-added features to getFunctionalVariantsVep.pl and findBiallelicVep.pl enabling filtering of splice_region_variants using annotations from my SpliceConsensus VEP plugin. In practice this means that you can select variants on a slightly stricter definition of the splice consensus region (3 bp before the exon to the first 3 bp of the exon or the last bp of the exon to 6 bp after the exon).
+-following report of the Bio::SeqIO::entrezgene bug the bioperl team have fixed the issue, but at the time of writing the fix will not be in the current version of bioperl.  Instead you will need to replace the Bio::SeqIO::entrezgene.pm module in your bioperl installation with the one here: https://github.com/bioperl/bioperl-live/blob/master/Bio/SeqIO/entrezgene.pm if you wish to update your local database for ensemblGeneAnnotator.pl.
+-various documentation tidy-ups
+-various code tidy-ups, minor optimisations
+
+
+VERSION 0.7.3:
 
 16/12/13 
 
 -added sortVcf.pl program
 -fixed issues with splitMultiallelicVariants.pl always printing to STDOUT and missing out final header line. 
--Updated location of HMD_human5.rpt reference file for ensemblGeneAnnotator.  Bio::SeqIO::entrezgene no longer parses all entrez gene asn.1 records correctly for creating the database - bug reported but an acceptable workaround needed so it is recommended to only use existing databases at this time.
+-Updated location of HMD_human5.rpt reference file for ensemblGeneAnnotator.pl.  Bio::SeqIO::entrezgene no longer parses all entrez gene asn.1 records correctly for creating the database - bug reported but an acceptable workaround needed so it is recommended to only use existing databases at this time.
 
 __INSTALLATION__
 
