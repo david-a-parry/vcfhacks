@@ -203,7 +203,7 @@ if (defined $gmaf or defined $any_maf){
     push @csq_fields, 'gmaf';
 }
 if ($splice_consensus){
-    push @csq_fields, 'SPLICE_CONSENSUS';
+    push @csq_fields, 'splice_consensus';
 }
 my @genes_to_filter;
 if (@gene_lists){
@@ -245,6 +245,14 @@ if (defined $any_maf){
         }
     }
 }
+
+foreach my $c (@csq_fields){
+    if (not exists $vep_header->{$c}){
+        die "Couldn't find '$c' VEP field in header - please ensure your VCF is annotated with " .
+        "Ensembl's variant effect precictor specifying the appropriate annotations.\n";
+    }
+}
+
 my $progressbar;
 my $line_count = 0;
 my $next_update = 0;
