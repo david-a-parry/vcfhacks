@@ -30,46 +30,50 @@ my @gene_lists; #array of files containing Ensembl Gene IDs to filter
 my @samples;
 my $in_every_sample;
 my $matching_genes = 0;#will change to '' if user specifies --find_shared_genes but provides no argument, in which case print to STDERR
+my $splice_consensus = 0; #use this flag to check for SpliceConsensus VEP plugin annotations
 my %opts = ("help" => \$help,
-			"manual" => \$manual,
-			"pass" => \$pass,
-			"progress" => \$progress,
-			"input" => \$infile,
-			"output" => \$outfile,
-			"classes" => \@classes,
-			"additional_classes" => \@add,
-			"remove_headers" => \$no_head,
-			"canonical_only" => \$canonical_only,
-			"maf" => \$any_maf,
-			"gmaf" => \$gmaf,
-			'damaging' => \@damaging,
-			'keep_any_damaging' => \$keep_any_damaging,
-			'unpredicted_missense' => \$filter_unpredicted,
-			'list' => \@gene_lists,
-			'samples' => \@samples,
-			'each_sample' => \$in_every_sample,
-			'find_shared_genes' => \$matching_genes );
+            "manual" => \$manual,
+            "pass" => \$pass,
+            "progress" => \$progress,
+            "input" => \$infile,
+            "output" => \$outfile,
+            "classes" => \@classes,
+            "additional_classes" => \@add,
+            "remove_headers" => \$no_head,
+            "canonical_only" => \$canonical_only,
+            "maf" => \$any_maf,
+            "gmaf" => \$gmaf,
+            "damaging" => \@damaging,
+            "keep_any_damaging" => \$keep_any_damaging,
+            "unpredicted_missense" => \$filter_unpredicted,
+            "list" => \@gene_lists,
+            "samples" => \@samples,
+            "each_sample" => \$in_every_sample,
+            "find_shared_genes" => \$matching_genes,
+            "consensus_splice_site" => \$splice_consensus,
+             );
 GetOptions(\%opts,
-			"help" ,
-			"manual" ,
-			"pass" ,
-			"progress" ,
-			"input=s" ,
-			"output=s" ,
-			"classes=s{,}" ,
-			"additional_classes=s{,}" ,
-			"remove_headers" ,
-			"canonical_only" ,
-			"maf=f" ,
-			"gmaf=f" ,
-			'damaging=s{,}' ,
-			'keep_any_damaging' ,
-			'unpredicted_missense' ,
-			'list=s{,}',
-			'samples=s{,}',
-			'each_sample',
-			'find_shared_genes:s', ) 
-                or pod2usage(-message => "Syntax error", -exitval => 2);
+            "help" ,
+            "manual" ,
+            "pass" ,
+            "progress" ,
+            "input=s" ,
+            "output=s" ,
+            "classes=s{,}" ,
+            "additional_classes=s{,}" ,
+            "remove_headers" ,
+            "canonical_only" ,
+            "maf=f" ,
+            "gmaf=f" ,
+            "damaging=s{,}" ,
+            "keep_any_damaging" ,
+            "unpredicted_missense" ,
+            "list=s{,}",
+            "samples=s{,}",
+            "each_sample",
+            "find_shared_genes:s", 
+            "consensus_splice_site",
+            ) or pod2usage(-message => "Syntax error", -exitval => 2);
 pod2usage(-verbose => 2) if ($manual);
 pod2usage(-verbose => 1) if ($help);
 pod2usage(-message => 
@@ -124,7 +128,7 @@ my @valid = qw (transcript_ablation
                 intergenic_variant);
 
 if (not @classes){
-        #@classes = qw(missense nonsense stoploss deletion insertion splicing splice_consensus);
+
         @classes = qw (transcript_ablation
                 splice_donor_variant
                 splice_acceptor_variant
@@ -142,8 +146,9 @@ if (not @classes){
                 regulatory_region_amplification);
 }
 push (@classes, @add) if (@add);
+push @classes, "splice_region_variant" if $splice_consensus;
 foreach my $class (@classes){
-        die "Error - variant class '$class' not recognised.\n" if not grep {/$class/i} @valid;
+    die "Error - variant class '$class' not recognised.\n" if not grep {/$class/i} @valid;
 }
 
 
@@ -197,7 +202,9 @@ if ($canonical_only){
 if (defined $gmaf or defined $any_maf){
     push @csq_fields, 'gmaf';
 }
-
+if ($splice_consensus){
+    push @csq_fields, 'SPLICE_CONSENSUS';
+}
 my @genes_to_filter;
 if (@gene_lists){
     foreach my $gene_file (@gene_lists){
@@ -352,6 +359,14 @@ CLASS:  foreach my $class (@classes){
                 if (lc$ac eq lc$class){
                     if (lc$class eq 'missense_variant' and %damage_filters){
                         next if (filter_missense($annot, \%damage_filters, $keep_any_damaging, $filter_unpredicted));
+                    }elsif(lc$class eq 'splice_region_variant' and $splice_consensus){
+                        my $consensus = $annot->{splice_consensus};
+                        next if not defined $consensus;
+                        if ($consensus !~/SPLICE_CONSENSUS\S+/i){
+                            print STDERR "WARNING - SPLICE_CONSENSUS annotation $consensus is".
+                            " not recognised as an annotation from the SpliceConsensus VEP plugin.\n";
+                            next;
+                        }
                     }
                     print $OUT "$line\n" if not $printed_line;
                     $printed_line++;
@@ -603,6 +618,10 @@ The user can specify one or more of the following classes instead:
 
 Specify one or more classes, separated by spaces, to add to the default mutation classes used.
  
+=item B<--consensus_splice_site>
+
+Use this flag in order to keep splice_region_variant classes only if they are in a splice consensus region as defined by the SpliceConsensus plugin. You do not need to specify 'splice_region_variant' using --classes or --add_classes options when using this flag. You B<MUST> have used the SpliceConsensus plugin when running the VEP for this option to work correctly.
+
 =item B<-g    --gmaf>
 
 Use a value between 0.00 and 0.50 to specify global minor allele frequencey filtering. If GMAF is available for variant it will be filtered if equal to or greater than the value specfied here.
