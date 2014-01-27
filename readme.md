@@ -4,6 +4,10 @@ This project comprises a set of perl scripts and modules that may be useful for 
 
 __UPDATE__
 
+7/1/14
+
+Following report of the Bio::SeqIO::entrezgene bug the bioperl team have fixed the issue, but at the time of writing the fix will not be in the current version of bioperl.  Instead you will need to replace your local entrezgene.pm module with the one here: https://github.com/bioperl/bioperl-live/blob/master/Bio/SeqIO/entrezgene.pm 
+
 16/12/13 
 
 -added sortVcf.pl program

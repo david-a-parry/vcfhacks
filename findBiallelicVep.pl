@@ -38,7 +38,7 @@ my $homozygous_only;
 my %opts = (
             'input' => \$vcf,
             'output' => \$out,
-            'list:s' => \$list_genes,
+            'list' => \$list_genes,
             'samples' => \@samples,
             'classes' => \@classes,
             'canonical_only' => \$canonical_only,
@@ -46,8 +46,8 @@ my %opts = (
             'damaging' => \@damaging,
             'keep_any_damaging' => \$keep_any_damaging,
             'unpredicted_missense' => \$filter_unpredicted,
-            "gmaf=f" => \$gmaf, 
-            "maf=f" => \$any_maf, 
+            "gmaf" => \$gmaf, 
+            "maf" => \$any_maf, 
             'check_all_samples' => \$check_all_samples,
             'equal_genotypes' => \$identical_genotypes,
             'quality' => \$genotype_quality,
@@ -235,7 +235,7 @@ if ($out){
 my $LIST;
 if ($list_genes){
     open ($LIST, ">$list_genes") || die "Can't open $list_genes for writing: $!\n";
-}elsif($list_genes eq '' or $list_genes == 0){#user specified --list option but provided no argument
+}elsif($list_genes eq '' ){#user specified --list option but provided no argument
     $LIST = \*STDERR;
     $list_genes = 1;
 }

@@ -672,13 +672,15 @@ By default, when using --filter_dbnsfp or --match_dbnsfp expressions when an ann
 
 =item B<-d    --damaging>
 
-Filter missense variants unless predicted to be damaging by specified prediction programs.  Available programs are LRT, MutationAssessor, MutationTaster, Polyphen2 (uses the HVAR prediction) and SIFT. Specify one or more of these programs or 'all' for all of them, 'any' for any of them (equivelent to using 'all' with the --keep_any_damaging option). This really acts as a shortcut for using the --filter_dbnsfp expressions:
+Filter missense variants unless predicted to be damaging by specified prediction programs.  Available programs are LRT, MutationAssessor, MutationTaster, Polyphen2 (using the HVAR prediction) and SIFT. Specify one or more of these programs, 'all' for all of them or 'any' for any of them (equivelent to using 'all' with the --keep_any_damaging option). 
+
+Using option without the --keep_any_damaging argument and without passing 'any' as an argument essentially acts as a shortcut for using the --filter_dbnsfp expressions:
 
 =over
 
-"dbNSFP_LRT_pred=N
+"dbNSFP_LRT_pred=N"
 
-"dbNSFP_MutationAssessor_pred=L or dbNSFP_MutationAssessor_pred=N
+"dbNSFP_MutationAssessor_pred=L or dbNSFP_MutationAssessor_pred=N"
 
 "dbNSFP_MutationTaster_pred=N or dbNSFP_MutationTaster_pred=P"
 
@@ -689,7 +691,7 @@ Filter missense variants unless predicted to be damaging by specified prediction
 
 =back
 
-The default behaviour is to only filter variants predicted predicted as damaging by ALL programs specified, but this behaviour can be changed using the --keep_any_damaging argument.
+The default behaviour is to only REMOVE variants predicted predicted as damaging by ALL programs specified, but this behaviour can be changed using the --keep_any_damaging argument.
 
 =item B<-k    --keep_any_damaging>
 
