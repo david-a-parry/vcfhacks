@@ -443,6 +443,7 @@ sub readSnpEffHeader{
     }
 
     $self->{_snpEffArrayField} = \@eff_fields;
+    return @eff_fields if wantarray;#return an array of fields in order
     return $self->{_snpEffHeader} if defined wantarray;
 }
 
@@ -825,6 +826,31 @@ sub _readHeaderInfo{
     }
         
 }
+
+sub checkCoordinateSorted{
+#return 1 if vcf is coordinate sorted (not checking chrom order)
+    my ($self) = @_;
+    $self->reopenFileHandle();
+    my %contigs = ();
+    my $prev_pos = 0;
+    while (my $line = scalar readline $self->{_filehandle}){
+        next if $line =~ /^#/;
+        my $chrom = (split "\t", $line)[$self->{_fields}->{CHROM}];
+        my $pos = (split "\t", $line)[$self->{_fields}->{POS}];
+        if (exists $contigs{$chrom}){
+            if ($contigs{$chrom}  != scalar(keys%contigs) -1 ){
+                return 0; #not sorted - encountered contig twice with another inbetween
+            }
+            return 0 if $pos < $prev_pos;
+        }else{
+            $contigs{$chrom}  = scalar(keys%contigs);
+        }
+        $prev_pos = $pos;
+    }
+    $self->reopenFileHandle();
+    return 1;
+}
+
 
 sub getHeaderColumns{
     my ($self) = @_;
