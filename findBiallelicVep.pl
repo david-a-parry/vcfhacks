@@ -198,6 +198,9 @@ if ($splice_consensus){
 }
 
 my $vcf_obj = ParseVCF->new(file=> $vcf);
+if (not $vcf_obj->checkCoordinateSorted()){
+    die "Vcf input is not sorted in coordinate order - please sort your input and try again.\n";
+}
 if ($check_all_samples){
     push @samples, $vcf_obj->getSampleNames();
 }
