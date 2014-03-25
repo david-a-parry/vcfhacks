@@ -75,6 +75,9 @@ for (my $i = 0; $i < @dbsnp; $i++){
         $snp_obj = ParseVCF->new( file => $dbsnp[$i], noLineCount =>1);
     }else{
         $snp_obj = ParseVCF->new( file => $dbsnp[$i], noLineCount =>0);
+        if (! $snp_obj->checkCoordinateSorted()){
+            die "dbSNP VCF $dbsnp[$i] is not coordinate sorted! Please sort and try again\n";
+        }
     }
     push @snp_objs, $snp_obj;
     if (not -e $snp_obj->get_index){
@@ -90,6 +93,18 @@ if ($opts{pathogenic}){
         print STDERR "WARNING - can't find CLNSIG or SCS fields in dbSNP file headers, your SNP reference files probably don't have pathogenic annotations.\n";
     }
 }
+
+if ($opts{build}){
+    if (not grep {/##INFO=<ID=dbSNPBuildID/} @snp_headers ){
+        print STDERR "WARNING - can't find dbSNPBuildID fields in dbSNP file headers, your SNP reference files probably don't have readable dbSNP build annotations.\n";
+    }
+}
+if ($opts{freq}){
+    if (not grep {/##INFO=<ID=(GMAF|AF|G5A|G5)/} @snp_headers ){
+        print STDERR "WARNING - can't find allele frequency fields (GMAF, AF, G5A or G5) in dbSNP file headers, your SNP reference files probably don't have readable frequency data.\n";
+    }
+}
+
 print $OUT  $vcf_obj->getHeader(0) ."##annotateSnps.pl=\"";
 print $KNOWN  $vcf_obj->getHeader(0) . "##annotateSnps.pl=\"" if $KNOWN;
 my @opt_string = ();
@@ -402,7 +417,23 @@ Show manual page.
 
 =head1 DESCRIPTION
 
-This program will annotate a VCF file with SNP IDs from a given VCF file and can optionally filter SNPs from a vcf file on user-specified criteria.
+This program will annotate a VCF file with SNP IDs from a given VCF file and can optionally filter SNPs from a vcf file on user-specified criteria. In its simplest form this program writes ID fields from files specified using the --dbsnp argument to matching variants in input files. However, it's most useful feature is probably its ability to filter variants based on their presence in different builds of dbSNP or on allele frequency. Use the --build, --freq and --pathogenic arguments to set up your filtering parameters (assuming the relevant annotations are present in the dbSNP files used). 
+
+For example:
+
+annotateSnps.pl -d dbSnp138.b37.vcf.gz clinvar_20130506.vcf -b 129 -f 1 --pathogenic -i input.vcf -o input_filtered.vcf
+
+The above command will remove variants if they were present in dbSNP build 129 or earlier dbSNP builds or if they are in later builds but have an allele frequency equal to or greater than 1 %. However, any variant with a 'pathogenic' or 'probably pathogenic' annotation will not be filtered regardless of frequency of dbSNP build.
+
+dbSNP VCF files are available from NCBI's ftp site. The latest version of human dbSNP containing allele frequency and dbSNP build information can be found here:
+
+ftp://ftp.ncbi.nlm.nih.gov/snp/organisms/human_9606/VCF/00-All.vcf.gz
+
+The latest version of ClinVar with pathogenic annotations is available here:
+
+ftp://ftp.ncbi.nlm.nih.gov/pub/clinvar/vcf/clinvar_00-latest.vcf.gz
+
+These files use the b37 human reference so should only be used if you are using this version of the human genome.
 
 =cut
 
