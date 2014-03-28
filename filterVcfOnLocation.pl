@@ -113,12 +113,12 @@ use strict;
 use Getopt::Long qw(:config no_ignore_case);
 use Data::Dumper;
 use Pod::Usage;
+use POSIX qw/strftime/;
+use Term::ProgressBar;
 use FindBin;
 use lib "$FindBin::Bin";
-use POSIX qw/strftime/;
 use SortGenomicCoordinates;
 use ParseVCF;
-use Term::ProgressBar;
 
 my $help;
 my $manual;
@@ -158,7 +158,7 @@ if (@bedfile){
         }
     #    my @temp = (<BED>) =~ s/[:-]/\t/g;
         close BED;
-        my $invalid = grep {!/^(chr)*[\dXYMU][\w\d]*\t[\d]+\t[\d]+/} @temp;
+        my $invalid = grep {!/\S+\t\d+\t\d+/} @temp;
         warn "$invalid invalid region(s) found in $bedfile" if $invalid;
         push (@regions, @temp);
     }
@@ -166,7 +166,7 @@ if (@bedfile){
 if (@reg){
     foreach my $reg (@reg){
         $reg =~ s/\,//g;
-        die "invalid region specied: $reg" if $reg !~ /^(chr)*[\dXYMU][\w\d]*:[\d]+-[\d]+$/; 
+        die "invalid region specied: $reg" if $reg !~ /^\S+:[\d]+-[\d]+$/; 
         $reg =~ s/[\:\-]/\t/g;
         push (@regions, $reg);
     }
