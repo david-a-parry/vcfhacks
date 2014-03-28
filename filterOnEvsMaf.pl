@@ -32,7 +32,7 @@ GetOptions(\%opts,
 pod2usage (-verbose => 2) if $opts{manual};
 pod2usage (-verbose => 1) if $opts{help};
 
-pod2usage(-exitval => 2, -message => "Syntax error") if not $opts{input} or (not $opts{dir} and not @{$opts{evs_file}});
+pod2usage(-exitval => 2, -message => "Syntax error") if not $opts{input} or (not $opts{dir} and not @{$opts{esp_file}});
 if (defined $freq){
         pod2usage(-exitval => 2, -message => "value for --freq argument must be greater than 0 and less than 50") if $freq > 50 or $freq <= 0;
 }
