@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#David Parry January 2013
+#David Parry January 2014
 use strict;
 use warnings;
 use Getopt::Long;
@@ -10,10 +10,13 @@ use FindBin;
 use lib "$FindBin::Bin";
 use ParseVCF;
 use SortGenomicCoordinates;
-our $genotype_quality = 0;
+use ParsePedfile;
+
+my $genotype_quality = 20;
 my $vcf;
 my @samples;
 my @reject;
+my @reject_except;
 my @head;
 my @classes;
 my $reject;
@@ -35,12 +38,16 @@ my $progress;
 my $check_all_samples;
 my $homozygous_only;
 my $splice_consensus = 0; #use this flag to check for SpliceConsensus VEP plugin annotations
+my $pedigree;
 
 my %opts = (
             'input' => \$vcf,
             'output' => \$out,
             'list' => \$list_genes,
             'samples' => \@samples,
+            'reject' => \@reject,
+            'reject_all_except' => \@reject_except,
+            'family' => \$pedigree,
             'classes' => \@classes,
             'canonical_only' => \$canonical_only,
             'pass_filters' => \$pass_filters,
@@ -52,8 +59,7 @@ my %opts = (
             'check_all_samples' => \$check_all_samples,
             'equal_genotypes' => \$identical_genotypes,
             'quality' => \$genotype_quality,
-            'allow_missing_genotypes' => \$allow_missing,
-            'reject' => \@reject,
+            #'allow_missing_genotypes' => \$allow_missing,
             'progress' => \$progress,
             'add_classes' => \@add,
             'homozygous_only' => \$homozygous_only,
@@ -61,10 +67,13 @@ my %opts = (
             'help' => \$help,
             'manual' => \$man);
 GetOptions(\%opts,
-            'input=s' =>\$vcf,
+            'input=s',
             'output=s',
             'list:s',
             'samples=s{,}',
+            'r|reject=s{,}' => \@reject,
+            'x|reject_all_except:s{,}' => \@reject_except,
+            'family=s',
             'classes=s{,}',
             'canonical_only',
             'pass_filters',
@@ -76,8 +85,7 @@ GetOptions(\%opts,
             'check_all_samples',
             'equal_genotypes',
             'quality=i',
-            'allow_missing_genotypes',
-            'reject=s{,}',
+#           'allow_missing_genotypes',
             'progress',
             'add_classes=s{,}',
             'homozygous_only',
@@ -89,9 +97,18 @@ GetOptions(\%opts,
 
 pod2usage(-verbose => 2) if $man;
 pod2usage(-verbose => 1) if $help;
-pod2usage(-message => "Syntax error", exitval => 2) if (not $vcf or (not @samples and not $check_all_samples));
+pod2usage(-message => "Syntax error: input is required.", exitval => 2) if not $vcf;
+pod2usage(-message => "Syntax error: please specify samples to analyze using --samples (-s), --check_all_samples or --family (-f) arguments.", exitval => 2) if not @samples and not $check_all_samples and not $pedigree;
 pod2usage(-message => "--gmaf option requires a value between 0.00 and 0.50 to filter on global minor allele frequency.\n", -exitval => 2) if (defined $gmaf && ($gmaf < 0 or $gmaf > 0.5));
 
+#QUICKLY CHECK PEDIGREE BEFORE DEALING WITH POTENTIALLY HUGE VCF
+my $ped;
+if ($pedigree){
+    $ped  = ParsePedfile->new(file => $pedigree);
+    #die "Pedigree file must contain at least one affected member!\n" if not $ped->getAllAffecteds();
+}
+
+#SORT OUT VEP DETAILS
 my @valid = qw (transcript_ablation
         splice_donor_variant
         splice_acceptor_variant
@@ -197,13 +214,16 @@ if ($splice_consensus){
     push @csq_fields, 'splice_consensus';
 }
 
+#PARSED VEP ARGUMENTS
+#INITIALIZE VCF
+
+print STDERR "Initializing VCF input ($vcf)...\n";
 my $vcf_obj = ParseVCF->new(file=> $vcf);
+print STDERR "Checking VCF is sorted...\n";
 if (not $vcf_obj->checkCoordinateSorted()){
     die "Vcf input is not sorted in coordinate order - please sort your input and try again.\n";
 }
-if ($check_all_samples){
-    push @samples, $vcf_obj->getSampleNames();
-}
+#CHECK VEP ARGUMENTS AGAINST VCF
 my $vep_header = $vcf_obj->readVepHeader();
 my @available_mafs = ();
 if (defined $any_maf){
@@ -240,6 +260,74 @@ if ($replace_hgnc){
     push @csq_fields, 'symbol';
 }
 
+#DONE CHECKING VEP INFO
+#CHECK OUR SAMPLES/PEDIGREE INFO
+if ($check_all_samples){
+    push @samples, $vcf_obj->getSampleNames();
+}
+if($ped){
+    my @aff = ();
+    my @un = ();
+    my @not_aff = ();
+    my @not_un = ();
+    foreach my $s ($ped->getAllAffecteds()){
+        if ($vcf_obj->checkSampleInVcf($s)){
+            push @aff, $s;
+        }else{
+            push @not_aff, $s;
+        }
+    }
+    foreach my $s ($ped->getAllUnaffecteds()){
+        if ($vcf_obj->checkSampleInVcf($s)){
+            push @un, $s;
+        }else{
+            push @not_un, $s;
+        }
+    }
+    print STDERR "Found " .scalar(@aff) . " affected samples from pedigree in VCF.\n";
+    print STDERR scalar(@not_aff) . " affected samples from pedigree were not in VCF.\n";
+    print STDERR "Found " .scalar(@un) . " unaffected samples from pedigree in VCF.\n";
+    print STDERR scalar(@not_un) . " unaffected samples from pedigree were not in VCF.\n";
+    push @samples, @aff;
+    push @reject, @un;
+}
+#check @samples and @reject exist in file
+my @not_found = ();
+foreach my $s (@samples, @reject){
+    if (not $vcf_obj->checkSampleInVcf($s)){
+        push @not_found, $s;
+    }
+    if (@not_found){
+        die "Could not find the following samples in VCF:\n".join("\n", @not_found)."\n";
+    }
+}
+die "No affected samples found in VCF\n" if not @samples;
+
+if (@reject_except){
+    my @all = $vcf_obj->getSampleNames();
+    push @reject_except, @samples; 
+    my %subtract = map {$_ => undef} @reject_except;
+    @all = grep {!exists $subtract{$_} } @all;
+    push @reject, @all;
+}
+
+#remove any duplicate samples in @samples or @reject
+my %seen = ();
+@reject = grep { ! $seen{$_}++} @reject;
+%seen = ();
+@samples = grep { ! $seen{$_}++} @samples;
+%seen = ();
+#make sure no samples appear in both @samples and @reject
+my %dup = map {$_ => undef} @samples;
+foreach my $s (@samples){
+    my @doubles = grep {exists ($dup{$_}) } @reject;
+    die "Same sample(s) specified as both affected and unaffected:\n" .join("\n",@doubles) ."\n" 
+        if @doubles;
+}
+
+#DONE CHECKING SAMPLE INFO
+#SET UP OUR OUTPUT FILES
+
 my $OUT;
 if ($out){
     open ($OUT, ">$out") || die "Can't open $out for writing: $!\n";
@@ -253,16 +341,7 @@ if ($list_genes){
     $LIST = \*STDERR;
     $list_genes = 1;
 }
-my $progressbar;
-if ($progress){
-    if ($vcf eq "-"){
-        print STDERR "Can't use --progress option when input is from STDIN\n";
-        $progress = 0;
-    }else{
-        $progressbar = Term::ProgressBar->new({name => "Biallelic", count => $vcf_obj->countLines("variants"), ETA => "linear", });
-    }
-}
-my $next_update = 0;
+
 print $OUT  $vcf_obj->getHeader(0) ."##findBiallelicVep.pl\"";
 my @opt_string = ();
 foreach my $k (sort keys %opts){
@@ -283,26 +362,45 @@ foreach my $k (sort keys %opts){
     }
 }
 print $OUT join(" ", @opt_string) . "\"\n" .  $vcf_obj->getHeader(1);
+
+#ALLOW FOR CUSTOM VCF BY LOGGING CHROM AND POS HEADER COL #s FOR SORTING OF VCF LINES
 my $chrom_header = $vcf_obj->getColumnNumber("CHROM");
 my $pos_header = $vcf_obj->getColumnNumber("POS");
 my $prev_chrom = 0;
 my $line_count = 0;
+
+
+#SET UP PROGRESSBAR
+my $progressbar;
+if ($progress){
+    if ($vcf eq "-"){
+        print STDERR "Can't use --progress option when input is from STDIN\n";
+        $progress = 0;
+    }else{
+        $progressbar = Term::ProgressBar->new({name => "Biallelic", count => $vcf_obj->countLines("variants"), ETA => "linear", });
+    }
+}
+my $next_update = 0;
+
+#START PROCESSING OUR VARIANTS
 LINE: while (my $line = $vcf_obj->readLine){
     $line_count++;
-        if ($progress){
-            $next_update = $progressbar->update($line_count) if $line_count >= $next_update;
-        }
-    if ($pass_filters){
-        next if $vcf_obj->getVariantField("FILTER") ne 'PASS';
+    if ($progress){
+        $next_update = $progressbar->update($line_count) if $line_count >= $next_update;
     }
     my %transcript = ();#hash of transcript ids that have a mutation type in @classes - using this hash protects us in case there are multiple alleles causing multiple mentions of the same transcript id in one VAR field
     my $chrom = $vcf_obj->getVariantField("CHROM");
-    my @temp_reject = @reject; #copy array of samples to reject variants from so we can remove them if necessarry (i.e. if using $identical genotypes argument)
-    if ($prev_chrom && $chrom ne $prev_chrom){#should we add a condition to allow for inclusion of PAR on chrY?
+    if ($prev_chrom && $chrom ne $prev_chrom){
     #print biallelic mutations for previous chromosome here...
         my @vcf_lines = ();
         foreach my $gene (keys %allelic_genes){
-            my @add_lines  = (check_all_samples_biallelic(\@samples, \@reject, \%{$allelic_genes{$gene}}, $identical_genotypes, $homozygous_only));
+            my @add_lines  = ();
+            #CHECK SEGREGATION IF PEDIGREE
+            if ($pedigree){
+                @add_lines = check_segregation($ped, \%{$allelic_genes{$gene}});
+            }else{
+                @add_lines  = check_all_samples_biallelic(\%{$allelic_genes{$gene}});
+            }
             if (@add_lines){
                 push (@vcf_lines, @add_lines);
                 push (@{$listing{$id_to_symbol{$gene}}}, $gene) if $list_genes;
@@ -316,35 +414,27 @@ LINE: while (my $line = $vcf_obj->readLine){
     }
 
     $prev_chrom = $chrom;
+    if ($pass_filters){
+        next if $vcf_obj->getVariantField("FILTER") ne 'PASS';
+    }
+    next if not is_autosome($chrom);
     my $have_variant = 0;
     foreach my $sample (@samples){
         $have_variant++ if $vcf_obj->getSampleCall(sample=>$sample, minGQ => $genotype_quality) =~ /[\d+][\/\|][\d+]/;
         last if $have_variant;
     }
     next LINE if not $have_variant;
+
     if ($identical_genotypes){
-        my %gts = $vcf_obj->getSampleCall(multiple=> \@samples, minGQ => $genotype_quality);
-        my %no_calls;
-        for (my $i = 0; $i < $#samples; $i++){
-            if ($allow_missing and $gts{$samples[$i]} =~ /^\.[\/\|]\.$/){#if we're allowing missing values then skip no calls
-                $no_calls{$samples[$i]}++;
-                next;
-            }elsif ($gts{$samples[$i]} =~ /^\.[\/\|]\.$/){#otherwise a no call means we should go to the next line
-                next LINE;
-            }
-            for (my $j = $i + 1; $j <= $#samples; $j++){
-                if ($allow_missing and $gts{$samples[$j]} =~ /^\.[\/\|]\.$/){
-                    $no_calls{$samples[$j]}++;
-                    next; 
-                }elsif ($gts{$samples[$i]} =~ /^\.[\/\|]\.$/){
-                    next LINE;
-                }
-                next LINE  if $gts{$samples[$j]} ne $gts{$samples[$i]};
-            }
-        }
-        #so, if we're here all @samples are identical (or no calls if $allow_missing)
-        next LINE if keys %no_calls == @samples;#even if we $allow_missing we don't want to print a variant if none of our @samples have a call
+        next LINE if not identical_genotypes(\@samples);
     }
+    #check for identical genotypes within family if using a ped file
+    if ($pedigree){
+        foreach my $fam ($ped->getAllFamilies()){
+            next LINE if not identical_genotypes($ped->getAffectedsFromFamily($fam));
+        }
+    }
+
     my @csq = $vcf_obj->getVepFields(\@csq_fields); #returns array of hashes e.g. $csq[0]->{Gene} = 'ENSG000012345' ; $csq[0]->{Consequence} = 'missense_variant'
     die "No consequence field found for line:\n$line\nPlease annotated your VCF file with ensembl's variant effect precictor before running this program.\n" if not @csq;
 CSQ: foreach my $annot (@csq){
@@ -421,7 +511,13 @@ ANNO:        foreach my $ac (@anno_csq){
 
 my @vcf_lines = ();
 foreach my $gene (keys %allelic_genes){
-    my @add_lines  = (check_all_samples_biallelic(\@samples, \@reject, \%{$allelic_genes{$gene}}, $identical_genotypes, $homozygous_only));
+    my @add_lines  = ();
+    #CHECK SEGREGATION IF PEDIGREE
+    if ($pedigree){
+        @add_lines = check_segregation($ped, \%{$allelic_genes{$gene}});
+    }else{
+        @add_lines  = check_all_samples_biallelic(\%{$allelic_genes{$gene}});
+    }
     if (@add_lines){
         push (@vcf_lines, @add_lines);
         push (@{$listing{$id_to_symbol{$gene}}}, $gene) if $list_genes;
@@ -437,6 +533,43 @@ if ($list_genes){
 
 if ($progressbar){
         $progressbar->update($vcf_obj->countLines("variants")) if $vcf_obj->countLines("variants") >= $next_update;
+}
+
+
+###########
+sub is_autosome{
+    my ($chrom) = @_;
+    if ($chrom =~ /^(chr)*(\d+|GL\d+)/i){
+        return 1;
+    }
+    return 0;
+}
+
+###########
+sub identical_genotypes{
+    my (@samp) = @_;
+    my %gts = $vcf_obj->getSampleCall(multiple=> \@samp, minGQ => $genotype_quality);
+    my %no_calls;
+    for (my $i = 0; $i < $#samp; $i++){
+        if ($allow_missing and $gts{$samp[$i]} =~ /^\.[\/\|]\.$/){#if we're allowing missing values then skip no calls
+            $no_calls{$samp[$i]}++;
+            next;
+        }elsif ($gts{$samp[$i]} =~ /^\.[\/\|]\.$/){#otherwise a no call means we should go to the next line
+            return 0;
+        }
+        for (my $j = $i + 1; $j <= $#samp; $j++){
+            if ($allow_missing and $gts{$samp[$j]} =~ /^\.[\/\|]\.$/){
+                $no_calls{$samp[$j]}++;
+                next; 
+            }elsif ($gts{$samp[$i]} =~ /^\.[\/\|]\.$/){
+                return 0;
+            }
+            return 0 if $gts{$samp[$j]} ne $gts{$samp[$i]};
+        }
+    }
+    #so, if we're here all @samp are identical (or no calls if $allow_missing)
+    return 0 if keys %no_calls == @samp;#even if we $allow_missing we don't want to print a variant if none of our @samphave a call
+    return 1;
 }
 
 ###########
@@ -516,20 +649,15 @@ sub add_damaging_filters{
 }
 
 ###########
-sub check_all_samples_biallelic{
-    my ($samples, $reject, $gene_counts, $identical, $homozygotes_only) = @_;
-    
-    #we need to go through every possible combination of biallelic alleles 
-    #(represented as chr:pos/allele) to compare between @$samples and against @$reject
-    my @vcf_lines;
+sub get_alleles_to_reject{
+#requires array ref to sample IDs and hash ref to gene count hash
+#returns two hash refs - see %reject_genotypes and %incompatible_alleles below 
+    my ($rej, $gene_counts) = @_;
     my @keys = (keys %{$gene_counts});#keys are "chr:pos/allele"
-    my %possible_biallelic_genotypes = ();#keys are samples, values are arrays of possible biallelic genotypes
-    my %reject_genotypes = ();#collect all genotype combinations present in @$reject samples - these are not be pathogenic
+    my %reject_genotypes = ();#collect all genotype combinations present in @$reject samples - these cannot be pathogenic
     my %incompatible_alleles = ();#key is allele, value is an array of alleles each of which can't be pathogenic if key allele is pathogenic and vice versa
-    #first check @$reject alleles and collect non-pathogenic genotpes in %reject_genotypes
-    #also note alleles that can't BOTH be pathogenic storing them in %incompatible alleles
     for (my $i = 0; $i < @keys; $i++){
-        foreach my $r (@$reject){
+        foreach my $r (@$rej){
             if ($gene_counts->{$keys[$i]}->{$r} >= 1){
                 $reject_genotypes{"$keys[$i]/$keys[$i]"}++ if $gene_counts->{$keys[$i]}->{$r} >= 2;#homozygous therefore biallelic
                 for (my $j = $i + 1; $j < @keys; $j++){#check other alleles to see if there are any compund het combinations
@@ -542,50 +670,48 @@ sub check_all_samples_biallelic{
             }
         }
     }
-    #now go through @$samples and throw away any @$reject genoypes
+    return (\%reject_genotypes, \%incompatible_alleles);
+}
+
+
+###########
+sub get_biallelic{
+#arguments are array ref to samples, hash ref to reject genotypes, hash ref to incompatible genotypes and gene_counts hash ref
+#returns hash of samples to arrays of potential biallelic genotypes
+    my ($aff, $reject_geno, $incompatible, $gene_counts) = @_;
+    my @keys = (keys %{$gene_counts});#keys are "chr:pos/allele"
+    my %possible_biallelic_genotypes = ();#keys are samples, values are arrays of possible biallelic genotypes
+    my %biallelic = ();#same as above, for returning final list of valid biallelic combinations
     for (my $i = 0; $i < @keys; $i++){
-        next if $reject_genotypes{"$keys[$i]/$keys[$i]"};#allele $i can't be pathogenic if homozygous in a @$reject sample
-        foreach my $s (@$samples){
+        next if $reject_geno->{"$keys[$i]/$keys[$i]"};#allele $i can't be pathogenic if homozygous in a @reject sample
+        foreach my $s (@$aff){
             if ($gene_counts->{$keys[$i]}->{$s} >= 1){
                 push @{$possible_biallelic_genotypes{$s}}, "$keys[$i]/$keys[$i]" if $gene_counts->{$keys[$i]}->{$s} >= 2;#homozygous therefore biallelic
-                if (not $homozygotes_only){#don't consider hets if --homozygous_only flag is in effect
+                if (not $homozygous_only){#don't consider hets if --homozygous_only flag is in effect
                     for (my $j = $i + 1; $j < @keys; $j++){#check other alleles to see if there are any compund het combinations
                         if ($gene_counts->{$keys[$j]}->{$s} >= 1){
-                            push @{$possible_biallelic_genotypes{$s}}, "$keys[$i]/$keys[$j]" if not $reject_genotypes{"$keys[$i]/$keys[$j]"};
+                            push @{$possible_biallelic_genotypes{$s}}, "$keys[$i]/$keys[$j]" if not $reject_geno->{"$keys[$i]/$keys[$j]"};
                         }
                     }
                 }
             }
         }
     }
-    #so now our @$samples only have genotypes not present in @$reject
-    #however, between all our samples we could be using pairs of alleles from %incompatible_alleles
-    # i.e. if two alleles are present in an unaffected (@$reject) sample at most one allele can be pathogenic
-    # so we can't use both in different affected (@$samples) samples
-    #
-    # perhaps start with first sample and first biallelic combination then cycle through
-    #
-    # for genotypes of sample[0]
-    #     for samples[1..$#samples]
-    #         for genotypes of sample[n]{
-    #             next if not compatbible
-    #             push compatible_genotypes{sample[n]} , genotype 
-    #         }
-    #     }            
-    #     if check_exists (samples[1..$#samples]){
-    #         put relevant vcf lines into array and add transcript id to list of genes to output
-    #     }
-    #         
-    if (@$samples > 1){
-        foreach my $gt (@{$possible_biallelic_genotypes{$samples->[0]}}){
+    #so now our $aff only have genotypes not present in %{$reject_geno}
+    #however, between all our samples we could be using pairs of alleles from %{$incompatible}
+    # i.e. if two alleles are present in an unaffected (@reject) sample at most one allele can be pathogenic
+    # so we can't use both in different affected (@$aff) samples
+    
+    foreach my $gt (@{$possible_biallelic_genotypes{$samples[0]}}){
+        if (@samples > 1){
             my @incompatible = ();# keep the alleles incompatible with current $gt here
             my %compatible_genotypes = (); #samples are keys, values are genotypes that pass our test against incompatible alleles
             foreach my $allele (split("\/", $gt)){
-                push (@incompatible, @{$incompatible_alleles{$allele}}) if exists $incompatible_alleles{$allele};
+                push (@incompatible, @{$incompatible->{$allele}}) if exists $incompatible->{$allele};
             }
-            foreach my $s (@$samples[1..$#{$samples}]){
+            foreach my $s (@$aff[1..$#{$aff}]){
                 foreach my $s_gt (@{$possible_biallelic_genotypes{$s}}){
-                    if ($identical){
+                    if ($identical_genotypes){
                         next if $s_gt ne $gt;
                     }
                     my @s_alleles =  (split("\/", $s_gt));
@@ -594,35 +720,104 @@ sub check_all_samples_biallelic{
                     }
                 }
             }
-            if (check_keys_are_true([@samples[1..$#{$samples}]], \%compatible_genotypes)){
-                foreach my $allele (split("\/", $gt)){
-                    push (@vcf_lines, $gene_counts->{$allele}->{vcf_line});    
-                }
-                foreach my $s (@$samples[1..$#{$samples}]){
+            if (check_keys_are_true([@$aff[1..$#{$aff}]], \%compatible_genotypes)){
+                push @{$biallelic{$samples[0]}}, $gt;    
+                foreach my $s (@samples[1..$#samples]){
                     foreach my $sgt (@{$compatible_genotypes{$s}}){
-                        foreach my $sallele (split("\/", $sgt)){
-                            push (@vcf_lines, $gene_counts->{$sallele}->{vcf_line});
-                        }
+                        push @{$biallelic{$s}}, $sgt;    
                     }
                 }
             }
-            #crude attempt to stop mass buildup of vcf lines if there are LOTS of possible biallelic combiations
-            my %seen = ();
-             @vcf_lines = grep { ! $seen{$_}++ } @vcf_lines;
-        }
-    }else{
-        foreach my $gt (@{$possible_biallelic_genotypes{$samples->[0]}}){
-            foreach my $allele (split("\/", $gt)){
-                push (@vcf_lines, $gene_counts->{$allele}->{vcf_line});    
+        }else{
+            foreach my $gt (@{$possible_biallelic_genotypes{$samples[0]}}){
+                push @{$biallelic{$samples[0]}}, $gt;    
             }
-            #crude attempt to stop mass buildup of vcf lines if there are LOTS of possible biallelic combiations
-            my %seen = ();
-             @vcf_lines = grep { ! $seen{$_}++ } @vcf_lines;
         }
     }
-    my %seen = ();
-    @vcf_lines = grep { ! $seen{$_}++ } @vcf_lines;
-    return @vcf_lines;
+    foreach my $k (keys %biallelic){
+        #remove duplicate genotypes for each sample
+        my %seen = ();
+        @{$biallelic{$k}} = grep {!$seen{$_}++}  @{$biallelic{$k}};
+    }
+    return %biallelic;
+}
+
+
+###########
+sub check_segregation{
+#checks whether variants segregate appropriately per family
+#can check between multiple families using check_all_samples_biallelic
+#returns hash from $gene_counts with only correctly segregating alleles
+    my ($p, $gene_counts) = @_;
+    my @keys = (keys %{$gene_counts});#keys are "chr:pos/allele"
+    my %seg_count = ();#return version of %{$gene_counts} containing only alleles that appear to segregate correctly
+    
+    #Iterate over all @reject to store %reject_genotypes and %incompatible_alleles
+    my ($reject_genotypes, $incompatible_alleles) = get_alleles_to_reject(\@reject, $gene_counts);
+    #Iterate overl all @samples to store possible biallelic genotypes
+    my %biallelic_candidates = get_biallelic(\@samples, $reject_genotypes, $incompatible_alleles, $gene_counts);
+    #Then for each family identify common biallelic genotypes but throw away anything if neither allele present in an obligate carrier
+
+    foreach my $f ($ped->getAllFamilies){
+        my %affected_ped = map {$_ => undef} $ped->getAffectedsFromFamily($f);
+        my @affected = grep { exists $affected_ped{$_} } @samples;
+        my %unaffected_ped = map {$_ => undef} $ped->getUnaffectedsFromFamily($f);
+        my @unaffected = grep { exists $unaffected_ped{$_} } @reject;
+        #get intersection of all @affected biallelic genotypes (we're assuming there's no phenocopy so we're looking for identical genotypes)
+        my %intersect = map {$_ => undef}  @{$biallelic_candidates{$affected[0]}};
+        foreach my $s (@affected[1..$#affected]){
+            my @biallelic = grep {exists ($intersect{$_}) } @{$biallelic_candidates{$s}};
+            %intersect = map {$_ => undef}  @biallelic;
+        }
+        #we've already checked that these allele combinations are not present in unaffected members including parents.
+        #check that parents don't contain 0 of a compound het (admittedly this does not allow for hemizygous variants in case of a deletion in one allele)
+        foreach my $key (keys %intersect){
+            foreach my $u (@unaffected){
+                if ($ped->isObligateCarrierRecessive($u)){
+                    my @al = split(/\//, $key);  
+                    if ($gene_counts->{$al[0]}->{$u} == 0 and $gene_counts->{$al[1]}->{$u} == 0){#0 means called as not having allele, -1 means no call
+                        delete $intersect{$key};
+                    }
+                }
+            }
+        }
+        #now %intersect only has viable genotypes for this family
+        #Put these genotypes into %seg_counts
+        foreach my $k (keys %intersect){
+            my @al = split(/\//, $k);  
+            #add viable alleles to %seg_count
+            $seg_count{$al[0]} = $gene_counts->{$al[0]};
+            $seg_count{$al[1]} = $gene_counts->{$al[1]};
+        }
+    }
+    #Find any common variation by running check_all_samples_biallelic using \%seg_counts
+    return check_all_samples_biallelic(\%seg_count);
+}
+
+###########
+sub check_all_samples_biallelic{
+    my ($gene_counts) = @_;
+    
+    #we need to go through every possible combination of biallelic alleles 
+    #(represented as chr:pos/allele) to compare between @samples and against @$reject
+    my %vcf_lines;
+    my @keys = (keys %{$gene_counts});#keys are "chr:pos/allele"
+    my %possible_biallelic_genotypes = ();#keys are samples, values are arrays of possible biallelic genotypes
+    #first check @$reject alleles and collect non-pathogenic genotpes in %reject_genotypes - the assumption here is that
+    # the disease alleles are rare so not likely to be in cis in a @reject sample while in trans in an affected sample therefore we can reject
+    # assuming presence of two alleles in a reject sample means either they are in cis or are harmless when in trans
+    #also note alleles that can't BOTH be pathogenic storing them in %incompatible alleles
+    my ($reject_genotypes, $incompatible_alleles) = get_alleles_to_reject(\@reject, $gene_counts);
+    my %biallelic_candidates = get_biallelic(\@samples, $reject_genotypes, $incompatible_alleles, $gene_counts);
+    #%biallelic_candidates - keys are samples, values are arrays of biallelic genotypes
+    foreach my $s (keys %biallelic_candidates){
+        foreach my $gt (@{$biallelic_candidates{$s}}){
+            foreach my $allele ( split(/\//, $gt)){
+                $vcf_lines{$gene_counts->{$allele}->{vcf_line}}++;
+            }
+        }
+    }
+    return keys %vcf_lines;
 }
 ###########
 sub check_keys_are_true{
@@ -655,11 +850,13 @@ sub create_var_hash{
         foreach my $s (@$samp){
             my $gt = $vcf_obj->getSampleCall(sample=>$s, minGQ => $genotype_quality);
             if ($gt =~ /$i[\/\|]$i/){
-                $var_hash{"$coord-$i"}->{$s} = 2;
+                $var_hash{"$coord-$i"}->{$s} = 2;#homozygous for this alt allele
             }elsif ($gt =~ /\d[\/\|]$i/ or $gt =~ /$i[\/\|]\d/ ){
-                $var_hash{"$coord-$i"}->{$s} = 1;
+                $var_hash{"$coord-$i"}->{$s} = 1;#het for alt allele
+            }elsif ($gt =~ /\d[\/\|]\d/){
+                $var_hash{"$coord-$i"}->{$s} = 0;#does not carry alt allele
             }else{
-                $var_hash{"$coord-$i"}->{$s} = 0;
+                $var_hash{"$coord-$i"}->{$s} = -1;#no call
             }
         }
     }
@@ -687,6 +884,9 @@ sub sort_vcf_lines{
     return $sort_obj->get_ordered;
 }
 ###########
+#=item B<--allow_missing>
+#When multiple --samples are being analysed use this flag to stop the script rejecting variants that are missing (as in no genotype call) from other samples.
+
 =head1 NAME
 
 findBiallelicVep.pl - identify variants that make up potential biallelic variation of a gene
@@ -722,6 +922,36 @@ One or more samples to identify biallelic genes from.  When more than one sample
 =item B<-r    --reject>
 
 ID of samples to exclude variants from. Biallelic variants identified in these samples will be used to filter those found in samples supplied via the --samples argument.
+
+=item B<-x    --reject_all_except>
+
+Reject variants present in all samples except these. If used without an argument all samples in VCF that are not specified by --samples argument will be used to reject variants. If one or more samples are given as argument to this option then all samples in VCF that are not specified by --samples argument or this argument will be used to reject variants.
+
+=item B<-f    --family>
+
+A PED file (format described below) containing information about samples in the VCF. In this way you can specify one or more families to allow the program to analyze biallelic variation that segregates correctly among affected and unaffected members. This assumes that any given family will have the same monogenic cause of recessive disease (i.e. this will not find phenocopies segregating in a family). One advantage of using a PED file is that the program can identify obligate carriers of a recessive disease and filter variants appropriately.  Can be used instead of or in conjunction with --samples (-s), --reject (-r) and --reject_all_except (-x) arguments. 
+
+Not all samples in a given PED file need be present in the VCF. For example, you may specify an affected child not present in a VCF to indicate that an unaffected sample that IS present in the VCF is an obligate carrier. 
+
+PED format - from the PLINK documentation:
+
+       The PED file is a white-space (space or tab) delimited file: the first six columns are mandatory:
+
+            Family ID
+            Individual ID
+            Paternal ID
+            Maternal ID
+            Sex (1=male; 2=female; other=unknown)
+            Phenotype
+
+       Affection status, by default, should be coded:
+
+           -9 missing
+            0 missing
+            1 unaffected
+            2 affected
+
+This script will ignore any lines in a PED file starting with '#' to allow users to include comments or headers.
 
 =item B<--classes>
 
@@ -781,7 +1011,7 @@ The user can specify one or more of the following classes instead:
         intergenic_variant
 
 
-=item B<--add_classes>
+=item B<-a    --add_classes>
 
 Specify one or more classes, separated by spaces, to add to the default mutation classes used for finding biallelic variants.
 
@@ -829,19 +1059,15 @@ Like gmaf but filter on any population specific minor allele frequency annotated
 
 =item B<-q    --quality>
 
-Minimum genotype qualities to consider. This applies to samples specified by both --sample and --reject. Anything below this threshold will be considered a no call.
+Minimum genotype qualities to consider. This applies to samples specified by both --sample and --reject. Anything below this threshold will be considered a no call. Default is 20.
 
 =item B<-e    --equal_genotypes>
 
-Use this flag if you only want to consider genotypes that are identical in each sample to count towards biallelic variation. Potentially useful if looking at several related individuals segregating the same disease.
-
-=item B<--allow_missing>
-
-When multiple --samples are being analysed use this flag to stop the script rejecting variants that are missing (as in no genotype call) from other samples.
+Use this flag if you only want to consider genotypes that are identical in each sample to count towards biallelic variation. Potentially useful if looking at several related individuals segregating the same disease and not using a PED file to specify their relationships.
 
 =item B<--check_all_samples>
 
-Check all samples in VCF.
+Check all samples in VCF. Assumes all samples are affected.
 
 =item B<--pass_filters>
 
@@ -872,21 +1098,26 @@ Show the program's manual page.
     findBiallelicVep.pl -i <variants.vcf> -s <sample1> <sample2> -r <sample3> <sample4>  -o output.vcf -l genelist.txt
     #find genes with biallelic variants in two unrelated samples but not in two unaffected samples. 
 
-    findBiallelicVep.pl -i <variants.vcf> -s <sample1> <sample2> -r <sample3> <sample4> -d polyphen -g 0.01 -o output.vcf -l genelist.txt
-    #as above but only consider missense variants predicted damaging by polyphen and with a global minor allele frequency less than 1%. 
+    findBiallelicVep.pl -i <variants.vcf> -s <sample1> <sample2> -r <sample3> <sample4> -d polyphen --maf 0.01 -o output.vcf -l genelist.txt
+    #as above but only consider missense variants predicted damaging by polyphen and with a minor allele frequency less than 1%. 
 
     findBiallelicVep.pl -i <variants.vcf> -s <sample1> <sample2> -e -o output.vcf -l genelist.txt
     #find genes with biallelic variants in two related samples where you expect them to share the same causative variant.
+
+    findBiallelicVep.pl -i <variants.vcf> -f families.ped -o output.vcf -l genelist.txt -q 30
+    #use families.ped file to describe affected and unaffected individuals, only consider calls with genotype quality of 30 or higher
 
 =cut
 
 =head1 DESCRIPTION
 
-This program reads VCF files annotated with Ensembl's Variant Effect Predictor and identifies transcripts with potential biallelic variation matching the various options specified above for the purpose of identifying potential recessively inherited pathogenic variants.  When more than one sample is specified using the --samples argument transcripts are identified that contain potential biallelic variation in all samples. 
+This program reads VCF files annotated with Ensembl's Variant Effect Predictor and identifies transcripts with potential biallelic variation matching the various options specified above for the purpose of identifying potential recessively inherited pathogenic variants.  When more than one sample is specified using the --samples (-s) argument transcripts are identified that contain (not necessarily identical) potential biallelic variation in all samples. If multiple samples are specified in a PED file passed to the script with the --family (-f) argument, the program will attempt to find identical biallelic combinations within families and transcripts that contain potential biallelic variation in all affected samples from different families.
 
-Genes are considered to contain potential biallelic variation if they either contain homozygous variants or two or more heterozygous variants. Phase can not be determined for variants so variants in cis will be erroneously considered to be potential biallelic variation.  Using variant data from unaffected parents with the --reject option can help get around this issue.  Any samples specified using the --reject option will be used to remove biallelic variant combinations present - specifically, genotype combinations identified in affected samples (--samples) but also present in samples specified using the --reject argument will be removed from output. In this manner, if you have data from unaffected parents you should be able to avoid the problem of false positives from variants in cis as well as removing any shared genuine biallelic but non-pathogenic variation.  
+Genes are considered to contain potential biallelic variation if they either contain homozygous variants or two or more heterozygous variants. Phase can not be determined for variants so variants in cis may be erroneously considered to be potential biallelic variation.  Using variant data from unaffected parents with the --reject (-r) option or by specifying a PED file with the --family (-f) option  can help get around this issue.  Any samples specified using the --reject option will be used to remove biallelic variant combinations present - specifically, genotype combinations identified in affected samples (--samples) but also present in samples specified using the --reject argument will be removed from output. In this manner, if you have data from unaffected parents you should be able to avoid the problem of false positives from variants in cis as well as removing any shared genuine biallelic but non-pathogenic variation. However, this program does not require parental samples and can attempt to infer phase from a single parent if only one is available if the relationship is specified in a PED file passed to the script with the --family (-f) argument.
 
 While related samples will be most useful in filtering using the --reject argument, data from any unaffected sample can be used to remove apparently non-pathogenic biallelic variation. Furthermore, while unrelated affected individuals can be used to identify shared genes containing apparent biallelic variation (when you believe the disorder to be caused by variation in the same gene), if using several related affected individuals you may use the --equal_genotypes flag to tell the program to only look for variants that are shared among all affected individuals AND potentially biallelic.
+
+Note that this program only considers autosomal recessive disease, it ignores X, Y and mitochondrial chromosomes.
 
 
 
