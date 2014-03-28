@@ -70,7 +70,7 @@ GetOptions(\%opts,
             "remove_headers" ,
             "allele_frequency=f" ,
             "1000_genomes_allele_frequency=f" ,
-            'filter_dbnsfp=s{,}' ,
+            'f|filter_dbnsfp=s{,}' =>  \@filter_dbnsfp,
             'match_dbnsfp=s{,}' ,
             'multi_value_operator=s',
             'damaging=s{,}' ,
@@ -79,7 +79,7 @@ GetOptions(\%opts,
             'list=s{,}',
             'samples=s{,}',
             'each_sample',
-            'find_shared_genes:s' 
+            'x|find_shared_genes:s' => \$matching_genes,
             ) or pod2usage(-message => "Syntax error",  -exitval => 2);
 
 pod2usage(-verbose => 2) if ($manual);
@@ -117,7 +117,7 @@ if (@effect_impact){
     #if --effect_impact is used we don't use @classes
     #unless they've been specified by user
     if (@classes or @add){
-	push @classes, @add;
+	    push @classes, @add;
         checkAndParseClasses(\@classes);
     }
 
@@ -717,7 +717,7 @@ Only keep variants present in at least one of these samples.  Can change behavio
 
 When --samples arguments are specified this switch will cause the program to only return variants present in ALL of the samples specified by the --samples argument.
 
-=item B<-f    --find_shared_genes>
+=item B<-x    --find_shared_genes>
 
 If --samples argument is specified this switch will return a list of genes shared by each sample according to the filtering criteria.  If a filename is given the list will be printed to file, otherwise the list will be printed to STDERR.
 
