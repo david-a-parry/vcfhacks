@@ -39,7 +39,9 @@ my $check_all_samples;
 my $homozygous_only;
 my $splice_consensus = 0; #use this flag to check for SpliceConsensus VEP plugin annotations
 my $pedigree;
-
+my $min_matching_samples;
+my $min_matching_per_family;
+my $ignore_carrier_status; 
 my %opts = (
             'input' => \$vcf,
             'output' => \$out,
@@ -60,6 +62,9 @@ my %opts = (
             'equal_genotypes' => \$identical_genotypes,
             'quality' => \$genotype_quality,
             #'allow_missing_genotypes' => \$allow_missing,
+            'num_matching' => \$min_matching_samples,
+            'num_matching_per_family' =>  \$min_matching_per_family,
+            'ignore_carrier_status' => \$ignore_carrier_status,
             'progress' => \$progress,
             'add_classes' => \@add,
             'homozygous_only' => \$homozygous_only,
@@ -67,7 +72,7 @@ my %opts = (
             'help' => \$help,
             'manual' => \$man);
 GetOptions(\%opts,
-            'input=s',
+            'i|input=s' => \$vcf,
             'output=s',
             'list:s',
             'samples=s{,}',
@@ -86,12 +91,15 @@ GetOptions(\%opts,
             'equal_genotypes',
             'quality=i',
 #           'allow_missing_genotypes',
-            'progress',
+            'n|num_matching=i' => \$min_matching_samples,
+            'y|num_matching_per_family=i' =>  \$min_matching_per_family,
+            't|ignore_carrier_status' => \$ignore_carrier_status,
+            'b|progress' => \$progress,
             'add_classes=s{,}',
-            'homozygous_only',
+            'z|homozygous_only' => \$homozygous_only,
             'consensus_splice_site',
-            'help',
-            'manual' => ,
+            'h|?|help' => \$help,
+            'manual' 
             )
         or pod2usage(-message => "Syntax error", exitval => 2);
 
@@ -288,6 +296,14 @@ if($ped){
     print STDERR scalar(@not_aff) . " affected samples from pedigree were not in VCF.\n";
     print STDERR "Found " .scalar(@un) . " unaffected samples from pedigree in VCF.\n";
     print STDERR scalar(@not_un) . " unaffected samples from pedigree were not in VCF.\n";
+    if ($min_matching_per_family){
+        foreach my $f ($ped->getAllFamilies){
+            my %affected_ped = map {$_ => undef} $ped->getAffectedsFromFamily($f);
+            my @affected = grep { exists $affected_ped{$_} } @samples;
+            die "Number of affected found in family $f (" .scalar(@affected) .") is less than value for ".
+                "--num_matching_per_family ($min_matching_per_family)\n" if $min_matching_per_family > @affected;
+        }
+    }
     push @samples, @aff;
     push @reject, @un;
 }
@@ -323,6 +339,12 @@ foreach my $s (@samples){
     my @doubles = grep {exists ($dup{$_}) } @reject;
     die "Same sample(s) specified as both affected and unaffected:\n" .join("\n",@doubles) ."\n" 
         if @doubles;
+}
+
+if (defined $min_matching_samples){
+    die "ERROR: --num_matching (-n) argument must be greater than 0.\n" if $min_matching_samples < 1;
+    die "ERROR: --num_matching (-n) value [$min_matching_samples] is greater than number of --samples identified (" .scalar(@samples). ")\n"
+        if $min_matching_samples > @samples;
 }
 
 #DONE CHECKING SAMPLE INFO
@@ -678,19 +700,25 @@ sub get_alleles_to_reject{
 sub get_biallelic{
 #arguments are array ref to samples, hash ref to reject genotypes, hash ref to incompatible genotypes and gene_counts hash ref
 #returns hash of samples to arrays of potential biallelic genotypes
-    my ($aff, $reject_geno, $incompatible, $gene_counts) = @_;
+    my ($aff, $reject_geno, $incompatible, $min_matches, $gene_counts) = @_;
+    $min_matches = @$aff if (not $min_matches);
     my @keys = (keys %{$gene_counts});#keys are "chr:pos/allele"
     my %possible_biallelic_genotypes = ();#keys are samples, values are arrays of possible biallelic genotypes
+    my %genotypes = ();#keys are all possible biallelic genotypes present in %possible_biallelic_genotypes
     my %biallelic = ();#same as above, for returning final list of valid biallelic combinations
     for (my $i = 0; $i < @keys; $i++){
         next if $reject_geno->{"$keys[$i]/$keys[$i]"};#allele $i can't be pathogenic if homozygous in a @reject sample
         foreach my $s (@$aff){
             if ($gene_counts->{$keys[$i]}->{$s} >= 1){
-                push @{$possible_biallelic_genotypes{$s}}, "$keys[$i]/$keys[$i]" if $gene_counts->{$keys[$i]}->{$s} >= 2;#homozygous therefore biallelic
+                if ($gene_counts->{$keys[$i]}->{$s} >= 2){#homozygous therefore biallelic
+                    push @{$possible_biallelic_genotypes{$s}}, "$keys[$i]/$keys[$i]";
+                    $genotypes{"$keys[$i]/$keys[$i]"}++;
+                }
                 if (not $homozygous_only){#don't consider hets if --homozygous_only flag is in effect
                     for (my $j = $i + 1; $j < @keys; $j++){#check other alleles to see if there are any compund het combinations
                         if ($gene_counts->{$keys[$j]}->{$s} >= 1){
                             push @{$possible_biallelic_genotypes{$s}}, "$keys[$i]/$keys[$j]" if not $reject_geno->{"$keys[$i]/$keys[$j]"};
+                            $genotypes{"$keys[$i]/$keys[$j]"}++;
                         }
                     }
                 }
@@ -702,38 +730,34 @@ sub get_biallelic{
     # i.e. if two alleles are present in an unaffected (@reject) sample at most one allele can be pathogenic
     # so we can't use both in different affected (@$aff) samples
     
-    foreach my $gt (@{$possible_biallelic_genotypes{$samples[0]}}){
-        if (@samples > 1){
-            my @incompatible = ();# keep the alleles incompatible with current $gt here
-            my %compatible_genotypes = (); #samples are keys, values are genotypes that pass our test against incompatible alleles
-            foreach my $allele (split("\/", $gt)){
-                push (@incompatible, @{$incompatible->{$allele}}) if exists $incompatible->{$allele};
-            }
-            foreach my $s (@$aff[1..$#{$aff}]){
-                foreach my $s_gt (@{$possible_biallelic_genotypes{$s}}){
-                    if ($identical_genotypes){
-                        next if $s_gt ne $gt;
-                    }
-                    my @s_alleles =  (split("\/", $s_gt));
-                    if (not grep { /^($s_alleles[0]|$s_alleles[1])$/ } @incompatible){
-                        push @{$compatible_genotypes{$s}}, $s_gt;
-                    }
+    foreach my $gt (keys %genotypes){
+        my @incompatible = ();# keep the alleles incompatible with current $gt here
+        my %compatible_genotypes = (); #samples are keys, values are genotypes that pass our test against incompatible alleles
+        foreach my $allele (split(/\//, $gt)){
+            push (@incompatible, @{$incompatible->{$allele}}) if exists $incompatible->{$allele};
+        }
+        foreach my $s (@$aff){
+            foreach my $s_gt (@{$possible_biallelic_genotypes{$s}}){
+                if ($identical_genotypes){
+                    next if $s_gt ne $gt;
+                }
+                my @s_alleles =  (split("\/", $s_gt));
+                if (not grep { /^($s_alleles[0]|$s_alleles[1])$/ } @incompatible){
+                    push @{$compatible_genotypes{$s}}, $s_gt;
                 }
             }
-            if (check_keys_are_true([@$aff[1..$#{$aff}]], \%compatible_genotypes)){
-                push @{$biallelic{$samples[0]}}, $gt;    
-                foreach my $s (@samples[1..$#samples]){
-                    foreach my $sgt (@{$compatible_genotypes{$s}}){
-                        push @{$biallelic{$s}}, $sgt;    
-                    }
+        }
+        #Test no. samples with compatible genotypes 
+        #against min. no. required matching samples or if not specified all samples
+        if (keys %compatible_genotypes >= $min_matches){
+            foreach my $s (keys %compatible_genotypes){
+                foreach my $sgt (@{$compatible_genotypes{$s}}){
+                    push @{$biallelic{$s}}, $sgt;
                 }
-            }
-        }else{
-            foreach my $gt (@{$possible_biallelic_genotypes{$samples[0]}}){
-                push @{$biallelic{$samples[0]}}, $gt;    
             }
         }
     }
+
     foreach my $k (keys %biallelic){
         #remove duplicate genotypes for each sample
         my %seen = ();
@@ -755,7 +779,7 @@ sub check_segregation{
     #Iterate over all @reject to store %reject_genotypes and %incompatible_alleles
     my ($reject_genotypes, $incompatible_alleles) = get_alleles_to_reject(\@reject, $gene_counts);
     #Iterate overl all @samples to store possible biallelic genotypes
-    my %biallelic_candidates = get_biallelic(\@samples, $reject_genotypes, $incompatible_alleles, $gene_counts);
+    my %biallelic_candidates = get_biallelic(\@samples, $reject_genotypes, $incompatible_alleles, $min_matching_per_family, $gene_counts);
     #Then for each family identify common biallelic genotypes but throw away anything if neither allele present in an obligate carrier
 
     foreach my $f ($ped->getAllFamilies){
@@ -771,12 +795,14 @@ sub check_segregation{
         }
         #we've already checked that these allele combinations are not present in unaffected members including parents.
         #check that parents don't contain 0 of a compound het (admittedly this does not allow for hemizygous variants in case of a deletion in one allele)
-        foreach my $key (keys %intersect){
-            foreach my $u (@unaffected){
-                if ($ped->isObligateCarrierRecessive($u)){
-                    my @al = split(/\//, $key);  
-                    if ($gene_counts->{$al[0]}->{$u} == 0 and $gene_counts->{$al[1]}->{$u} == 0){#0 means called as not having allele, -1 means no call
-                        delete $intersect{$key};
+        if (not $ignore_carrier_status){
+            foreach my $key (keys %intersect){
+                foreach my $u (@unaffected){
+                    if ($ped->isObligateCarrierRecessive($u)){
+                        my @al = split(/\//, $key);  
+                        if ($gene_counts->{$al[0]}->{$u} == 0 and $gene_counts->{$al[1]}->{$u} == 0){#0 means called as not having allele, -1 means no call
+                            delete $intersect{$key};
+                        }
                     }
                 }
             }
@@ -808,7 +834,7 @@ sub check_all_samples_biallelic{
     # assuming presence of two alleles in a reject sample means either they are in cis or are harmless when in trans
     #also note alleles that can't BOTH be pathogenic storing them in %incompatible alleles
     my ($reject_genotypes, $incompatible_alleles) = get_alleles_to_reject(\@reject, $gene_counts);
-    my %biallelic_candidates = get_biallelic(\@samples, $reject_genotypes, $incompatible_alleles, $gene_counts);
+    my %biallelic_candidates = get_biallelic(\@samples, $reject_genotypes, $incompatible_alleles, $min_matching_samples, $gene_counts);
     #%biallelic_candidates - keys are samples, values are arrays of biallelic genotypes
     foreach my $s (keys %biallelic_candidates){
         foreach my $gt (@{$biallelic_candidates{$s}}){
@@ -1063,25 +1089,37 @@ Minimum genotype qualities to consider. This applies to samples specified by bot
 
 =item B<-e    --equal_genotypes>
 
-Use this flag if you only want to consider genotypes that are identical in each sample to count towards biallelic variation. Potentially useful if looking at several related individuals segregating the same disease and not using a PED file to specify their relationships.
+Use this flag if you only want to consider genotypes that are identical in each sample to count towards biallelic variation. Potentially useful if looking at several related individuals segregating the same disease and not using a PED file to specify their relationships (or if for some reason you think several families will have the same causative mutation).
 
 =item B<--check_all_samples>
 
 Check all samples in VCF. Assumes all samples are affected.
 
+=item B<-n    --num_matching>
+
+By default only transcripts that are found to contain potentially pathogenic variation in ALL affected samples are considered. Use this option to specify a minimum number of matching samples if you want to consider the possibility that one or more samples may not have a causative mutation in the same gene or to allow for no calls/calls falling below --quality threshold. 
+
+=item B<-y    --num_matching_per_family>
+
+As above but for affected members per family. Even when using --num_matching it is still assumed that all samples in a given family (if a PED file was used) must all contain matching biallelic variants unless this argument is used.  Arguably a solution in search of a problem.
+
+=item B<-t    --ignore_carrier_status>
+
+Don't check 
+
 =item B<--pass_filters>
 
 Only consider variants with a PASS filter field.
 
-=item B<--progress>
+=item B<-b    --progress>
 
 Show a progress bar while working.
 
-=item B<--homozygous_only>
+=item B<-z    --homozygous_only>
 
 Only consider homozygous variants, ignore potential compound heterozygotes (i.e. if autozygosity is assumed). 
 
-=item B<---help>
+=item B<-h    ---help>
 
 Show the program's help message.
 
