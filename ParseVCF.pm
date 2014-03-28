@@ -427,7 +427,7 @@ sub readSnpEffHeader{
     carp "Warning - multiple EFF fields found, ignoring all but the most recent field " if @info > 1;
     my $eff_line = $info[-1] ;#assume last applied VEP consequences are what we are looking for 
     my @eff_fields = ();  
-    if ($eff_line =~ /Format:\s+'Effect\s+\(\s+(.*)\)'\s+">/){
+    if ($eff_line =~ /Format:\s+'Effect\s+\(\s+(.*)\)'\s*">/){
         @eff_fields = split(/\s*\|\s*/, $1);
         unshift @eff_fields, 'Effect';
     }else{
