@@ -5,6 +5,10 @@ use warnings;
 use Getopt::Long;
 use Pod::Usage;
 use Data::Dumper;
+use Term::ProgressBar;
+use FindBin;
+use lib "$FindBin::Bin";
+use ParseVCF;
 my $vcf;
 my $out;
 my @samples;
@@ -12,142 +16,159 @@ my $check_presence_only;
 my $ignore_non_existing;#don't exit if a sample is not found
 my %sm_index;# this hash to index position of each sample in vcf file
 my %rej_index;
-my @reject = ();
+my @reject = ();#reject if allele is present in these samples
+my @reject_except = (); #reject all except these samples
 my $threshold;
-my $only_sample_alleles;
-my $remove_calls;
+my $quality = 20;
 my $help;
 my $manual;
+my $progress;
+my %opts = ('existing' => \$ignore_non_existing, 'input' =>\$vcf, "output" => \$out, 'samples' => \@samples, 'reject' => \@reject, 'reject_all_except' => \@reject_except, 'threshold' => \$threshold, 'presence' => \$check_presence_only, 'quality' => \$quality, 'help' => \$help, "manual" => \$manual, 'progress' => \$progress);
 
-GetOptions('existing' => \$ignore_non_existing, 'input=s' =>\$vcf, "output=s" => \$out, 'k|samples=s{,}' => \@samples, 'reject=s{,}' => \@reject, 'threshold=i' => \$threshold, 'presence' => \$check_presence_only, 'x|sample_alleles_only' => \$only_sample_alleles, 'calls' => \$remove_calls, 'help' => \$help, "manual" => \$manual) or pod2usage(-message=> "syntax error.\n");
+GetOptions(\%opts, 'existing' => \$ignore_non_existing, 'input=s' =>\$vcf, "output=s" => \$out, 'samples=s{,}' => \@samples, 'r|reject=s{,}' => \@reject, 'x|reject_all_except:s{,}' => \@reject_except, 'threshold=i' => \$threshold, 'presence' => \$check_presence_only, 'quality=i' => \$quality, 'help' => \$help, "manual" => \$manual, 'progress' => \$progress) or pod2usage(-message=> "syntax error.\n");
 pod2usage(-verbose => 2) if $manual;
 pod2usage(-verbose => 1) if $help;
-pod2usage(-message=> "syntax error - required argument not found.\n") if (not $vcf or not @samples);
-my $IN;
-if ($vcf =~ /\.gz/){
-    open ($IN, "gzip -dc $vcf |") || die "Can't open gzipped $vcf\n";
-}else{
-    open ($IN, $vcf) || die "Can't open $vcf\n";
+pod2usage(-message=> "syntax error: --input (-i) argument is required.\n") if not $vcf;
+pod2usage(-message=> "syntax error: you must specify samples using at least one of the arguments --samples (-s), --reject (-r) or --reject_all_except (-x).\n") if not @samples and not @reject and not @reject_except;
+
+print STDERR "Initializing VCF input ($vcf)\n";
+my $vcf_obj = ParseVCF->new(file=> $vcf);
+my @not_found = ();
+my @samples_checked = ();
+my @reject_checked = ();
+   
+my ($samples_found, $samples_not_found) = check_samples(\@samples);
+my ($reject_found, $reject_not_found) = check_samples(\@reject);
+if (@$samples_not_found or @$reject_not_found){
+    my @not_found = (@$samples_not_found, @$reject_not_found);
+    if (not $ignore_non_existing){
+        print STDERR "Warning - could not find the following samples in VCF:\n".join("\n", @not_found)."\n";
+        if (@samples and not @$samples_found){
+            print STDERR "Warning - no samples specified by --samples identified in VCF.\n";
+        }
+        if (@reject and not @$reject_found){
+            print STDERR "Warning - no samples specified by --reject identified in VCF.\n";
+        }
+        @samples = @$samples_found;
+        @reject = @$reject_found;
+    }else{
+        die "Could not find the following samples in VCF:\n".join("\n", @not_found)."\n";
+    }
 }
+if (@reject_except){
+    my @all = $vcf_obj->getSampleNames();
+    push @reject_except, @samples; 
+    my %subtract = map {$_ => undef} @reject_except;
+    @all = grep {!exists $subtract{$_} } @all;
+    push @reject, @all;
+    my %seen = ();
+    @reject = grep { ! $seen{$_}++} @reject;
+}
+
+if (not @reject and not @samples){
+    print STDERR "Warning - no samples from --samples (-s), --reject (-r) or --reject_all_except (-x) argument found to filter. Your output will remain unchanged.\n";
+}
+
 my $OUT;
 if ($out){
     open ($OUT, ">$out") || die "Can't open $out for writing: $!\n";
 }else{
     $OUT = \*STDOUT;
 }
-my $format = 0;
-my $ref = 0;
-my $alt = 0;
-my @sample_order;#for use if removing other sample calls
-LINE: while (<$IN>){
-    chomp;
-    if (/^##/){
-        print $OUT "$_\n";
-        next;
+my $progressbar;
+if ($progress){
+    if ($vcf eq "-"){
+        print STDERR "Can't use --progress option when input is from STDIN\n";
+        $progress = 0;
+    }else{
+        $progressbar = Term::ProgressBar->new({name => "Filtering", count => $vcf_obj->countLines("variants"), ETA => "linear", });
     }
-    if (/^#[A-Z]/){
-        my @header = split("\t");
-        foreach my $sample (@samples){
-            my $n = 0;    
-            no warnings 'uninitialized';
-            $n++ until $header[$n] eq $sample or $n > $#header;
-            if ($n > $#header){
-                if (not $ignore_non_existing){
-                    die "Can't find sample $sample in header line.\nHeader:\n$_\n";
-                }else{
-                    print STDERR "Warning - can't find sample $sample in header line.\n";
-                }
-            }else{
-                $sm_index{$sample} = $n;
-            }
+}
+my $next_update = 0;
+print $OUT  $vcf_obj->getHeader(0) ."##filterOnSample.pl\"";
+my @opt_string = ();
+foreach my $k (sort keys %opts){
+    if (not ref $opts{$k}){
+        push @opt_string, "$k=$opts{$k}";
+    }elsif (ref $opts{$k} eq 'SCALAR'){
+        if (defined ${$opts{$k}}){
+            push @opt_string, "$k=${$opts{$k}}";
+        }else{
+            push @opt_string, "$k=undef";
         }
-        if (@reject){
-            foreach my $reject (@reject){
-                my $n = 0;
-                ++$n until $header[$n] eq $reject or $n > $#header;
-                if ($n > $#header){
-                    if (not $ignore_non_existing){
-                        die "Can't find sample $reject in header line.\nHeader:\n$_\n";
+    }elsif (ref $opts{$k} eq 'ARRAY'){
+        if (@{$opts{$k}}){
+            push @opt_string, "$k=" .join(",", @{$opts{$k}});
+        }else{
+            push @opt_string, "$k=undef";
+        }
+    }
+}
+print $OUT join(" ", @opt_string) . "\"\n" .  $vcf_obj->getHeader(1);
+my $line_count = 0;
+LINE: while (my $line = $vcf_obj->readLine){
+    $line_count++;
+    if ($progress){
+        $next_update = $progressbar->update($line_count) if $line_count >= $next_update;
+    }
+    my %alleles = ();
+    #do samples first for efficiency (if they don't have a variant allele)
+    if (@samples){
+SAMPLE: foreach my $sample (@samples){
+            my $call = $vcf_obj->getSampleCall(sample => $sample, minGQ => $quality);
+            if ($call =~ /(\d+)[\/\|](\d+)/){
+                if ($1 == 0 and $2 == 0){
+                    if ($check_presence_only){
+                        next SAMPLE;
                     }else{
-                        print STDERR "Warning - can't find sample $reject in header line.\n";
+                        next LINE;#by default only keep variants present in all samples
                     }
                 }else{
-                    $rej_index{$reject} = $n;
-                }
-            }
-        }
-        $ref++ until $header[$ref] eq "REF" or $ref > $#header;
-        die "Can't find REF field in header line.\nHeader:\n$_\n" if ($ref > $#header);
-        $alt++ until $header[$alt] eq "ALT" or $alt > $#header;
-        die "Can't find ALT field in header line.\nHeader:\n$_\n" if ($alt > $#header);
-        $format++ until $header[$format] eq "FORMAT" or $format > $#header;
-        die "Can't find FORMAT field in header line.\nHeader:\n$_\n" if ($format > $#header);
-        if ($remove_calls){
-            @sample_order = ();#clear this array in case if we've stuck VCFs together and have come across a new header
-            print $OUT join("\t", @header[0..$format]) . "\t";
-            foreach my $k (sort {$sm_index{$a} <=> $sm_index{$b}} keys %sm_index){#if removing calls let's retain the original order
-                push (@sample_order, $k);
-            }
-            print $OUT join("\t", @sample_order) ."\n";
-        }else{
-            print $OUT "$_\n"; 
-        }
-        next;
-    }
-    my @line = split("\t");
-    my @form = split(":", $line[$format]);
-    my $skip = 0;
-    my $gt = 0;
-    $gt++ until $form[$gt] eq "GT" or $gt > $#form;
-    die "Can't find genotype field in variant line:\n$_\n" if ($gt > $#form);
-    my %alleles;
-    my $sample_no_calls = 0;
-    my $sample_refs = 0;
-SAMPLE:    foreach my $sample (keys %sm_index){
-        my @call = split(":", $line[$sm_index{$sample}]); 
-        if ($call[$gt] =~ /([\d])[\/\|]([\d])/){
-            if ($1 == 0 and $2 == 0){
-                if ($check_presence_only){
-                    next SAMPLE;
-                }else{
-                    next LINE;#by default only keep variants present in all samples
+                    push (@{$alleles{$sample}}, $1, $2);
+                    #samples only get added to %alleles hash if they are called and not reference
+                    #because we compare the samples in %alleles hash only this allows variants 
+                    #with no call to go through
                 }
             }else{
-                push (@{$alleles{$sample}}, $1, $2);
-                #samples only get added to %alleles hash if they are called and not reference
-                #because we compare the samples in %alleles hash only this allows variants 
-                #with no call to go through
+                next LINE unless $check_presence_only;
             }
-        }else{
-            next LINE unless $check_presence_only;
         }
-    }
-    next LINE if (keys%alleles < 1);#i.e. if only reference (0) or no calls were found
+        next LINE if (keys%alleles < 1);#i.e. if only reference (0) or no calls were found
+    }#otherwise we'll collect --reject alleles and see if there are any alts that aren't in %reject_alleles
+
     my %reject_alleles;    
     if (@reject){
-        foreach my $reject (keys %rej_index){
-            my @call = split(":", $line[$rej_index{$reject}]); 
-            if ($call[$gt] =~ /([\d])[\/\|]([\d])/){
+        foreach my $reject (@reject){
+            my $call = $vcf_obj->getSampleCall(sample => $reject, minGQ => $quality);
+            if ($call =~ /(\d+)[\/\|](\d+)/){
                 $reject_alleles{$1}++; #store alleles from rejection samples as keys of %reject_alleles
                 $reject_alleles{$2}++;
             }
         }
     }
+    if (not @samples){
+        my @ref_alt = $vcf_obj->readAlleles();
+        for (my $i = 1; $i < @ref_alt; $i++){
+            push @{$alleles{alt}}, $i if not exists $reject_alleles{$i};
+        }
+        next LINE if (keys%alleles < 1);#i.e. if only reference (0) or no calls were found
+    }
     my %var_call;
     my %breached;
     my %count;
-    
+    my %genotypes = $vcf_obj->countGenotypes();
 
     foreach my $samp (keys%alleles){
     #if we're looking for alleles that match in ALL samples than we only need to check a single hash entry
-ALLELE:        foreach my $allele (@{$alleles{$samp}}){
+ALLELE: foreach my $allele (@{$alleles{$samp}}){
             next ALLELE if ($allele == 0);
             next ALLELE if (exists $reject_alleles{$allele});
             $count{$allele}++; #count number of unrejected alleles for comparison with threshold by storing as key of %count hash
             if ($threshold){
-                my $all_call_string = join("\t", @line[($format+1)..$#line]);
                 my $t = 0;
-                $t++ while $all_call_string =~ /(($allele)[\/\|]\d|\d[\/\|]$allele)/g;#searching all calls 
+                foreach my $k (keys %genotypes){
+                    $t += $genotypes{$k} if ($k =~ /(^($allele)[\/\|]\d+|\d+[\/\|]$allele)$/);
+                }
                 if ($t > $threshold){
                     $breached{$allele}++;
                     next ALLELE;
@@ -155,66 +176,42 @@ ALLELE:        foreach my $allele (@{$alleles{$samp}}){
             }
             my $allele_matches = 0;
             foreach my $sample (keys %alleles){
-                $allele_matches++ if (grep (/$allele/, @{$alleles{$sample}})); #we're counting the no. of samples with matching allele, not no. of occcurences (zygosity) of allele
+                $allele_matches++ if (grep (/^$allele$/, @{$alleles{$sample}})); #we're counting the no. of samples with matching allele, not no. of occcurences (zygosity) of allele
             }
             if ($check_presence_only){#don't worry if all samples have variant or not if checking presence only
                 $var_call{$allele}++ ;
             }else{
-                $var_call{$allele}++ if ($allele_matches == keys%alleles); #i.e. if all of our calleda '--keep' sample genotypes match this allele in either het or homo state
+                $var_call{$allele}++ if ($allele_matches == keys%alleles); #i.e. if all of our called '--keep' sample genotypes match this allele in either het or homo state
             }
         }
     }
-    next LINE if (keys %var_call < 1);#if we don't have at least one valid variant allele
+    next LINE if (keys %var_call < 1 );#if we don't have at least one valid variant allele
     if (keys %count and keys %breached){
         next LINE if (keys %count == keys %breached);
     }
-    if ($only_sample_alleles){
-        my @alts = split(",", $line[$alt]);
-        unshift @alts, $line[$ref];#add reference call to beginning of @alts array
-        my @alt_ref=();
-        if (@alts > 2){#i.e. more than one alt call
-            foreach my $sample (keys %sm_index){
-                foreach my $call (@{$alleles{$sample}}){
-                    push (@alt_ref, $alts[$call]) unless $call == 0;
-                }
-            }
-            my %seen = ();
-            @alt_ref = grep { !$seen{$_}++ } @alt_ref;#remove dups
-            foreach my $sample (keys %sm_index){
-                my @call = split(":", $line[$sm_index{$sample}]); 
-                if ($call[$gt] =~ /([\d])[\/\|]([\d])/){
-                    #need to adjust allele numbering if only keeping sample alleles
-                    my @new_call = (); 
-                    foreach my $call ($1, $2){
-                        if ($call == 0){
-                            push (@new_call, 0);
-                        }else{
-                            my $actual_allele = $alts[$call];
-                            my $i = 0;
-                            ++$i until $alt_ref[$i] eq $actual_allele or $i >$#alt_ref;
-                            die "Error identifying alternate alleles for line:\n$_" if $i > $#alt_ref;
-                            push (@new_call, $i+1);
-                        }
-                    }
-                    splice (@call, $gt, 1, join("/", @new_call));#replace genotype call
-                    splice (@line, $sm_index{$sample}, 1, join(":", @call));#replace sample genotype field
-                }
-            }
-            splice (@line, $alt, 1, join(",", @alt_ref));#replace ALT field
-        }
-    }
-    if ($remove_calls){
-        print $OUT join("\t", @line[0..$format]) ."\t";
-        my @rest_of_line = ();
-        foreach my $sample (@sample_order){
-            push (@rest_of_line, $line[$sm_index{$sample}]);
-        }
-        print $OUT join("\t", @rest_of_line) ."\n";
-        
-    }else{
-        print $OUT "$_\n";
-    }
+    print $OUT "$line\n";
 }
+
+if ($progressbar){
+        $progressbar->update($vcf_obj->countLines("variants")) if $vcf_obj->countLines("variants") >= $next_update;
+}
+
+#################################################
+sub check_samples{
+    my ($sample_ref) = @_;
+    my @found;
+    my @not_found;
+    foreach my $s (@$sample_ref){
+        if (not $vcf_obj->checkSampleInVcf($s)){
+            push @not_found, $s;
+        }else{
+            push @found, $s;
+        }
+    }
+    return (\@found, \@not_found);
+}
+ 
+#################################################
 
 =head1 NAME
 
@@ -224,7 +221,7 @@ filterOnSample.pl - filter variants in vcf that belong to specific samples.
 
 =head1 SYNOPSIS
 
-    filterOnSample.pl --input [var.vcf] --keep [samples to keep variants if present in all] --reject [samples to reject variants from if present in any] 
+    filterOnSample.pl --input [var.vcf] --samples [samples to keep variants if present in all] --reject [samples to reject variants from if present in any] 
 
 =head1 ARGUMENTS
 
@@ -238,7 +235,7 @@ vcf file input.
 
 output filename.
 
-=item B<-k    --samples>
+=item B<-s    --samples>
 
 IDs of samples to keep variants from. Variants will be kept only if present in ALL of these samples in either heterozygous or homozygous states unless --presence flag is set.  Samples must be entered as contained in the vcf header.
 
@@ -250,17 +247,17 @@ Use this flag to print variants present in any sample specified by the --keep op
 
 IDs of samples to reject variants from. Variants will be rejected if present in ANY of these samples.
 
+=item B<-x    --reject_all_except>
+
+Reject variants present in all samples except these. If used without an argument all samples in VCF that are not specified by --samples argument will be used to reject variants. If one or more samples are given as argument to this option then all samples in VCF that are not specified by --samples argument or this argument will be used to reject variants.
+
 =item B<-t    --threshold>
 
-Reject variants present in more than this number of samples.
+Reject variants present in more than this number of samples in the VCF. Counts all samples in the VCF irrespective of whether they are specified by the --samples or any other argument.
 
-=item B<-x    --sample_alleles_only>
+=item B<-q    --quality>
 
-Use this flag to remove alternative alleles from other samples from output vcf.
-
-=item B<-c    --calls>
-
-Use this flag to remove calls from other samples from output vcf.
+Minimum phred-like genotype quality to consider.  All calls below this quality will be considered no calls. Default is 20.
 
 =item B<-e    --existing>
 
@@ -279,17 +276,25 @@ Show manual page
 
 =head1 EXAMPLES
 
+ filterOnSample.pl -i [var.vcf] -s Sample1
+ (only print variants if Sample1's genotype has a variant allele)
+
  filterOnSample.pl -i [var.vcf] -k Sample1 -r Sample2 Sample3
  (look for variants in Sample1 but reject variants also present in Sample2 or Sample3)
  
  filterOnSample.pl -i [var.vcf] -k Sample1 -r Sample2 Sample3 -t 4
  (same but also reject variants present in 4 or more samples)
  
- filterOnSample.pl -i [var.vcf] -k Sample1 -r Sample2 Sample3 -s 
- (same but don't print variant alleles from other samples for each variant if more than one variant allele exists)
+ filterOnSample.pl -i [var.vcf] -k Sample1 -x 
+ (look for variants in Sample1 and reject variants if present in any other sample in the VCF)
+ 
+ filterOnSample.pl -i [var.vcf] -k Sample1 -x Sample2 
+ (look for variants in Sample1 and reject variants if present in any other sample in the VCF except for Sample2)
+ 
 
 =head1 DESCRIPTION
 
+This program reads a VCF file and filters variants depending on which samples contain variant. Samples to keep variants from can be specified using --samples (-s) and samples to reject variants from can be specified with --reject (-r). 
 
 =cut
 
