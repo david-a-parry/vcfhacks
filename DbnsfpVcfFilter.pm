@@ -1,11 +1,11 @@
-#!/usr/bin/perl
+package DbnsfpVcfFilter;
 use strict;
 use warnings;
 use Carp;
 use Scalar::Util qw(looks_like_number);
 require Exporter;
 our @ISA = qw(Exporter);
-
+our @EXPORT = qw(checkAndParseDbnsfpExpressions getFrequencyFilters getAnyDamagingFilters getAllDamagingFilters filterDbnsfpExpressions);
 my %dbnsfp_short = ( #selection of shortcuts for the dbNSFP fields
     "1000Gp1_AC" => "dbNSFP_1000Gp1_AC",
     "1000Gp1_AF" => "dbNSFP_1000Gp1_AF",
