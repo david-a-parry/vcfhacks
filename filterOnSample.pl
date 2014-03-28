@@ -25,7 +25,7 @@ my $manual;
 my $progress;
 my %opts = ('existing' => \$ignore_non_existing, 'input' =>\$vcf, "output" => \$out, 'samples' => \@samples, 'reject' => \@reject, 'reject_all_except' => \@reject_except, 'threshold' => \$threshold, 'presence' => \$check_presence_only, 'quality' => \$quality, 'help' => \$help, "manual" => \$manual, 'progress' => \$progress);
 
-GetOptions(\%opts, 'existing' => \$ignore_non_existing, 'input=s' =>\$vcf, "output=s" => \$out, 'samples=s{,}' => \@samples, 'r|reject=s{,}' => \@reject, 'x|reject_all_except:s{,}' => \@reject_except, 'threshold=i' => \$threshold, 'presence' => \$check_presence_only, 'quality=i' => \$quality, 'help' => \$help, "manual" => \$manual, 'progress' => \$progress) or pod2usage(-message=> "syntax error.\n");
+GetOptions(\%opts, 'existing' => \$ignore_non_existing, 'input=s' =>\$vcf, "output=s" => \$out, 'samples=s{,}' => \@samples, 'r|reject=s{,}' => \@reject, 'x|reject_all_except:s{,}' => \@reject_except, 'threshold=i' => \$threshold, 'p|presence' => \$check_presence_only, 'quality=i' => \$quality, 'help' => \$help, "manual" => \$manual, 'b|progress' => \$progress) or pod2usage(-message=> "syntax error.\n");
 pod2usage(-verbose => 2) if $manual;
 pod2usage(-verbose => 1) if $help;
 pod2usage(-message=> "syntax error: --input (-i) argument is required.\n") if not $vcf;
@@ -262,6 +262,10 @@ Minimum phred-like genotype quality to consider.  All calls below this quality w
 =item B<-e    --existing>
 
 Use this flag to cause the program to ignore non-existing samples rather than exiting.
+
+=item B<-b    --progress>
+
+Show a progress bar.
 
 =item B<-h    --help>
 
