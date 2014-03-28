@@ -1238,6 +1238,11 @@ sub getFormatFields{
     return keys %format_fields if defined wantarray;
 }
 
+sub checkSampleInVcf{
+    my ($self, $sample) = @_;
+    return 1 if exists $self->{_samples}->{$sample};
+    return 0;
+}
 
 sub getSampleVariant{
     my ($self, $sample) = @_;
@@ -1846,7 +1851,7 @@ ParseVCF.pm - read standard and custom Variant Call Format (VCF) files and retur
 
 DOCUMENTATION NEEDS SERIOUS ATTENTION
 #TO DO - ADD filtering on GQ etc. for sample variants, test changeHeader method
-#NEED DOCUMENTATION FOR getSampleGenotypeField, getSampleCall, getFormatFields, getAltAlleles, reopenFileHandle, searchForPosition, readPosition, getVepFields methods
+#NEED DOCUMENTATION FOR getSampleGenotypeField, getSampleCall, getFormatFields, getAltAlleles, reopenFileHandle, searchForPosition, readPosition, getVepFields, checkSampleInVcf methods
 
 $obj = ParseVCF -> new(file => $vcf);
 #(initialise object with a VCF file)
