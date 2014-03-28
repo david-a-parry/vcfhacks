@@ -385,9 +385,9 @@ sub merge {
             push (@info, $table);
                 }
                 elsif (uc$cur_chrom eq uc$prev_chrom and $cur_start <= $prev_end and $cur_end <= $prev_end){ #if contained within larger region
-            push (@info, $table);
-        }
-        }
+                    push (@info, $table);
+                }
+            }
         my $hash = {chrom=>$prev_chrom, start=>$prev_start, end=>$prev_end, info=>[@info]};
         push (@merged, $hash);
         $self -> {_merged} = \@merged;
