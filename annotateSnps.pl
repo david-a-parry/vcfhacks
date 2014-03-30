@@ -72,9 +72,12 @@ for (my $i = 0; $i < @dbsnp; $i++){
     print STDERR "[$time] Initializing $dbsnp[$i] dbSNP reference VCF " .($i + 1) ." of " .scalar(@dbsnp) ."\n";
     my $snp_obj;
     if ($dbsnp[$i] =~ /\.gz$/){
+        #must be bgzip compressed and tabix will index if not already - no need to check if sorted
         $snp_obj = ParseVCF->new( file => $dbsnp[$i], noLineCount =>1);
     }else{
         $snp_obj = ParseVCF->new( file => $dbsnp[$i], noLineCount =>0);
+        $time = strftime("%H:%M:%S", localtime);
+        print STDERR "[$time] Checking whether $dbsnp[$i] is sorted.\n"
         if (! $snp_obj->checkCoordinateSorted()){
             die "dbSNP VCF $dbsnp[$i] is not coordinate sorted! Please sort and try again\n";
         }
