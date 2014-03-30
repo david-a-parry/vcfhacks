@@ -709,13 +709,15 @@ sub indexVcf{
     my $pack = "N";
     print STDERR "Indexing $self->{_file} ($self->{_totalLines} lines)...";
     $pack = "Q" if $self->{_fileSize} >= 4294967296;
+    my $prev_pos = 0;
     while (my $line = scalar readline $self->{_filehandle}){
         print $INDEX pack($pack, $offset);
         $offset = tell $self->{_filehandle};
         next if $line =~ /^#/;
         my $chrom = (split "\t", $line)[$self->{_fields}->{CHROM}];
+        my $pos = (split "\t", $line)[$self->{_fields}->{POS}];
         if (exists $contigs{$chrom}){
-            if ($contigs{$chrom}  != scalar(keys%contigs) -1 ){
+            if ($contigs{$chrom}  != scalar(keys%contigs) -1 or $pos < $prev_pos){
                 close $INDEX;
                 unlink $self->{_index} or carp "Couldn't delete partial index $self->{_index} - please delete manually: $!" ;
                 croak "Can't index VCF - $self->{_file} not sorted properly ";
@@ -724,6 +726,7 @@ sub indexVcf{
             $contigs{$chrom}  = scalar(keys%contigs);
             print $CONTIGS "$chrom\n";
         }
+        $prev_pos = $pos;
     }
     print STDERR " Done indexing.\n";
     $self->{_contigOrder} = \%contigs;
