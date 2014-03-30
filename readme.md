@@ -22,6 +22,12 @@ VERSION 0.1.5:
 
 -made filterVcfOnLocation.pl more lenient regarding region/bed formats.
 
+-annotateSnps.pl checks dbSNP VCF files are sorted in coordinate order.
+
+-annotateSnps.pl checks dbSNP VCF files for relevant INFO fields.
+
+-improved documentation of annotateSnps.pl 
+
 -fixed option spec in getFunctionalVariantsSnpEff.pl
 
 -fixed test for EFF header line in readSnpEffHeader() method in ParseVCF.pm (used by getFunctionalVariantsSnpEff.pl).
