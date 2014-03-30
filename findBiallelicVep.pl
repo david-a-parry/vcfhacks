@@ -297,6 +297,11 @@ if($ped){
     print STDERR "Found " .scalar(@un) . " unaffected samples from pedigree in VCF.\n";
     print STDERR scalar(@not_un) . " unaffected samples from pedigree were not in VCF.\n";
     if ($min_matching_per_family){
+        if (not $min_matching_samples){
+            print STDERR "WARNING: --num_matching_per_family (-y) set without setting --num_matching (-n). " .
+                "Setting --num_matching to $min_matching_per_family.\n";
+            $min_matching_samples = $min_matching_per_family;
+        }
         foreach my $f ($ped->getAllFamilies){
             my %affected_ped = map {$_ => undef} $ped->getAffectedsFromFamily($f);
             my @affected = grep { exists $affected_ped{$_} } @samples;
@@ -345,6 +350,11 @@ if (defined $min_matching_samples){
     die "ERROR: --num_matching (-n) argument must be greater than 0.\n" if $min_matching_samples < 1;
     die "ERROR: --num_matching (-n) value [$min_matching_samples] is greater than number of --samples identified (" .scalar(@samples). ")\n"
         if $min_matching_samples > @samples;
+    if ($pedigree){
+        print STDERR "WARNING: --num_matching (-n) argument should be used in ".
+            "conjunction with --num_matching_per_family (-y) when using a PED file ".
+            "(unless you really know what you're doing).\n";
+    }
 }
 
 #DONE CHECKING SAMPLE INFO
@@ -1097,19 +1107,19 @@ Check all samples in VCF. Assumes all samples are affected.
 
 =item B<-n    --num_matching>
 
-By default only transcripts that are found to contain potentially pathogenic variation in ALL affected samples are considered. Use this option to specify a minimum number of matching samples if you want to consider the possibility that one or more samples may not have a causative mutation in the same gene or to allow for no calls/calls falling below --quality threshold. 
+By default only transcripts that are found to contain potentially pathogenic variation in ALL affected samples are considered. Use this option to specify a minimum number of matching samples if you want to consider the possibility that one or more samples may not have a causative mutation in the same gene or to allow for no calls/calls falling below --quality threshold. If using a ped file also use the --num_matching_per_family (-y) argument to allow for missing variants within families.
 
 =item B<-y    --num_matching_per_family>
 
-As above but for affected members per family. Even when using --num_matching it is still assumed that all samples in a given family (if a PED file was used) must all contain matching biallelic variants unless this argument is used.  Arguably a solution in search of a problem.
+As above but for affected members per family. By default, even when using --num_matching it, biallelic variants from a given family (if a PED file was used) are only passed on for consideration if all affected samples present in the VCF contain matching biallelic variants. This argument sets the minimum number of affected samples per family for a biallelic combination of variants to be considered.  Arguably a solution in search of a problem.
 
 =item B<-t    --ignore_carrier_status>
 
-Don't check 
+When using a PED file to specify family members, use this flag to prevent checking of carrier status of unaffected parents of affected children. Without this flag biallelic combinations will be rejected if an unaffected parent does not contain either variant (and the parent's genotype call quality is equal to or greater than the minimum genotype quality - see the --quality argument above). For example, you may want to use this option if you want to consider the possibility of a de novo occurence of one mutant allele or an undetected large deletion in one parent which may make an affected child's genotype look homozygous while the true genotype is compound heterozygosity for the mutation in the VCF alongside a large (undetected) deletion.
 
 =item B<--pass_filters>
 
-Only consider variants with a PASS filter field.
+Only consider variants with a PASS filter field. If the FILTER field for variant is not PASS the variant will be skipped.
 
 =item B<-b    --progress>
 
