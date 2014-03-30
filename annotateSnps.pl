@@ -76,11 +76,6 @@ for (my $i = 0; $i < @dbsnp; $i++){
         $snp_obj = ParseVCF->new( file => $dbsnp[$i], noLineCount =>1);
     }else{
         $snp_obj = ParseVCF->new( file => $dbsnp[$i], noLineCount =>0);
-        $time = strftime("%H:%M:%S", localtime);
-        print STDERR "[$time] Checking whether $dbsnp[$i] is sorted.\n"
-        if (! $snp_obj->checkCoordinateSorted()){
-            die "dbSNP VCF $dbsnp[$i] is not coordinate sorted! Please sort and try again\n";
-        }
     }
     push @snp_objs, $snp_obj;
     if (not -e $snp_obj->get_index){
