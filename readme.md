@@ -20,6 +20,8 @@ VERSION 0.1.5:
 
 -added --reject_all_except (-x) option to findBiallelicVep.pl and filterOnSample.pl to allow users to reject variants in all samples in a VCF except for those specified by this option or --samples (-s) option.
 
+-added --num_matching option to filterOnSample.pl to allow users to specify a minimum number of samples that must contain a variant allele in order to print variant.
+
 -made filterVcfOnLocation.pl more lenient regarding region/bed formats.
 
 -annotateSnps.pl checks dbSNP VCF files are sorted in coordinate order.
