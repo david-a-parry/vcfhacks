@@ -145,7 +145,7 @@ SAMPLE: foreach my $sample (@samples){
             my $call = $vcf_obj->getSampleCall(sample => $sample, minGQ => $quality);
             if ($call =~ /(\d+)[\/\|](\d+)/){
                 if ($1 == 0 and $2 == 0){
-                    if ($check_presence_only){
+                    if ($check_presence_only or $num_matching){
                         next SAMPLE;
                     }else{
                         next LINE;#by default only keep variants present in all samples
@@ -157,7 +157,7 @@ SAMPLE: foreach my $sample (@samples){
                     #with no call to go through
                 }
             }else{
-                next LINE unless $check_presence_only;
+                next LINE unless $check_presence_only or $num_matching;
             }
         }
         next LINE if (keys%alleles < 1);#i.e. if only reference (0) or no calls were found
