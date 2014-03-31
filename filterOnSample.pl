@@ -48,7 +48,7 @@ GetOptions(\%opts,
         'threshold=i' => \$threshold,
         'p|presence' => \$check_presence_only,
         'quality=i' => \$quality,
-        'num_matching' => \$num_matching,
+        'num_matching=i' => \$num_matching,
         'help' => \$help,
         "manual" => \$manual,
         'b|progress' => \$progress) or pod2usage(-message=> "syntax error.\n");
