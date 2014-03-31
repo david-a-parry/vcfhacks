@@ -20,16 +20,43 @@ my @reject = ();#reject if allele is present in these samples
 my @reject_except = (); #reject all except these samples
 my $threshold;
 my $quality = 20;
+my $num_matching;
 my $help;
 my $manual;
 my $progress;
-my %opts = ('existing' => \$ignore_non_existing, 'input' =>\$vcf, "output" => \$out, 'samples' => \@samples, 'reject' => \@reject, 'reject_all_except' => \@reject_except, 'threshold' => \$threshold, 'presence' => \$check_presence_only, 'quality' => \$quality, 'help' => \$help, "manual" => \$manual, 'progress' => \$progress);
+my %opts = ('existing' => \$ignore_non_existing,
+        'input' =>\$vcf,
+        "output" => \$out,
+        'samples' => \@samples,
+        'reject' => \@reject,
+        'reject_all_except' => \@reject_except,
+        'threshold' => \$threshold,
+        'presence' => \$check_presence_only,
+        'quality' => \$quality,
+        'num_matching' => \$num_matching,
+        'help' => \$help,
+        "manual" => \$manual,
+        'progress' => \$progress);
 
-GetOptions(\%opts, 'existing' => \$ignore_non_existing, 'input=s' =>\$vcf, "output=s" => \$out, 'samples=s{,}' => \@samples, 'r|reject=s{,}' => \@reject, 'x|reject_all_except:s{,}' => \@reject_except, 'threshold=i' => \$threshold, 'p|presence' => \$check_presence_only, 'quality=i' => \$quality, 'help' => \$help, "manual" => \$manual, 'b|progress' => \$progress) or pod2usage(-message=> "syntax error.\n");
+GetOptions(\%opts,
+        'existing' => \$ignore_non_existing,
+        'input=s' =>\$vcf,
+        "output=s" => \$out,
+        'samples=s{,}' => \@samples,
+        'r|reject=s{,}' => \@reject,
+        'x|reject_all_except:s{,}' => \@reject_except,
+        'threshold=i' => \$threshold,
+        'p|presence' => \$check_presence_only,
+        'quality=i' => \$quality,
+        'num_matching' => \$num_matching,
+        'help' => \$help,
+        "manual" => \$manual,
+        'b|progress' => \$progress) or pod2usage(-message=> "syntax error.\n");
 pod2usage(-verbose => 2) if $manual;
 pod2usage(-verbose => 1) if $help;
 pod2usage(-message=> "syntax error: --input (-i) argument is required.\n") if not $vcf;
 pod2usage(-message=> "syntax error: you must specify samples using at least one of the arguments --samples (-s), --reject (-r) or --reject_all_except (-x).\n") if not @samples and not @reject and not @reject_except;
+print STDERR "Warning - --num_matching has no effect when --presence flag is set.\n" if $check_presence_only and $num_matching;
 
 print STDERR "Initializing VCF input ($vcf)\n";
 my $vcf_obj = ParseVCF->new(file=> $vcf);
@@ -180,6 +207,8 @@ ALLELE: foreach my $allele (@{$alleles{$samp}}){
             }
             if ($check_presence_only){#don't worry if all samples have variant or not if checking presence only
                 $var_call{$allele}++ ;
+            }elsif($num_matching){
+                $var_call{$allele}++ if $allele_matches >= $num_matching;
             }else{
                 $var_call{$allele}++ if ($allele_matches == keys%alleles); #i.e. if all of our called '--keep' sample genotypes match this allele in either het or homo state
             }
@@ -237,11 +266,15 @@ output filename.
 
 =item B<-s    --samples>
 
-IDs of samples to keep variants from. Variants will be kept only if present in ALL of these samples in either heterozygous or homozygous states unless --presence flag is set.  Samples must be entered as contained in the vcf header.
+IDs of samples to keep variants from. Variants will be kept only if present in ALL of these samples in either heterozygous or homozygous states unless --presence or --num_matching flags are set.  Samples must be entered as contained in the vcf header.
 
 =item B<-p    --presence>
 
-Use this flag to print variants present in any sample specified by the --keep option rather than variants present in all.
+Use this flag to print variants present in any sample specified by the --samples option rather than variants present in all.
+
+=item B<-n    --num_matching>
+
+Use this flag to print variants present in at least this many samples rather than only variants present in all.
 
 =item B<-r    --reject>
 
