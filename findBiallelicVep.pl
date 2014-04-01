@@ -458,7 +458,7 @@ LINE: while (my $line = $vcf_obj->readLine){
     next LINE if not $have_variant;
 
     if ($identical_genotypes){
-        next LINE if not identical_genotypes(\@samples);
+        next LINE if not identical_genotypes(@samples);
     }
     #check for identical genotypes within family if using a ped file
     if ($pedigree){
