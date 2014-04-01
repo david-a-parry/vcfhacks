@@ -16,7 +16,7 @@ sub usage{
     my ($help) = @_;
     if ($help){
         print "\nTakes an annotated vcf file optionally annotated with Ensembl's variant_effect_predictor.pl and outputs a simplified version in Excel's .xlsx format.\n\n" .
-        "Usage:  annovcf_to_simple.pl -i [annotated vcf file] [options]\n\n" .
+        "Usage:  $0 -i [annotated vcf file] [options]\n\n" .
         "Arguments:\n\n" .
         "--input [annotated vcf input]\n". 
         "--output [output file]\n". 
