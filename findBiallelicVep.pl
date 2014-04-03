@@ -13,6 +13,8 @@ use SortGenomicCoordinates;
 use ParsePedfile;
 
 my $genotype_quality = 20;
+my $aff_genotype_quality ;#will convert to $genotype_quality value if not specified
+my $unaff_genotype_quality ;#will convert to $genotype_quality value if not specified
 my $vcf;
 my @samples;
 my @reject;
@@ -61,6 +63,8 @@ my %opts = (
             'check_all_samples' => \$check_all_samples,
             'equal_genotypes' => \$identical_genotypes,
             'quality' => \$genotype_quality,
+            'aff_quality' => \$aff_genotype_quality,
+            'un_quality' => \$unaff_genotype_quality,
             #'allow_missing_genotypes' => \$allow_missing,
             'num_matching' => \$min_matching_samples,
             'num_matching_per_family' =>  \$min_matching_per_family,
@@ -90,12 +94,14 @@ GetOptions(\%opts,
             'check_all_samples',
             'equal_genotypes',
             'quality=i',
+            'w|aff_quality=i' => \$aff_genotype_quality,
+            'z|un_quality=i' => \$unaff_genotype_quality,
 #           'allow_missing_genotypes',
             'n|num_matching=i' => \$min_matching_samples,
             'y|num_matching_per_family=i' =>  \$min_matching_per_family,
             't|ignore_carrier_status' => \$ignore_carrier_status,
             'b|progress' => \$progress,
-            'add_classes=s{,}',
+            'a|add_classes=s{,}' => \@add,
             'z|homozygous_only' => \$homozygous_only,
             'consensus_splice_site',
             'h|?|help' => \$help,
@@ -108,6 +114,20 @@ pod2usage(-verbose => 1) if $help;
 pod2usage(-message => "Syntax error: input is required.", exitval => 2) if not $vcf;
 pod2usage(-message => "Syntax error: please specify samples to analyze using --samples (-s), --check_all_samples or --family (-f) arguments.", exitval => 2) if not @samples and not $check_all_samples and not $pedigree;
 pod2usage(-message => "--gmaf option requires a value between 0.00 and 0.50 to filter on global minor allele frequency.\n", -exitval => 2) if (defined $gmaf && ($gmaf < 0 or $gmaf > 0.5));
+pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) if ($genotype_quality < 0 );
+
+if (defined $aff_genotype_quality){
+    pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) 
+        if $aff_genotype_quality < 0;
+}else{
+    $unaff_genotype_quality = $genotype_quality;
+}
+if (defined $unaff_genotype_quality){
+    pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) 
+        if $unaff_genotype_quality < 0;
+}else{
+    $unaff_genotype_quality = $genotype_quality;
+}
 
 #QUICKLY CHECK PEDIGREE BEFORE DEALING WITH POTENTIALLY HUGE VCF
 my $ped;
@@ -452,7 +472,7 @@ LINE: while (my $line = $vcf_obj->readLine){
     next if not is_autosome($chrom);
     my $have_variant = 0;
     foreach my $sample (@samples){
-        $have_variant++ if $vcf_obj->getSampleCall(sample=>$sample, minGQ => $genotype_quality) =~ /[\d+][\/\|][\d+]/;
+        $have_variant++ if $vcf_obj->getSampleCall(sample=>$sample, minGQ => $aff_genotype_quality) =~ /[\d+][\/\|][\d+]/;
         last if $have_variant;
     }
     next LINE if not $have_variant;
@@ -517,7 +537,7 @@ ANNO:        foreach my $ac (@anno_csq){
             }
         }
         if ($matches_class){
-            my %var_hash = create_var_hash($annot, $vcf_obj, [@samples, @reject]);
+            my %var_hash = create_var_hash($annot, $vcf_obj, \@samples, \@reject);
             foreach my $k (keys %var_hash){
                 #$allelic_genes{$subannot[2]}->{$k} =  $var_hash{$k};
                 $allelic_genes{$annot->{feature}}->{$k} =  $var_hash{$k};
@@ -580,7 +600,7 @@ sub is_autosome{
 ###########
 sub identical_genotypes{
     my (@samp) = @_;
-    my %gts = $vcf_obj->getSampleCall(multiple=> \@samp, minGQ => $genotype_quality);
+    my %gts = $vcf_obj->getSampleCall(multiple=> \@samp, minGQ => $aff_genotype_quality);
     my %no_calls;
     for (my $i = 0; $i < $#samp; $i++){
         if ($allow_missing and $gts{$samp[$i]} =~ /^\.[\/\|]\.$/){#if we're allowing missing values then skip no calls
@@ -866,7 +886,7 @@ sub check_keys_are_true{
 
 ###########
 sub create_var_hash{
-    my ($annotation, $vcf_obj, $samp) = @_;
+    my ($annotation, $vcf_obj, $aff, $un) = @_;
     my %var_hash;
     my $coord = $vcf_obj->getVariantField("CHROM") . ":" . $vcf_obj->getVariantField("POS");
     #we should check sample alleles against subannot alleles
@@ -883,8 +903,20 @@ sub create_var_hash{
         }else{
             next;
         }
-        foreach my $s (@$samp){
-            my $gt = $vcf_obj->getSampleCall(sample=>$s, minGQ => $genotype_quality);
+        foreach my $s (@$aff){
+            my $gt = $vcf_obj->getSampleCall(sample=>$s, minGQ => $aff_genotype_quality);
+            if ($gt =~ /$i[\/\|]$i/){
+                $var_hash{"$coord-$i"}->{$s} = 2;#homozygous for this alt allele
+            }elsif ($gt =~ /\d[\/\|]$i/ or $gt =~ /$i[\/\|]\d/ ){
+                $var_hash{"$coord-$i"}->{$s} = 1;#het for alt allele
+            }elsif ($gt =~ /\d[\/\|]\d/){
+                $var_hash{"$coord-$i"}->{$s} = 0;#does not carry alt allele
+            }else{
+                $var_hash{"$coord-$i"}->{$s} = -1;#no call
+            }
+        }
+        foreach my $s (@$un){
+            my $gt = $vcf_obj->getSampleCall(sample=>$s, minGQ => $unaff_genotype_quality);
             if ($gt =~ /$i[\/\|]$i/){
                 $var_hash{"$coord-$i"}->{$s} = 2;#homozygous for this alt allele
             }elsif ($gt =~ /\d[\/\|]$i/ or $gt =~ /$i[\/\|]\d/ ){
@@ -898,6 +930,7 @@ sub create_var_hash{
     }
     return %var_hash;
 }
+
 ###########
 sub sort_gene_listing{
     my ($gene_list) = @_;
@@ -1097,6 +1130,14 @@ Like gmaf but filter on any population specific minor allele frequency annotated
 
 Minimum genotype qualities to consider. This applies to samples specified by both --sample and --reject. Anything below this threshold will be considered a no call. Default is 20.
 
+=item B<-w    --aff_quality>
+
+Minimum genotype qualities to consider for affected samples only (i.e. samples specified by --sample argument or affected samples from a given pedigree). Anything below this threshold will be considered a no call. Default is 20.
+
+=item B<-z    --un_quality>
+
+Minimum genotype qualities to consider for unaffected samples only (i.e. samples specified by --reject argument or unaffected samples from a given pedigree). Anything below this threshold will be considered a no call. Default is 20.
+
 =item B<-e    --equal_genotypes>
 
 Use this flag if you only want to consider genotypes that are identical in each sample to count towards biallelic variation. Potentially useful if looking at several related individuals segregating the same disease and not using a PED file to specify their relationships (or if for some reason you think several families will have the same causative mutation).
@@ -1154,6 +1195,9 @@ Show the program's manual page.
 
     findBiallelicVep.pl -i <variants.vcf> -f families.ped -o output.vcf -l genelist.txt -q 30
     #use families.ped file to describe affected and unaffected individuals, only consider calls with genotype quality of 30 or higher
+    
+    findBiallelicVep.pl -i <variants.vcf> -f families.ped -o output.vcf -l genelist.txt -w 10 -z 30
+    #use a low gneotype quality threshold (10) to identify variants in affected samples but use a higher threshold (30) to identify genotypes in unaffecteds to reject
 
 =cut
 
