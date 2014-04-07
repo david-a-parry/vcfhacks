@@ -68,7 +68,15 @@ Minimum variant quality as defined by the QUAL field.  Variants in the input wil
 
 =item B<-g    --genotype_quality>
 
-Minimum genotype quality.  Only applicable if --samples,  --reject or --threshold arguments are used. Sample alleles will only be counted if they have a genotype quality score equal to or higher than this value.
+Minimum genotype quality.  Only applicable if --samples,  --reject or --threshold arguments are used. Sample alleles will only be counted if they have a genotype quality score equal to or higher than this value. Default is 0 (i.e. no filtering on genotype quality).
+
+=item B<-a    --aff_quality>
+
+Minimum genotype qualities to consider for samples specified by --samples argument only. Any sample call with a genotype quality below this threshold will be considered a no call. Default is 0.
+
+=item B<-u    --un_quality>
+
+Minimum genotype qualities to consider for samples specified by --reject argument only. Any sample call with a genotype quality below this threshold will be considered a no call. Default is 0.
 
 =item B<-p    --print_matching>
 
@@ -119,17 +127,49 @@ my $print_matching = 0;#flag telling the script to invert so we print matching l
 my $out;
 my $min_qual = 0;
 my $minGQ = 0;
+my $aff_quality ;#will convert to $minGQ value if not specified
+my $unaff_quality ;#will convert to $minGQ value if not specified
 my $help;
 my $man;
 my $progress;
 my $regex; #match this regex if looking in dir
-GetOptions('x|not_samples=s{,}' => \@ignore_samples, 'expression=s' => \$regex, 'input=s' => \$vcf, 'output=s' => \$out, 'filter=s{,}' => \@filter_vcfs, 'directories=s{,}' => \@dirs, 'samples=s{,}' => \@samples, 'reject=s{,}' => \@reject, 'threshold=i' => \$threshold, 'quality=f' => \$min_qual,'genotype_quality=f' => \$minGQ, 'bar|progress' => \$progress, 'help' => \$help, 'manual' => \$man, 'print_matching' => \$print_matching) or pod2usage(-message => "Syntax error.", exitval => 2);
+GetOptions(
+        'x|not_samples=s{,}' => \@ignore_samples,
+        'expression=s' => \$regex,
+        'input=s' => \$vcf,
+        'output=s' => \$out,
+        'filter=s{,}' => \@filter_vcfs,
+        'directories=s{,}' => \@dirs,
+        'samples=s{,}' => \@samples,
+        'reject=s{,}' => \@reject,
+        'threshold=i' => \$threshold,
+        'quality=f' => \$min_qual,'genotype_quality=f' => \$minGQ,
+        'aff_quality=i' => \$aff_quality,
+        'un_quality=i' => \$unaff_quality,
+        'bar|progress' => \$progress,
+        'help' => \$help,
+        'manual' => \$man,
+        'print_matching' => \$print_matching) or pod2usage(-message => "Syntax error.",
+        exitval => 2);
 
 pod2usage(-verbose => 2) if $man;
 pod2usage(-verbose => 1) if $help;
 pod2usage(-message => "Syntax error", exitval => 2) if (not $vcf or (not @filter_vcfs and not @dirs));
 pod2usage(-message => "Syntax error - cannot use --reject and --not_samples argument together", exitval => 2) if (@reject and @ignore_samples);
-
+pod2usage(-message => "Variant quality scores must be 0 or greater.\n", -exitval => 2) if ($min_qual < 0 );
+pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) if ($minGQ < 0 );
+if (defined $aff_quality){
+    pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) 
+        if $aff_quality < 0;
+}else{
+    $unaff_quality = $minGQ;
+}
+if (defined $unaff_quality){
+    pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) 
+        if $unaff_quality < 0;
+}else{
+    $unaff_quality = $minGQ;
+}
 my %ignores = ();
 if (@ignore_samples){
     %ignores = map {$_ => 1 } @ignore_samples;
@@ -166,7 +206,9 @@ if ($progress){
 my $next_update = 0;
 my $n = 0;
 print $OUT  $vcf_obj->getHeader(0);
-print $OUT "##filterVcfOnVcf.pl=\"filter_vcfs=" .join(",", @filter_vcfs) ." genotype_quality=$minGQ quality=$min_qual samples=@samples reject=@reject threshold=$threshold print_matching=$print_matching\n";
+print $OUT "##filterVcfOnVcf.pl=\"filter_vcfs=" .join(",", @filter_vcfs) .
+    " ----aff_quality=$aff_quality --un_quality=$unaff_quality genotype_quality=$minGQ quality=$min_qual ".
+    " samples=@samples reject=@reject threshold=$threshold print_matching=$print_matching\n";
 print $OUT  $vcf_obj->getHeader(1);
 my $lines_filtered = 0;
 my $lines_passed = 0;
@@ -182,11 +224,11 @@ LINE: while (my $line = $vcf_obj->readLine){
     next LINE if $qual < $min_qual;
     my @alts = ();
     if (@samples){
-        @alts = $vcf_obj->getSampleActualGenotypes(multiple => \@samples, return_alleles_only => 1);
+        @alts = $vcf_obj->getSampleActualGenotypes(multiple => \@samples, return_alleles_only => 1, minGQ => $aff_quality);
     }else{
-        @alts = $vcf_obj->readAlleles(alt_alleles=>1);
+        @alts = $vcf_obj->readAlleles(alt_alleles=>1, minGQ => $aff_quality);
     }
-    my $threshold_counts = 0;#count samples in all filter_vcfs i.e. don't reset after each file
+    my %alt_counts = ();#count samples in all filter_vcfs i.e. don't reset after each file
 FILTER:    foreach my $filter_obj(@filter_objs){
         if ($filter_obj->searchForPosition(chrom=> $chrom, pos => $pos)){
 FILTER_LINE:    while (my $filter_line = $filter_obj->readPosition()){
@@ -197,41 +239,43 @@ FILTER_LINE:    while (my $filter_line = $filter_obj->readPosition()){
                 my $f_ref = $filter_obj->getVariantField('REF');
                 next FILTER_LINE if ($chrom ne $filter_chrom or $pos ne $filter_pos); #this might happen if tabix finds a deletion
                 next FILTER_LINE if $ref ne $f_ref;
-                my @f_alts = ();
-                if (@reject){
-                    @f_alts = $filter_obj->getSampleActualGenotypes(multiple => \@reject, return_alleles_only => 1);
-                }elsif(@ignore_samples){
-                    my @temp_reject = $filter_obj->getSampleNames() ;            
+                my %f_alts = ();
+                my @temp_reject = ();
+                if (@ignore_samples){
+                    @temp_reject = $filter_obj->getSampleNames() ;
                     @temp_reject = grep {! $ignores{$_} } @temp_reject;
-                    @f_alts = $filter_obj->getSampleActualGenotypes(multiple => \@temp_reject, return_alleles_only => 1);
-                }else{
-                    @f_alts = $filter_obj->readAlleles(alt_alleles=>1);
+                }
+                push @temp_reject, @reject;
+                if (@temp_reject){
+                    %f_alts = map {$_ => undef} $filter_obj->getSampleActualGenotypes(multiple => \@temp_reject, return_alleles_only => 1, minGQ => $unaff_quality);
+                }elsif(not @reject and not @ignore_samples){
+                    %f_alts = map {$_ => undef} $filter_obj->readAlleles(alt_alleles=>1, minGQ => $unaff_quality);
                 }
                 my $alts_match = 0;
                 foreach my $alt (@alts){
-                    $alts_match++ if grep{/^$alt$/i} @f_alts;
-                    last if $alts_match;
+                    $alts_match++ if exists $f_alts{$alt};
                 }
-                next FILTER_LINE if not $alts_match;
+                next FILTER_LINE if $alts_match != @alts;#don't filter unless all ALT alleles are represented in VCF
                 if ($threshold){
                     my @t_samples = ();
-                    if (@reject){
-                        @t_samples = @reject;
-                    }else{
+                    if (@temp_reject){
+                        @t_samples = @temp_reject;
+                    }elsif(not @reject and not @ignore_samples){
                         @t_samples = $filter_obj->getSampleNames();
                     }
                     foreach my $t_samp(@t_samples){
-                        my @t_alleles = $filter_obj->getSampleActualGenotypes(sample => $t_samp, return_alleles_only => 1);
-                        foreach my $t_allele (@t_alleles){
-                            if (grep {/^$t_allele$/} @alts){
+                        my %t_alleles = map { $_ => undef } $filter_obj->getSampleActualGenotypes(sample => $t_samp, return_alleles_only => 1, minGQ => $unaff_quality);
+                        foreach my $alt (@alts){
+                            if (exists $t_alleles{$alt}){
+                                $alt_counts{$alt}++;
+                            }
                             #we're counting no. of samples with at least one matching allele
                             #not no. matching alleles
-                                $threshold_counts++;
-                                last;
-                            }
                         }
                     }
-                    next FILTER_LINE if $threshold_counts < $threshold;
+                    foreach my $alt (@alts){
+                        next FILTER_LINE if $alt_counts{$alt} < $threshold;
+                    }
                 }
                 #we have a match - no need to look at other filter_vcfs
                 $lines_filtered++;
