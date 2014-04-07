@@ -228,6 +228,7 @@ LINE: while (my $line = $vcf_obj->readLine){
     }else{
         @alts = $vcf_obj->readAlleles(alt_alleles=>1, minGQ => $aff_quality);
     }
+    my %alt_matches = ();#check each allele matches in all filter_vcfs but don't reset after each file
     my %alt_counts = ();#count samples in all filter_vcfs i.e. don't reset after each file
 FILTER:    foreach my $filter_obj(@filter_objs){
         if ($filter_obj->searchForPosition(chrom=> $chrom, pos => $pos)){
@@ -251,11 +252,10 @@ FILTER_LINE:    while (my $filter_line = $filter_obj->readPosition()){
                 }elsif(not @reject and not @ignore_samples){
                     %f_alts = map {$_ => undef} $filter_obj->readAlleles(alt_alleles=>1, minGQ => $unaff_quality);
                 }
-                my $alts_match = 0;
                 foreach my $alt (@alts){
-                    $alts_match++ if exists $f_alts{$alt};
+                    $alt_matches{$alt}++ if exists $f_alts{$alt};
                 }
-                next FILTER_LINE if $alts_match != @alts;#don't filter unless all ALT alleles are represented in VCF
+                next FILTER_LINE if keys %alt_matches != @alts;#don't filter unless all ALT alleles are represented in VCFs done so far
                 if ($threshold){
                     my @t_samples = ();
                     if (@temp_reject){
