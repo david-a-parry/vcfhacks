@@ -14,12 +14,12 @@ my $out;
 my @samples;
 my $check_presence_only;
 my $ignore_non_existing;#don't exit if a sample is not found
-my %sm_index;# this hash to index position of each sample in vcf file
-my %rej_index;
 my @reject = ();#reject if allele is present in these samples
 my @reject_except = (); #reject all except these samples
 my $threshold;
 my $quality = 20;
+my $aff_genotype_quality ;#will convert to $genotype_quality value if not specified
+my $unaff_genotype_quality ;#will convert to $genotype_quality value if not specified
 my $num_matching;
 my $help;
 my $manual;
@@ -33,6 +33,8 @@ my %opts = ('existing' => \$ignore_non_existing,
         'threshold' => \$threshold,
         'presence' => \$check_presence_only,
         'quality' => \$quality,
+        'aff_quality' => \$aff_genotype_quality,
+        'un_quality' => \$unaff_genotype_quality,
         'num_matching' => \$num_matching,
         'help' => \$help,
         "manual" => \$manual,
@@ -48,6 +50,8 @@ GetOptions(\%opts,
         'threshold=i' => \$threshold,
         'p|presence' => \$check_presence_only,
         'quality=i' => \$quality,
+        'aff_quality=i',
+        'un_quality=i',
         'num_matching=i' => \$num_matching,
         'help' => \$help,
         "manual" => \$manual,
@@ -56,6 +60,19 @@ pod2usage(-verbose => 2) if $manual;
 pod2usage(-verbose => 1) if $help;
 pod2usage(-message=> "syntax error: --input (-i) argument is required.\n") if not $vcf;
 pod2usage(-message=> "syntax error: you must specify samples using at least one of the arguments --samples (-s), --reject (-r) or --reject_all_except (-x).\n") if not @samples and not @reject and not @reject_except;
+pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) if ($quality < 0 );
+if (defined $aff_genotype_quality){
+    pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) 
+        if $aff_genotype_quality < 0;
+}else{
+    $unaff_genotype_quality = $quality;
+}
+if (defined $unaff_genotype_quality){
+    pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) 
+        if $unaff_genotype_quality < 0;
+}else{
+    $unaff_genotype_quality = $quality;
+}
 print STDERR "Warning - --num_matching has no effect when --presence flag is set.\n" if $check_presence_only and $num_matching;
 
 print STDERR "Initializing VCF input ($vcf)\n";
@@ -142,7 +159,7 @@ LINE: while (my $line = $vcf_obj->readLine){
     #do samples first for efficiency (if they don't have a variant allele)
     if (@samples){
 SAMPLE: foreach my $sample (@samples){
-            my $call = $vcf_obj->getSampleCall(sample => $sample, minGQ => $quality);
+            my $call = $vcf_obj->getSampleCall(sample => $sample, minGQ => $aff_genotype_quality);
             if ($call =~ /(\d+)[\/\|](\d+)/){
                 if ($1 == 0 and $2 == 0){
                     if ($check_presence_only or $num_matching){
@@ -166,7 +183,7 @@ SAMPLE: foreach my $sample (@samples){
     my %reject_alleles;    
     if (@reject){
         foreach my $reject (@reject){
-            my $call = $vcf_obj->getSampleCall(sample => $reject, minGQ => $quality);
+            my $call = $vcf_obj->getSampleCall(sample => $reject, minGQ => $unaff_genotype_quality);
             if ($call =~ /(\d+)[\/\|](\d+)/){
                 $reject_alleles{$1}++; #store alleles from rejection samples as keys of %reject_alleles
                 $reject_alleles{$2}++;
@@ -290,7 +307,15 @@ Reject variants present in more than this number of samples in the VCF. Counts a
 
 =item B<-q    --quality>
 
-Minimum phred-like genotype quality to consider.  All calls below this quality will be considered no calls. Default is 20.
+Minimum phred-like genotype quality to consider for both sets of samples specified by --samples and --reject arguments.  All calls below this quality will be considered no calls. Default is 20.
+
+=item B<-a    --aff_quality>
+
+Minimum genotype qualities to consider for samples specified by --samples argument only. Any sample call with a genotype quality below this threshold will be considered a no call. Default is 20.
+
+=item B<-u    --un_quality>
+
+Minimum genotype qualities to consider for samples specified by --reject argument only. Any sample call with a genotype quality below this threshold will be considered a no call. Default is 20.
 
 =item B<-e    --existing>
 
