@@ -195,7 +195,7 @@ sub sortVcf{
     my $add_ids = 0;
     my $i = 0;
     foreach my $head (@{$self->{_metaHeader}}){
-        if ($head =~ /##contig=<ID=([^,]+),\S+/){
+        if ($head =~ /##contig=<ID=([^,>]+),\S+/){
             $contigs{$1} = $i++;
         }
     }
