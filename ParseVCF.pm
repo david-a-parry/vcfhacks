@@ -158,15 +158,44 @@ sub _openFileHandle{
     return $FH;
 }
 
+sub _byContigs{
+    $a =~ s/^chr//;
+    $b =~ s/^chr//;
+    if ($a =~ /^\d+$/){
+        if ($b =~ /^\d+$/){
+            return $a <=> $b;
+        }else{
+            return -1;
+        }
+    }elsif ($b =~ /^\d+$/){
+        return 1;
+    }elsif ($a =~ /^[XY]$/){
+        if ($b =~ /^[XY]$/){
+            return $a cmp $b;
+        }else{
+            return -1;
+        }
+    }elsif ($b =~ /^[XY]$/){
+        return 1;
+    }elsif ($a =~ /^MT*$/){
+        return $b cmp $a;
+    }elsif ($b =~ /^MT*$/){
+        return 1;
+    }else{
+        return $a cmp $b;
+    }
+}
+
 sub sortVcf{
 #creates a new vcf sorted in coordinate order
 #returns filename of new sorted file
 #does not alter $self
     my ($self, %args) = @_;
     my %contigs = ();
+    my $add_ids = 0;
     my $i = 0;
     foreach my $head (@{$self->{_metaHeader}}){
-        if ($head =~ /##contig=<ID=(.*),length/){
+        if ($head =~ /##contig=<ID=([^,]+),\S+/){
             $contigs{$1} = $i++;
         }
     }
@@ -178,7 +207,19 @@ sub sortVcf{
     }
     print STDERR "Sorting $self->{_file} to $sorted.\n"; 
     open (my $SORTOUT,  ">$sorted") or croak "Can't open file $sorted for output of sortVcf: $! ";
-    croak "No contig lines found in header for $self->{_file}, cannot sort\n" if not keys(%contigs);
+    if (not keys(%contigs)){
+        print "WARNING - no contig lines found in header for $self->{_file}, will gather contigs and sort arbitrarily.\n";
+        $add_ids++;
+        $self->reopenFileHandle();#ensure we're at the start of the file
+        my %chroms = ();
+        while (my $line = scalar readline $self->{_filehandle}){
+            next if $line =~ /^#/;
+            $chroms{(split "\t", $line)[$self->{_fields}->{CHROM}]}++;
+        }
+        $i = 0;
+        %contigs = map {$_ => $i++} sort _byContigs(keys%chroms);
+    }
+    croak "No contigs found in $self->{_file}, cannot sort\n" if not keys(%contigs);
     eval "use Sort::External; 1" or carp "The Sort::External module was not found - will attempt to sort in memory. For huge files it is recommended to install Sort::External via CPAN.\n";
     $self->reopenFileHandle();#ensure we're at the start of the file
     if ($@){#no Sort::External , sort in memory
@@ -191,6 +232,11 @@ sub sortVcf{
                     } @sort;
         print STDERR "Printing output...";
         print $SORTOUT $self->getHeader();
+        if ($add_ids){
+            foreach my $c (sort {$contigs{$a} <=> $contigs{$b} } keys %contigs){
+                print $SORTOUT "##contig=<ID=$c>\n";
+            }
+        }
         print $SORTOUT join('', @sort);
     }else{
         my $vcfsort = 
@@ -204,7 +250,15 @@ sub sortVcf{
         my $n = 0;
         while (my $line = scalar readline $self->{_filehandle}){
             $n++;
-            if ($line =~ /^#/){
+            if ($line =~ /^##/){
+                print $SORTOUT $line;
+                next;
+            }elsif ($line =~ /^#/){
+                if ($add_ids){
+                    foreach my $c (sort {$contigs{$a} <=> $contigs{$b} } keys %contigs){
+                        print $SORTOUT "##contig=<ID=$c>\n";
+                    }
+                }
                 print $SORTOUT $line;
                 next;
             }
