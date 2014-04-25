@@ -274,7 +274,7 @@ sub sortVcf{
         $sortex->feed(@feeds) if @feeds;
         print STDERR "Fed $n lines";
         print STDERR " of " . ($self->{_totalLines})  if $self->{_totalLines};
-        print STDERR " - performing sort.\n";
+        print STDERR ".\n";
         $sortex->finish; 
         print STDERR "Sort done. Writing output...";
         $n = 0;
@@ -708,6 +708,31 @@ sub _binSearch{
             return $i;
         }
     }
+    #FIND OVERLAPPING VARIANTS (DELETIONS/MNVs) NOT NECESSARILY OF SAME COORDINATE
+    for (my $j = $i - 1; $j > 0; $j--){#look at previous lines
+        my $line =  $self->_lineWithIndex($j);
+        last if ($line =~ /^#/);
+        my @split = split("\t", $line);
+        #skip if we're at the next chrom...
+        next if 
+            $self->{_contigOrder}->{$args{chrom}}  < $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]};
+        #...or downstream
+        next if 
+            $self->{_contigOrder}->{$args{chrom}} == $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]}
+	            and $args{pos} < $split[$self->{_fields}->{POS}];
+        #we're done if we've got to the previous chromosome...
+        last if 
+            $self->{_contigOrder}->{$args{chrom}}  > $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]};
+        #and let's assume we're not going to have detected any del/mnv larger than 200 bp (is there a better way?)
+        last if 
+            $self->{_contigOrder}->{$args{chrom}} == $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]} 
+                and $args{pos} < ($split[$self->{_fields}->{POS}] - 200);
+        my $ref_length = length($split[$self->{_fields}->{REF}]);
+        if ($ref_length > 1 and ($ref_length + $split[$self->{_fields}->{POS}] - 1) >= $args{pos}){
+            #we've found a deletion/mnv that overlaps our pos
+            return $j;
+        }
+    }
     return 0;
 }
 
@@ -720,11 +745,24 @@ sub _searchVcf{
         my @hits;
         for (my $j = $i - 1; $j > 0; $j--){#look at previous lines
             my $line = $self->_lineWithIndex($j);
-             my @split = split("\t", $line);
+            last if ($line =~ /^#/);
+            my @split = split("\t", $line);
             if ($split[$self->{_fields}->{CHROM}] eq $args{chrom} and $split[$self->{_fields}->{POS}] == $args{pos}){
                 push @hits, $line;
             }else{
-                last;
+                #FIND OVERLAPPING VARIANTS (DELETIONS/MNVs) NOT NECESSARILY OF SAME COORDINATE
+                #we're done if we've got to the previous chromosome...
+                last if 
+                    $self->{_contigOrder}->{$args{chrom}}  > $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]};
+                #and let's assume we're not going to have detected any del/mnv larger than 200 bp (is there a better way?)
+                last if 
+                    $self->{_contigOrder}->{$args{chrom}} == $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]} 
+                        and $args{pos} < ($split[$self->{_fields}->{POS}] - 200);
+                my $ref_length = length($split[$self->{_fields}->{REF}]);
+                if ($ref_length > 1 and ($ref_length + $split[$self->{_fields}->{POS}] - 1) >= $args{pos}){
+                    #we've found a deletion/mnv that overlaps our pos
+                    push @hits, $line;
+                }
             }
         }
         @hits = reverse(@hits);#put in original order
