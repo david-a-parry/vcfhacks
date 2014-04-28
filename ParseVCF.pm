@@ -690,8 +690,9 @@ sub _binSearch{
     my $u = $self->{_totalLines};
     my $l = 1;
     return 0 if not exists $self->{_contigOrder}->{$args{chrom}};
+    my $i = 0;
     while ($l <= $u){
-        my $i = int(($l + $u)/2);
+        $i = int(($l + $u)/2);
         my $line =  $self->_lineWithIndex($i);
         if ($line =~ /^#/){
             $l = $i+1;
@@ -944,6 +945,10 @@ sub checkCoordinateSorted{
     }
     $self->reopenFileHandle();
     return 1;
+}
+
+sub simplifyVariant{
+
 }
 
 
@@ -1286,6 +1291,58 @@ sub readVariant{
     }else{
         return;
     }
+}
+
+sub minimizeAlleles{
+    #reduce alleles to their simplest representation
+    #so that multiallelic variants can be represented 
+    #in their most basic form
+    #e.g. (from http://www.cureffi.org/2014/04/24/converting-genetic-variants-to-their-minimal-representation/)
+    #1  1001    .   CTCC    CCC,C,CCCC 
+    #becomes
+    #1  1001   CTCC    CCC →   1001    CT  C
+    #1001   CTCC    C   →   1001    CTCC    C
+    #1001   CTCC    CCCC    →   1002    T   C
+    #
+    my ($self) = @_;
+    my %min_alleles = ();#key is allele number, each entry is anon hash of CHROM, REF, POS, ALT
+    my @al =  $self->readAlleles();
+    for (my $i = 1; $i < @al; $i++){
+        my ($pos, $ref, $alt) = _reduceRefAlt($self->getVariantField("POS"), $al[0], $al[$i]);
+        $min_alleles{$i} = {
+            CHROM => $self->getVariantField("CHROM"),
+            POS => $pos,
+            REF => $ref,
+            ALT => $alt,
+        };
+    }
+    $self->{_minimizedAlleles} = \%min_alleles;
+    return %min_alleles if wantarray;
+}
+
+sub _reduceRefAlt{
+    #reduce a single ref/alt pair to their simplest representation
+    my ($pos, $ref, $alt) = @_;
+    if (length($ref) > 1 and length($alt) > 1){
+        #can only reduce if both REF and ALT are longer than 1
+        my @r = split('', $ref);
+        my @al = split('', $alt);
+        while ($r[-1] eq $al[-1] and @r > 1 and @al > 1){
+            #remove identical suffixes
+            pop @r;
+            pop @al;
+        }
+        while ($r[0] eq $al[0] and @r > 1 and @al > 1){
+            #remove identical prefixes
+            #increment position accordingly
+            shift @r;
+            shift @al;
+            $pos++;
+        }
+        $ref = join('', @r);
+        $alt = join('', @al);
+    }
+    return ($pos, $ref, $alt);
 }
 
 sub readAlleles{
