@@ -1,11 +1,16 @@
 #!/usr/bin/perl
 #David Parry August 2011
+
+#TO DO - implement an allele frequency filter which uses information from ped files
+# to only count per family
+
 use strict;
 use warnings;
 use Getopt::Long;
 use Pod::Usage;
 use Data::Dumper;
 use Term::ProgressBar;
+use List::Util qw(sum);
 use FindBin;
 use lib "$FindBin::Bin";
 use ParseVCF;
@@ -18,8 +23,10 @@ my @reject = ();#reject if allele is present in these samples
 my @reject_except = (); #reject all except these samples
 my $threshold;
 my $quality = 20;
+my $allele_depth_cutoff = 0;#even if genotype isn't called use this value to filter on reported allele depth
 my $aff_genotype_quality ;#will convert to $genotype_quality value if not specified
 my $unaff_genotype_quality ;#will convert to $genotype_quality value if not specified
+my $confirm_missing; #only consider variants where there is sufficient genotype information from all --reject samples to exclude
 my $num_matching;
 my $help;
 my $manual;
@@ -32,9 +39,11 @@ my %opts = ('existing' => \$ignore_non_existing,
         'reject_all_except' => \@reject_except,
         'threshold' => \$threshold,
         'presence' => \$check_presence_only,
+        'confirm_missing' => \$confirm_missing,
         'quality' => \$quality,
         'aff_quality' => \$aff_genotype_quality,
         'un_quality' => \$unaff_genotype_quality,
+        'depth_allele_cutoff' => \$allele_depth_cutoff,
         'num_matching' => \$num_matching,
         'help' => \$help,
         "manual" => \$manual,
@@ -49,9 +58,11 @@ GetOptions(\%opts,
         'x|reject_all_except:s{,}' => \@reject_except,
         'threshold=i' => \$threshold,
         'p|presence' => \$check_presence_only,
+        'confirm_missing' => \$confirm_missing,
         'quality=i' => \$quality,
         'aff_quality=i',
         'un_quality=i',
+        'depth_allele_cutoff=f' => \$allele_depth_cutoff,
         'num_matching=i' => \$num_matching,
         'help' => \$help,
         "manual" => \$manual,
@@ -61,11 +72,12 @@ pod2usage(-verbose => 1) if $help;
 pod2usage(-message=> "syntax error: --input (-i) argument is required.\n") if not $vcf;
 pod2usage(-message=> "syntax error: you must specify samples using at least one of the arguments --samples (-s), --reject (-r) or --reject_all_except (-x).\n") if not @samples and not @reject and not @reject_except;
 pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) if ($quality < 0 );
+pod2usage(-message => "--depth_allele_cutoff must be a value between 0.00 and 1.00.\n", -exitval => 2) if ($allele_depth_cutoff < 0 or $allele_depth_cutoff > 1.0 );
 if (defined $aff_genotype_quality){
     pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) 
         if $aff_genotype_quality < 0;
 }else{
-    $unaff_genotype_quality = $quality;
+    $aff_genotype_quality = $quality;
 }
 if (defined $unaff_genotype_quality){
     pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) 
@@ -187,6 +199,22 @@ SAMPLE: foreach my $sample (@samples){
             if ($call =~ /(\d+)[\/\|](\d+)/){
                 $reject_alleles{$1}++; #store alleles from rejection samples as keys of %reject_alleles
                 $reject_alleles{$2}++;
+            }elsif($confirm_missing){
+                next LINE;
+            }
+            if($allele_depth_cutoff){
+                #reject even if uncalled if proportion of alt allele >= $allele_depth_cutoff
+                my $ad = $vcf_obj->getSampleGenotypeField(sample => $reject, field => 'AD');
+                if ($ad){ 
+                    my @ads = split(",", $ad);
+                    @ads = grep {! /\./ } @ads; #sometimes with no reads an AD of '.' is given
+                    my $dp = sum(@ads);
+                    for (my $i = 0; $i < @ads; $i++){
+                        if ($dp){
+                            $reject_alleles{$i}++ if $ads[$i]/$dp >= $allele_depth_cutoff;
+                        }
+                    }
+                }
             }
         }
     }
@@ -211,7 +239,7 @@ ALLELE: foreach my $allele (@{$alleles{$samp}}){
             if ($threshold){
                 my $t = 0;
                 foreach my $k (keys %genotypes){
-                    $t += $genotypes{$k} if ($k =~ /(^($allele)[\/\|]\d+|\d+[\/\|]$allele)$/);
+                    $t += $genotypes{$k} if ($k =~ /(^$allele[\/\|][\.\d+]|[\.\d+][\/\|]$allele)$/);
                 }
                 if ($t > $threshold){
                     $breached{$allele}++;
@@ -241,6 +269,8 @@ ALLELE: foreach my $allele (@{$alleles{$samp}}){
 if ($progressbar){
         $progressbar->update($vcf_obj->countLines("variants")) if $vcf_obj->countLines("variants") >= $next_update;
 }
+$vcf_obj->DESTROY();
+close $OUT; 
 
 #################################################
 sub check_samples{
@@ -305,17 +335,25 @@ Reject variants present in all samples except these. If used without an argument
 
 Reject variants present in more than this number of samples in the VCF. Counts all samples in the VCF irrespective of whether they are specified by the --samples or any other argument.
 
-=item B<-q    --quality>
+=item B<-c    --confirm_missing>
 
-Minimum phred-like genotype quality to consider for both sets of samples specified by --samples and --reject arguments.  All calls below this quality will be considered no calls. Default is 20.
+Use this flag to look only for variants that are present only in --samples and are confirmed absent from all --reject samples. This means that as well as filtering variants with alleles present in --reject samples, variants that contain no calls (or genotype qualities below the --un_quality threshold) in --reject samples will also be filtered. In this way you may identify likely de novo variants in a sample specified by --samples by specifying parental samples with the --reject option, thus avoiding variants where there is not sufficient information to confirm de novo inheritance.
+
+=item B<-d    --depth_allele_cutoff>
+
+Fraction cut-off for allele depth. When specified, the allele depth will be assessed for all samples specified using the --reject argument and any allele with a proportion of reads greater than or equal to this value will be rejected even if the sample genotypes are not called by the genotyper. For example, a value of 0.1 would reject any allele making up 10 % of reads for a sample specified by --reject even if the sample is called as homozygous reference. Must be a value between 0.0 and 1.0. 
 
 =item B<-a    --aff_quality>
 
-Minimum genotype qualities to consider for samples specified by --samples argument only. Any sample call with a genotype quality below this threshold will be considered a no call. Default is 20.
+Minimum genotype qualities to consider for samples specified by --samples argument only. Any sample call with a genotype quality below this threshold will be considered a no call. Default is 20. Overrides any value specified by --quality argument.
 
 =item B<-u    --un_quality>
 
-Minimum genotype qualities to consider for samples specified by --reject argument only. Any sample call with a genotype quality below this threshold will be considered a no call. Default is 20.
+Minimum genotype qualities to consider for samples specified by --reject argument only. Any sample call with a genotype quality below this threshold will be considered a no call. Default is 20. Overrides any value specified by --quality argument.
+
+=item B<-q    --quality>
+
+Minimum genotype quality for all samples - sets both --aff_quality and --un_quality to this value.
 
 =item B<-e    --existing>
 
@@ -341,18 +379,26 @@ Show manual page
  filterOnSample.pl -i [var.vcf] -s Sample1
  (only print variants if Sample1's genotype has a variant allele)
 
- filterOnSample.pl -i [var.vcf] -k Sample1 -r Sample2 Sample3
+ filterOnSample.pl -i [var.vcf] -s Sample1 -r Sample2 Sample3
  (look for variants in Sample1 but reject variants also present in Sample2 or Sample3)
  
- filterOnSample.pl -i [var.vcf] -k Sample1 -r Sample2 Sample3 -t 4
+ filterOnSample.pl -i [var.vcf] -s Sample1 -r Sample2 Sample3 -a 20 -u 30
+ (as above but variants are only kept if Sample1 has a genotype quality score of 20 or higher)
+ 
+ filterOnSample.pl -i [var.vcf] -s Sample1 -r Sample2 Sample3 -a 20 -u 30
+ (as above but variants are only rejected when alleles are present in Sample2 or Sample3 with a genotype quality score of 30 or higher)
+ 
+ filterOnSample.pl -i [var.vcf] -s Sample1 -r Sample2 Sample3 -t 4
  (same but also reject variants present in 4 or more samples)
  
- filterOnSample.pl -i [var.vcf] -k Sample1 -x 
+ filterOnSample.pl -i [var.vcf] -s Sample1 -x 
  (look for variants in Sample1 and reject variants if present in any other sample in the VCF)
  
- filterOnSample.pl -i [var.vcf] -k Sample1 -x Sample2 
+ filterOnSample.pl -i [var.vcf] -s Sample1 -x Sample2 
  (look for variants in Sample1 and reject variants if present in any other sample in the VCF except for Sample2)
  
+ filterOnSample.pl -i [var.vcf] -s child -r mum dad -c -q 30
+ (look for apparent de novo variants in child, ignoring variants for which mum or dad have no calls or genotype qualities below threshold genotype quality of 30)
 
 =head1 DESCRIPTION
 
