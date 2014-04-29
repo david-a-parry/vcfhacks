@@ -176,7 +176,7 @@ VAR: while (my $line = $vcf_obj->readLine){
             if ($snp_obj->searchForPosition(chrom => $min_vars{$allele}->{CHROM}, pos => $min_vars{$allele}->{POS})){
                 while (my $snp_line = $snp_obj->readPosition()){
                     #check whether the snp line(s) match our variant
-                    if (checkSnpMatches($min_vars{$allele}, $snp_obj)){
+                    if (checkVarMatches($min_vars{$allele}, $snp_obj)){
                         $is_known_snp++;
                         #replace or append to ID field
                         if ($vcf_obj->getVariantField('ID') eq '.' || ($opts{replace} && not $replaced_already)){
@@ -312,7 +312,7 @@ sub evaluate_snp{
     return (0, 0);
 }
 #################################################
-sub checkSnpMatches{
+sub checkVarMatches{
     my ($min_allele, $snp) = @_;
     my $matches = 0;
     my %snp_min = $snp->minimizeAlleles();

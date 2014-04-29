@@ -146,7 +146,7 @@ ALLELE:    foreach my $allele (keys %min_vars){
             if ($snp_obj->searchForPosition(chrom => $min_vars{$allele}->{CHROM}, pos => $min_vars{$allele}->{POS})){
                 while (my $snp_line = $snp_obj->readPosition()){#need to edit the below so we traverse through potentially multiple SNPs and still append/filter as necessarry
                     #check whether the snp line(s) match our variant
-                    if (checkSnpMatches($min_vars{$allele}, $snp_obj)){
+                    if (checkVarMatches($min_vars{$allele}, $snp_obj)){
                         $is_known_snp++;
                         #perform filtering if fiters are set
                         if ($freq){
@@ -197,7 +197,7 @@ print STDERR "$filtered variants filtered, $kept variants retained.\n";
 #####################SUBS#######################
 ################################################
 
-sub checkSnpMatches{
+sub checkVarMatches{
     my ($min_allele, $snp) = @_;
     my $matches = 0;
     my %snp_min = $snp->minimizeAlleles();
