@@ -1314,6 +1314,9 @@ sub minimizeAlleles{
             POS => $pos,
             REF => $ref,
             ALT => $alt,
+            ORIGINAL_POS => $self->getVariantField("POS"),
+            ORIGINAL_REF => $self->getVariantField("REF"),
+            ORIGINAL_ALT => $self->getVariantField("ALT"),
         };
     }
     $self->{_minimizedAlleles} = \%min_alleles;
