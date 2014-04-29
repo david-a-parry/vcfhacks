@@ -309,7 +309,7 @@ CLASS:  foreach my $class (@classes){
                 }
             }
         }
-        CLASS:  foreach my $impact (@effect_impact){
+EFFECT_IMPACT:  foreach my $impact (@effect_impact){
             if (lc$annot->{Effect_Impact} eq lc$impact){
                 print $OUT "$line\n" if not $printed_line;
                 $printed_line++;
@@ -507,7 +507,7 @@ getFunctionalVariantsSnpEff.pl  -  retrieve specific variant classes from a SnpE
 
 =item B<-i    --input>
 
-VCF file(s) with functional annotations from SnpEff.jar.  
+VCF file with functional annotations from SnpEff.jar.  
 
 =item B<-o    --output>
 
@@ -691,7 +691,7 @@ Using option without the --keep_any_damaging argument and without passing 'any' 
 
 =back
 
-The default behaviour is to only REMOVE variants predicted predicted as damaging by ALL programs specified, but this behaviour can be changed using the --keep_any_damaging argument.
+The default behaviour is to only REMOVE variants predicted as damaging by ALL programs specified, but this behaviour can be changed using the --keep_any_damaging argument.
 
 =item B<-k    --keep_any_damaging>
 

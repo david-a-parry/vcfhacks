@@ -557,7 +557,7 @@ getFunctionalVariantsVep.pl  -  retrieve specific variant classes from an annota
 
 =item B<-i    --input>
 
-VCF file(s) with functional annotations from variant_effect_predictor.pl script.  
+VCF file with functional annotations from variant_effect_predictor.pl script.  
 
 =item B<-o    --output>
 
