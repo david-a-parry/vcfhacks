@@ -1,41 +1,152 @@
 #!/usr/bin/perl
 #David Parry August 2011
+#
+=head1 NAME
+
+annovcfToSimple.pl - takes a vcf file and outputs a simplified version in Excel's .xlsx format.
+
+=head1 SYNOPSIS
+
+        annovcfToSimple.pl -i [ file] [options]
+        
+        annovcfToSimple.pl -v -i [VEP annotated VCF file] [options]
+        
+        annovcfToSimple.pl -g -v -i [VEP and ensemblGeneAnnotator.pl annotated VCF file] [options]
+        
+        annovcfToSimple.pl -h (display help message)
+        
+        annovcfToSimple.pl -m (display manual page)
+
+=cut
+
+=head1 ARGUMENTS
+
+=over 8
+
+=item B<-i    --input>
+
+Input VCF file, optionally annotated with variant_effect_predictor.pl and ensemblGeneAnnotator.pl. 
+
+=item B<-o    --output>
+
+Output file name. Defaults to [input name].xlsx (or [input name].txt if --text_output option is used).
+
+=item B<-s    --samples>
+
+Sample ids to output, optional. Ignored if --do_not_simplify argument is used.
+
+=item B<-v    --vep>
+
+Use this flag to output annotations from Ensembl's variant_effect_predictor.pl at the beginning of each line (assuming your input has already been annotated by the VEP).
+
+=item B<-g    --gene_anno>
+
+Use this flag if annotated with ensemblGeneAnnotator.pl to output gene annotation information. This script cannot distinguish between gene annotation information belonging to canonical transcripts or particular variant classes, these distinctions have to be made when running ensemblGeneAnnotator.pl prior to this script.
+
+=item B<--canonical_only>
+
+Use this flag to only print consequences from canonical transcripts when using --vep option. 
+
+=item B<--functional>
+
+Use this flag to only annotate standard 'functional' variant classes (transcript_ablation, splice_donor_variant, splice_acceptor_variant, stop_gained, frameshift_variant, stop_lost, initiator_codon_variant, inframe_insertion, inframe_deletion, missense_variant, transcript_amplification, TFBS_ablation, TFBS_amplification, regulatory_region_ablation, regulatory_region_amplification).
+
+=item B<--classes>
+
+Use this to specify a set of VEP variant classes to print in output. Overrides --functional option.
+
+=item B<-a    --additional_classes>
+
+Use this to specify additional VEP variant classes to output as well as those used by --functional.
+
+=item B<--fields>
+
+Specify one or more VEP fields to output. Use of --vep without this flag outputs the following fields:
+
+            symbol
+            gene
+            feature
+            allele
+            consequence
+            cds_position
+            protein_position
+            amino_acids
+            codons
+            existing_variation
+            exon
+            intron
+            splice_consensus
+            sift
+            polyphen
+            condel
+            gmaf
+            aa_maf
+            ea_maf
+            afr_maf
+            amr_maf
+            asn_maf
+            eur_maf
+       
+=item B<--all>
+
+Use with --vep option to output all available VEP fields.
+
+=item B<-d    --do_not_simplify>
+
+Use this flag to output all fields to Excel as they appear in the original VCF. Useful if you have a customised VCF but doesn't allow you to pick out individual samples.
+
+=item B<-t    --text_output>
+
+Use this flag to output tab-delimited text instead of Excel format. 
+
+=item B<-h    --help>
+
+Show help message.
+
+=item B<-m    --manual>
+
+Show manual page.
+
+
+=back 
+
+=cut
+
+=head1 DESCRIPTION
+
+Reads a VCF file and outputs a simplified version in Excel's .xlsx format. Useful when using a VCF annotated with Ensembl's variant_effect_predictor.pl to output a more easily readable version (use the -v option), and particularly useful for VCF files annotated with ensemblGeneAnnotator.pl (use the -g option).
+
+=cut
+
+=head1 AUTHOR
+
+David A. Parry
+University of Leeds
+
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2013,2014  David A. Parry
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+=cut
+
+
+
+
 use strict;
 use warnings;
 use Getopt::Long;
 use Data::Dumper;
 use Excel::Writer::XLSX;
 use Excel::Writer::XLSX::Utility;
+use Pod::Usage;
 use File::Basename;
 use FindBin;
 use lib "$FindBin::Bin";
 use ParseVCF;
 
-############
-sub usage{
-    my ($help) = @_;
-    if ($help){
-        print "\nTakes an annotated vcf file optionally annotated with Ensembl's variant_effect_predictor.pl and outputs a simplified version in Excel's .xlsx format.\n\n" .
-        "Usage:  $0 -i [annotated vcf file] [options]\n\n" .
-        "Arguments:\n\n" .
-        "--input [annotated vcf input]\n". 
-        "--output [output file]\n". 
-        "--samples [sample ids to output, optional. Does not currently work with --do_not_simplify argument.]\n". 
-        "--vep [use this flag to output annotations from Ensembl's variant_effect_predictor.pl at the beginning of each line]\n". 
-        "--functional [use this flag to only output standard functional variant classes]\n".
-        "--classes [use this to specify VEP variant classes to output]\n".
-        "--additional_classes [use this to specify additional VEP variant classes to output as well as those used by --functional]\n".
-        "--fields [specify one or more VEP fields to output. Use of --vep without this flag outputs all available fields]\n". 
-        "--canonical_only [use this flag to only print consequences from canonical transcripts when using --vep flag]\n". 
-        "--do_not_simplify [use this flag to output all fields to Excel as they appear in the original VCF. Useful if you have a customised VCF but doesn't allow you to pick out individual samples]\n". 
-        "--text_output [use this flag to output tab-delimited text instead of Excel format]\n". 
-        "--quiet [use this flag to supress warning messages if AD, GQ or PL fields can't be found in FORMAT field for a variant]\n". 
-        "--gene_anno [use this flag if annotated with ensembl_gene_annotator.pl]\n--help [use this flag to print this help message]\n\n";
-        exit;
-    }else{
-        die "--input argument is required\n";
-    }
-}
 ############
 
 my $vcf;
@@ -45,7 +156,7 @@ my @add;
 my $output;
 my $config = {};
 my $help;
-my $quiet;
+my $man;
 GetOptions($config,
     'classes=s{,}' => \@classes,
     'additional_classes=s{,}' => \@add,
@@ -53,20 +164,53 @@ GetOptions($config,
     'gene_anno',
     'text_output',
     'do_not_simplify',
-    'quiet', => \$quiet,
     'canonical_only',
     'vep',
     'fields=s{,}', => @{$config->{fields}}, 
+    'all',
     'input=s' =>\$vcf,
     'output=s' => \$output,
     'samples=s{,}' => \@samples,
+    'manual' => \$man,
     'help' => \$help) or die "Syntax error.\n";
-usage($help) if $help;
-usage() if (not $vcf);
+pod2usage( -verbose => 2 ) if $man;
+pod2usage( -verbose => 1 ) if $help;
+pod2usage( -exitval => 2, -message => "--input is required" ) if (not $vcf);
 
 if (@classes or @add){
     $config->{functional} = 1;
 }
+
+if (not defined @{$config->{fields}} and not $config->{all}){
+    push @{$config->{fields}}, 
+        qw ( 
+            symbol
+            gene
+            feature
+            allele
+            consequence
+            cds_position
+            protein_position
+            amino_acids
+            codons
+            existing_variation
+            exon
+            intron
+            splice_consensus
+            sift
+            polyphen
+            condel
+            gmaf
+            aa_maf
+            ea_maf
+            afr_maf
+            amr_maf
+            asn_maf
+            eur_maf
+            );
+}
+
+
 
 my @valid = qw (transcript_ablation
                 splice_donor_variant
@@ -183,7 +327,7 @@ if (defined $config->{text_output}){
 ###########################
 sub process_as_text{
     open (my $OUT, ">$output") or die "Can't open $output: $!\n";
-    if (@fields){
+    if (defined $config->{vep}){
         print $OUT "#";
         print $OUT join("\t", @fields) ."\t";
     }
@@ -207,7 +351,7 @@ sub process_as_text{
         print $OUT join("\t", @samples) ."\t" ;
         print $OUT join(" Allele Depth\t", @samples) ." Allele Depth\t" ;
         print $OUT join(" Genotype Confidence\t", @samples) ." Genotype Confidence\t" ;
-        print $OUT join(" Scaled Percent Probably Liklihoods\t", @samples) ." Scaled Percent Probably Liklihoods" ;
+ #       print $OUT join(" Scaled Percent Probably Liklihoods\t", @samples) ." Scaled Percent Probably Liklihoods" ;
         if (defined $config->{gene_anno}){
             my $i = 0; 
             $i++ until $head_split[$i] =~ /CHROM/;
@@ -231,7 +375,7 @@ sub process_as_text{
 ####################################################
 sub write_line_to_text{
     my @output = split("\t", $vcf_obj->get_currentLine);
-    if (@fields){
+    if (defined $config->{vep}){
         my @csq = ();
         @csq = $vcf_obj->getVepFields(\@fields);
         my %vep_allele ; 
@@ -296,84 +440,33 @@ sub write_simplified_vcf_to_text{
     push @output, $vcf_obj->getVariantField("REF");
     my @form = split(":", $vcf_obj->getVariantField("FORMAT"));
     my @all_alleles = ($vcf_obj->getVariantField("REF"), split(",", $vcf_obj->getVariantField("ALT")));
-    my $gt = 0;
-    my $ad = 0;
-    my $gq = 0;
-    my $pl = 0;
-    {
-    no warnings 'uninitialized';
-    $gt++ until $form[$gt] eq "GT" or $gt > $#form;
-    $ad++ until $form[$ad] eq "AD" or $ad > $#form;
-    $gq++ until $form[$gq] eq "GQ" or $gq > $#form;
-    $pl++ until $form[$pl] eq "PL" or $pl > $#form;
-    }
-    die "Can't find genotype field in variant line:\n" . $vcf_obj->get_currentLine() ."\n" if ($gt > $#form);
-    print STDERR "Can't find allele depth field in variant line:\n" . $vcf_obj->get_currentLine() ."\n" if ($ad > $#form and not $quiet);
-    print STDERR "Can't find genotype quality field in variant line:\n" . $vcf_obj->get_currentLine() ."\n" if ($gq > $#form and not $quiet);
-    print STDERR "WARNING - Can't find probable likelihoods quality field in variant line:\n" . $vcf_obj->get_currentLine() ."\n" if ($pl > $#form and not $quiet);
     my @sample_calls = ();
     my @sample_allele_depths = ();
     my @sample_genotype_quality = ();
-    my @sample_probable = ();
     foreach my $sample (@samples){
-        my $genotype;
-        my @call = split(":", $vcf_obj->getSampleVariant($sample));
-        if (@call > $gt and $call[$gt] =~ /(\d+)[\/\|](\d+)/){
-            $genotype = "$all_alleles[$1]/$all_alleles[$2]";
+        my $genotype = $vcf_obj->getSampleActualGenotypes(sample=>$sample);
+        if (defined $genotype){ 
+            push (@sample_calls, $genotype);
         }else{
-            $genotype = "-";
+            push @sample_calls, "-";
         }
-        push (@sample_calls, $genotype);
-        my $allele_depths;
-        if (@call > $ad){
-            if ($call[$ad] =~ /(\d+,*)+/){
-                my @ads = split(",", $call[$ad]);
-                my @allele_depth = ();
-                for (my $n = 0; $n < @ads; $n++){
-                    push (@allele_depth, "$all_alleles[$n]=$ads[$n]");
-                }
-                $allele_depths = join("/", @allele_depth);
-            }else{
-                $allele_depths = "-";
+        my $ad = $vcf_obj->getSampleGenotypeField(sample => $sample, field => "AD"); 
+        my $allele_depths = '-';
+        if (defined $ad && $ad =~ /(\d+,*)+/){
+            my @ads = split(",", $ad);
+            my @allele_depth = ();
+            for (my $n = 0; $n < @ads; $n++){
+                push (@allele_depth, "$all_alleles[$n]=$ads[$n]");
             }
-        }else{
-            $allele_depths = "-";
+            $allele_depths = join("/", @allele_depth);
         }
         push (@sample_allele_depths, $allele_depths);
-        my $genotype_quality;
-        if (@call > $gq){
-            if ($call[$gq] =~ /(\d+\.*\d*)+/){
-                $genotype_quality = 100 - (100 * 10**(-$1/10));
-            }else{
-                $genotype_quality = "-";
-            }
-        }else{
-            $genotype_quality = "-";
+        my $genotype_quality = "-";
+        my $gq = $vcf_obj->getSampleGenotypeField(sample => $sample, field => "GQ");
+        if (defined $gq && $gq =~ /(\d+\.*\d*)+/){
+            $genotype_quality = 100 - (100 * 10**(-$gq/10));
         }
         push (@sample_genotype_quality, $genotype_quality);
-        my $probable_likelihoods;
-        if (@call > $pl){
-            if ($call[$pl] =~ /(\d+,\d+,\d+)/){
-                my @prob = split(",", $call[$pl]);
-                my @possible_genotypes = get_possible_genotypes(\@all_alleles);
-                if (scalar@possible_genotypes != scalar@prob){
-                    print STDERR "ERROR - number of possible genotypes doesn't match genotype probabilities for line:\n" . $vcf_obj->get_currentLine() ."\n";
-                    $probable_likelihoods = "-";
-                }else{    
-                    my @probables = ();
-                    for (my $n = 0; $n < @prob; $n++){
-                        my $percent = 100 * (10**(-$prob[$n]/10));
-                        push (@probables, "$possible_genotypes[$n]=$percent");
-                    }
-                    $probable_likelihoods =  join(", ", @probables);
-                }
-            }else{
-                $probable_likelihoods = "-";
-            }
-        }else{
-            $probable_likelihoods = "-";
-        }
-        push (@sample_probable, $probable_likelihoods);
     }
     foreach my $call (@sample_calls){
         push @output, $call;
@@ -384,10 +477,7 @@ sub write_simplified_vcf_to_text{
     foreach my $sample_gq (@sample_genotype_quality){
         push @output, $sample_gq;
     }
-    foreach my $probable_percent (@sample_probable){
-        push @output, $probable_percent;
-    }
-    if (@fields){
+    if ($config->{vep}){
         my @csq = $vcf_obj->getVepFields(\@fields);
         my %vep_allele ; 
         if ($config->{samples}){
@@ -461,16 +551,15 @@ sub process_as_xlsx{
     $header_formatting = $workbook->add_format(bold => 1);
     $std_formatting = $workbook->add_format();
     $url_format = $workbook->add_format(color => 'blue', underline => 1, );
-=cut$worksheet->set_column( 0, 0, 10);
-    $worksheet->set_column( 1, 1, 12);
-    $worksheet->set_column( 2, 2, 25);
-    $worksheet->set_column( 4, 4, 9);
-    $worksheet->set_column( 10, 10, 11);
-    $worksheet->set_column( 11, 11, 13);
-    $worksheet->set_column( 12, 15, 20);
-=cut
+#    $worksheet->set_column( 0, 0, 10);
+#    $worksheet->set_column( 1, 1, 12);
+#    $worksheet->set_column( 2, 2, 25);
+#    $worksheet->set_column( 4, 4, 9);
+#    $worksheet->set_column( 10, 10, 11);
+#    $worksheet->set_column( 11, 11, 13);
+#    $worksheet->set_column( 12, 15, 20);
     my $vep_header;
-    if (@fields){
+    if (defined $config->{vep}){
         foreach my $csq (@fields){
             $worksheet->write($row, $col++, $csq, $header_formatting);
         }
@@ -506,9 +595,6 @@ sub process_as_xlsx{
         foreach my $sample (@samples){
             $worksheet->write($row, $col++, "$sample Genotype Confidence", $header_formatting);
         }
-        foreach my $sample (@samples){
-            $worksheet->write($row, $col++, "$sample Scaled Percent Probably Liklihoods", $header_formatting);
-        }
         if (defined $config->{gene_anno}){
             my $i = 0; 
             $i++ until $head_split[$i] =~ /CHROM/;
@@ -539,6 +625,7 @@ sub write_vep_fields{
     my ($row, $col) = @_;
     my @csq = $vcf_obj->getVepFields(\@fields);
     my $lines = 0;
+    my ($canonical_found, $functional_found, $sample_found) = (0, 0, 0);
     my $temp_col;
     my %vep_allele = ();
     if ($config->{samples}){
@@ -551,7 +638,8 @@ sub write_vep_fields{
 ANNOT:  foreach my $annot (@csq){
         if ($config->{canonical_only}){
               next if (not $annot->{'canonical'} );
-          }
+        }
+        $canonical_found++;
         if ($config->{functional}){
             my $match = 0;
 CLASS:      foreach my $class (@classes){
@@ -569,9 +657,11 @@ CLASS:      foreach my $class (@classes){
             }
             next ANNOT if not $match;
         }
+        $functional_found++;
         if ($config->{samples}){
             next if not exists $vep_allele{$annot->{allele}};
         }
+        $sample_found++;
         $temp_col = $col;
         foreach my $vep  (@fields){
             my $value = $annot->{$vep};
@@ -580,20 +670,31 @@ CLASS:      foreach my $class (@classes){
         $lines++;
         $row++;
     }   
-    return ($lines, $temp_col);
+    return ($lines, $temp_col, $canonical_found, $functional_found, $sample_found);
 }
 ####################################################
 sub write_line_to_excel{
 #return no. of merged rows in order to increment $row
     my ($row, $col, ) = @_;
     my $lines = 1;
-    if (@fields){
-        ($lines, $col) = write_vep_fields($row, $col);
+    my ($canonical_found, $functional_found, $sample_found) = (0, 0, 0);
+    if (defined $config->{vep}){
+        ($lines, $col, $canonical_found, $functional_found, $sample_found) = write_vep_fields($row, $col);
     }
     if ($lines < 1){
     #this happens if --canonical_only argument is in effect and we haven't got a canonical transcript for this variant
+    #or if we haven't found a functional variant 
+    #or if we haven't got a variant in our sample
     #we won't have printed anything for the consequence fields
-        $worksheet->write($row, $col++, "No canonical variant found for this site");
+        my $e_string ;
+        if (not $canonical_found){
+            $e_string = "No canonical variant";
+        }elsif (not $functional_found){
+           $e_string = "No valid functional variant";
+        }elsif (not $sample_found){
+            $e_string = "No valid variant in samples";
+        }
+        $worksheet->write($row, $col++, $e_string);
         for (my $i = 1; $i < @fields; $i++){
             $worksheet->write($row, $col++, "-");
         }
@@ -617,130 +718,72 @@ sub write_simplified_vcf_to_excel{
 #return no. of merged rows in order to increment $row
     my ($row, $col, $gene_anno_cols) = @_;
     my $lines = 1;
-    if (@fields){
-        ($lines, $col) = write_vep_fields($row, $col);
+    my ($canonical_found, $functional_found, $sample_found) = (0, 0, 0);
+    if (defined $config->{vep}){
+        ($lines, $col, $canonical_found, $functional_found, $sample_found) = write_vep_fields($row, $col);
     }
     if ($lines < 1){
     #this happens if --canonical_only argument is in effect and we haven't got a canonical transcript for this variant
+    #or if we haven't found a functional variant 
+    #or if we haven't got a variant in our sample
     #we won't have printed anything for the consequence fields
-        $worksheet->write($row, $col++, "No canonical variant found for this site");
+        my $e_string ;
+        if (not $canonical_found){
+            $e_string = "No canonical variant";
+        }elsif (not $functional_found){
+           $e_string = "No valid functional variant";
+        }elsif (not $sample_found){
+            $e_string = "No valid variant in samples";
+        }
+        $worksheet->write($row, $col++, $e_string);
         for (my $i = 1; $i < @fields; $i++){
             $worksheet->write($row, $col++, "-");
         }
         $lines = 1;
     }
     foreach my $varfield ($vcf_obj->getVariantField("CHROM"), $vcf_obj->getVariantField("POS"), $vcf_obj->getVariantField("ID"),){ 
-        #$worksheet->write($row, $col++, $varfield);
-        #push (@shared_values, $varfield);
         write_worksheet($lines, $varfield, $worksheet, $row, $col++, $std_formatting);
     }
-    #push (@shared_values, 100 - (100 * (10**(-$split_line[$qual]/10))), $split_line[$header_hash->{FILTER}], $split_line[$header_hash->{REF}]);
     write_worksheet($lines, 100 - (100 * (10**(-($vcf_obj->getVariantField("QUAL"))/10))), $worksheet, $row, $col++, $std_formatting, );
     write_worksheet($lines, $vcf_obj->getVariantField("FILTER"), $worksheet, $row, $col++, $std_formatting);
     write_worksheet($lines, $vcf_obj->getVariantField("REF"), $worksheet, $row, $col++, $std_formatting);
-    #$worksheet->write($row, $col++, 100 - (100 * (10**(-$line[$qual]/10))));
-    #$worksheet->write($row, $col++, $line[$filter]);
-    #$worksheet->write($row, $col++, $line[$ref]);
-    my @form = split(":", $vcf_obj->getVariantField("FORMAT"));
-    my @all_alleles = ($vcf_obj->getVariantField("REF"), split(",", $vcf_obj->getVariantField("ALT")));
-    my $gt = 0;
-    my $ad = 0;
-    my $gq = 0;
-    my $pl = 0;
-    {
-    no warnings 'uninitialized';
-    $gt++ until $form[$gt] eq "GT" or $gt > $#form;
-    $ad++ until $form[$ad] eq "AD" or $ad > $#form;
-    $gq++ until $form[$gq] eq "GQ" or $gq > $#form;
-    $pl++ until $form[$pl] eq "PL" or $pl > $#form;
-    }
-    die "Can't find genotype field in variant line:\n" . $vcf_obj->get_currentLine() ."\n" if ($gt > $#form);
-    print STDERR "Can't find allele depth field in variant line:\n" . $vcf_obj->get_currentLine() ."\n" if ($ad > $#form and not $quiet);
-    print STDERR "Can't find genotype quality field in variant line:\n" . $vcf_obj->get_currentLine() ."\n" if ($gq > $#form and not $quiet);
-    print STDERR "WARNING - Can't find probable likelihoods quality field in variant line:\n" . $vcf_obj->get_currentLine() ."\n" if ($pl > $#form and not $quiet);
+    my @all_alleles = $vcf_obj->readAlleles();
     my @sample_calls = ();
     my @sample_allele_depths = ();
     my @sample_genotype_quality = ();
-    my @sample_probable = ();
     foreach my $sample (@samples){
-        my $genotype;
-        my @call = split(":", $vcf_obj->getSampleVariant($sample));
-        if (@call > $gt and $call[$gt] =~ /(\d+)[\/\|](\d+)/){
-            $genotype = "$all_alleles[$1]/$all_alleles[$2]";
+        my $genotype = $vcf_obj->getSampleActualGenotypes(sample=>$sample);
+        if (defined $genotype){ 
+            push (@sample_calls, $genotype);
         }else{
-            $genotype = "-";
+            push @sample_calls, "-";
         }
-        push (@sample_calls, $genotype);
-        my $allele_depths;
-        if (@call > $ad){
-            if ($call[$ad] =~ /(\d+,*)+/){
-                my @ads = split(",", $call[$ad]);
-                my @allele_depth = ();
-                for (my $n = 0; $n < @ads; $n++){
-                    push (@allele_depth, "$all_alleles[$n]=$ads[$n]");
-                }
-                $allele_depths = join("/", @allele_depth);
-            }else{
-                $allele_depths = "-";
+        my $ad = $vcf_obj->getSampleGenotypeField(sample => $sample, field => "AD"); 
+        my $allele_depths = '-';
+        if (defined $ad && $ad =~ /(\d+,*)+/){
+            my @ads = split(",", $ad);
+            my @allele_depth = ();
+            for (my $n = 0; $n < @ads; $n++){
+                push (@allele_depth, "$all_alleles[$n]=$ads[$n]");
             }
-        }else{
-            $allele_depths = "-";
+            $allele_depths = join("/", @allele_depth);
         }
         push (@sample_allele_depths, $allele_depths);
-        my $genotype_quality;
-        if (@call > $gq){
-            if ($call[$gq] =~ /(\d+\.*\d*)+/){
-                $genotype_quality = 100 - (100 * 10**(-$1/10));
-            }else{
-                $genotype_quality = "-";
-            }
-        }else{
-            $genotype_quality = "-";
+        my $genotype_quality = "-";
+        my $gq = $vcf_obj->getSampleGenotypeField(sample => $sample, field => "GQ");
+        if (defined $gq && $gq =~ /(\d+\.*\d*)+/){
+            $genotype_quality = 100 - (100 * 10**(-$gq/10));
         }
         push (@sample_genotype_quality, $genotype_quality);
-        my $probable_likelihoods;
-        if (@call > $pl){
-            if ($call[$pl] =~ /(\d+,\d+,\d+)/){
-                my @prob = split(",", $call[$pl]);
-                my @possible_genotypes = get_possible_genotypes(\@all_alleles);
-                if (scalar@possible_genotypes != scalar@prob){
-                    print STDERR "ERROR - number of possible genotypes doesn't match genotype probabilities for line:\n" . $vcf_obj->get_currentLine() ."\n";
-                    $probable_likelihoods = "-";
-                }else{    
-                    my @probables = ();
-                    for (my $n = 0; $n < @prob; $n++){
-                        my $percent = 100 * (10**(-$prob[$n]/10));
-                        push (@probables, "$possible_genotypes[$n]=$percent");
-                    }
-                    $probable_likelihoods =  join(", ", @probables);
-                }
-            }else{
-                $probable_likelihoods = "-";
-            }
-        }else{
-            $probable_likelihoods = "-";
-        }
-        push (@sample_probable, $probable_likelihoods);
     }
     foreach my $call (@sample_calls){
-        #$worksheet->write($row, $col++, $call);
         write_worksheet($lines, $call, $worksheet, $row, $col++, $std_formatting);
-        #push (@shared_values, $call);
     }
     foreach my $sample_depth (@sample_allele_depths){
-        #$worksheet->write($row, $col++,$sample_depth);
         write_worksheet($lines, $sample_depth, $worksheet, $row, $col++, $std_formatting);
-        #push (@shared_values, $sample_depth);
     }
     foreach my $sample_gq (@sample_genotype_quality){
-        #$worksheet->write($row, $col++,$sample_gq);
         write_worksheet($lines, $sample_gq, $worksheet, $row, $col++, $std_formatting, );
-        #push (@shared_values, $sample_gq);
-    }
-    foreach my $probable_percent (@sample_probable){
-        #$worksheet->write($row, $col++,$probable_percent);
-        write_worksheet($lines, $probable_percent, $worksheet, $row, $col++, $std_formatting);
-        #push (@shared_values, $probable_percent);
     }
     if (ref $gene_anno_cols eq 'ARRAY'){
         foreach my $field (@$gene_anno_cols){
