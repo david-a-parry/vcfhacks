@@ -563,6 +563,52 @@ sub checkAndParseDbnsfpExpressions{
     carp ("checkAndParseDbnsfpExpressions called in void context.");
 }
 
+####################################################################
+sub getDbnsfpFieldsFromHeader{
+    my ($head) = @_;
+    my @fields = ();
+    #$head is a vcf header containing at a minimum the relevant dbNSFP INFO lines
+    foreach my $info ( split("\n", $head) ){
+        if ($info =~ /##INFO=<ID=(dbNSFP_\S+),Number=\S+,Type=(\w+),Description=.*>$/){
+            push @fields, $1;
+        }
+    }
+    return @fields if defined wantarray;
+    carp ("checkAndParseDbnsfpExpressions called in void context.");
+}
+
+####################################################################
+sub getDbnsfpValue{
+    my ($vcf_line, $f) = @_;
+    #$f is the name of the dbnsfp field we want the value for
+    #$vcf_line is a complete VCF line containing dbNSFP annotations
+    #returns the value for given field if found, otherwise returns nothing
+    my @line = split("\t", $vcf_line);
+    my @info = split(";", $line[7]);
+    my %values = ();
+    foreach my $inf (@info){
+        my ($field, $value) = split("=", $inf);
+        $values{$field} = $value if defined $value;
+    }
+    return $values{$f} if (exists $values{$f});
+    return;
+}
+
+####################################################################
+sub getDbnsfpAnnotations{
+    my ($vcf_line) = @_;
+    #$vcf_line is a complete VCF line containing dbNSFP annotations
+    #returns hash of field names to values
+    my @line = split("\t", $vcf_line);
+    my @info = split(";", $line[7]);
+    my %values = ();
+    foreach my $inf (@info){
+        my ($field, $value) = split("=", $inf);
+        $values{$field} = $value if defined $value;
+    }
+    return %values;
+}
+
 1;
 
 
@@ -582,7 +628,7 @@ filterDbnsfpExpressions(\@filters, $vcf_line);
 
 =head1 DESCRIPTION
 
-Check/create filter expressions to test against VCF lines containing dbNSFP annotations added using SnpSift.jar (http://snpeff.sourceforge.net/SnpSift.html).
+Check/create filter expressions to test against VCF lines containing dbNSFP annotations added using SnpSift.jar (http://snpeff.sourceforge.net/SnpSift.html). Also contains a few simple functions for returning dbNSFP annotations.
 
 
 =head1 FUNCTIONS
@@ -828,6 +874,37 @@ getAllDamagingFilters() is equivelent to constructing an expression from the fol
 =back 
 
 Returns a single element array containing the appropriate anonymous hash for use with filterDbnsfpExpressions if called in an array context, otherwise returns the anonymous hash.
+
+
+=head2 getDbnsfpFieldsFromHeader
+
+Returns an array of the names of all dbNSFP fields found in the dbNSFP info field in VCF header. Takes a VCF header string as an argument - e.g.
+
+=over 4
+
+my @dbnsfp_fields = DbnsfpVcfFilter::getDbnsfpFieldsFromHeader($header);
+
+=back 
+
+=head2 getDbnsfpValue
+
+Takes a VCF line string and the name of a dbNSFP field and returns the value for that field if found.
+
+=over 4
+
+my $ma_pred = DbnsfpVcfFilter::getDbnsfpValue($line, "dbNSFP_MutationAssessor_pred");
+
+=back 
+
+=head2 getDbnsfpAnnotations
+
+Given an annotated VCF line, returns hash of field names to values.
+
+=over 4
+
+my %dbnsfp = DbnsfpVcfFilter::getDbnsfpAnnotations($line);
+
+=back
 
 
 =head1 EXPORTS
