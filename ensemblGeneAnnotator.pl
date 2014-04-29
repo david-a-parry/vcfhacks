@@ -34,11 +34,11 @@ For each variant, print a line per Entrez gene rather than concatanating Entrez 
 
 =item B<-f    --functional>
 
-Use this flag to only annotate standard functional variant classes.
+Use this flag to only annotate standard 'functional' variant classes (transcript_ablation, splice_donor_variant, splice_acceptor_variant, splice_region_variant, stop_gained, frameshift_variant, stop_lost, initiator_codon_variant, inframe_insertion, inframe_deletion, missense_variant, transcript_amplification, TFBS_ablation, TFBS_amplification, regulatory_region_ablation, regulatory_region_amplification). Prevents annotation of gene information for genes/transcripts that overlap a variant but are not affected in a way defined by one of these variant classes.
 
 =item B<-c    --classes>
 
-Use this to specify VEP variant classes to annotate.
+Use this to specify VEP variant classes to annotate. Gene information will only be annotated for genes affected by one of these variant classes. Overrides --functional option.
 
 =item B<-a    --additional_classes>
 
@@ -337,6 +337,7 @@ if ( not @classes ) {
     @classes = qw (transcript_ablation
       splice_donor_variant
       splice_acceptor_variant
+      splice_region_variant
       stop_gained
       frameshift_variant
       stop_lost
