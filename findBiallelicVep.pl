@@ -120,7 +120,7 @@ if (defined $aff_genotype_quality){
     pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) 
         if $aff_genotype_quality < 0;
 }else{
-    $unaff_genotype_quality = $genotype_quality;
+    $aff_genotype_quality = $genotype_quality;
 }
 if (defined $unaff_genotype_quality){
     pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) 
@@ -324,7 +324,7 @@ if($ped){
         }
         foreach my $f ($ped->getAllFamilies){
             my %affected_ped = map {$_ => undef} $ped->getAffectedsFromFamily($f);
-            my @affected = grep { exists $affected_ped{$_} } @samples;
+            my @affected = grep { exists $affected_ped{$_} } @aff;
             die "Number of affected found in family $f (" .scalar(@affected) .") is less than value for ".
                 "--num_matching_per_family ($min_matching_per_family)\n" if $min_matching_per_family > @affected;
         }
@@ -373,7 +373,7 @@ if (defined $min_matching_samples){
     if ($pedigree){
         print STDERR "WARNING: --num_matching (-n) argument should be used in ".
             "conjunction with --num_matching_per_family (-y) when using a PED file ".
-            "(unless you really know what you're doing).\n";
+            "(unless you really know what you're doing).\n" if not $min_matching_per_family;
     }
 }
 
@@ -472,7 +472,9 @@ LINE: while (my $line = $vcf_obj->readLine){
     next if not is_autosome($chrom);
     my $have_variant = 0;
     foreach my $sample (@samples){
-        $have_variant++ if $vcf_obj->getSampleCall(sample=>$sample, minGQ => $aff_genotype_quality) =~ /[\d+][\/\|][\d+]/;
+        if ($vcf_obj->getSampleCall(sample=>$sample, minGQ => $aff_genotype_quality) =~ /(\d+)[\/\|](\d+)/){
+            $have_variant++ if ($1 > 0 or $2 > 0);
+        }
         last if $have_variant;
     }
     next LINE if not $have_variant;
@@ -815,23 +817,44 @@ sub check_segregation{
     foreach my $f ($ped->getAllFamilies){
         my %affected_ped = map {$_ => undef} $ped->getAffectedsFromFamily($f);
         my @affected = grep { exists $affected_ped{$_} } @samples;
-        my %unaffected_ped = map {$_ => undef} $ped->getUnaffectedsFromFamily($f);
-        my @unaffected = grep { exists $unaffected_ped{$_} } @reject;
         #get intersection of all @affected biallelic genotypes (we're assuming there's no phenocopy so we're looking for identical genotypes)
-        my %intersect = map {$_ => undef}  @{$biallelic_candidates{$affected[0]}};
-        foreach my $s (@affected[1..$#affected]){
-            my @biallelic = grep {exists ($intersect{$_}) } @{$biallelic_candidates{$s}};
-            %intersect = map {$_ => undef}  @biallelic;
+        my %intersect = ();
+        foreach my $s (@affected){
+            foreach my $bi (@{$biallelic_candidates{$s}}){
+                $intersect{$bi}++;
+            }
+        }
+        if ($min_matching_per_family){
+            foreach my $k (keys %intersect){
+                delete $intersect{$k} if $intersect{$k} < $min_matching_per_family;
+            }
+        }else{#by default require all affecteds to match
+            foreach my $k (keys %intersect){
+                delete $intersect{$k} if $intersect{$k} < @affected;
+            }
         }
         #we've already checked that these allele combinations are not present in unaffected members including parents.
-        #check that parents don't contain 0 of a compound het (admittedly this does not allow for hemizygous variants in case of a deletion in one allele)
         if (not $ignore_carrier_status){
-            foreach my $key (keys %intersect){
-                foreach my $u (@unaffected){
-                    if ($ped->isObligateCarrierRecessive($u)){
-                        my @al = split(/\//, $key);  
+        #check that parents (if available) contain one allele of a compound het (admittedly this does not allow for hemizygous variants in case of a deletion in one allele)
+            my %unaffected = map {$_ => undef} $ped->getUnaffectedsFromFamily($f);
+KEY:        foreach my $key (keys %intersect){
+                my @al = split(/\//, $key);  
+                foreach my $aff (keys %affected_ped){#check parents of any affected even if affected not in VCF
+                    my @par = grep { exists $unaffected{$_} } $ped->getParents($aff);
+                    foreach my $u (@par){
+                        #check each parent carries at least one of the alleles
                         if ($gene_counts->{$al[0]}->{$u} == 0 and $gene_counts->{$al[1]}->{$u} == 0){#0 means called as not having allele, -1 means no call
                             delete $intersect{$key};
+                            next KEY;
+                        }
+                    }
+                    if (@par == 2){#if we have both parents make sure there's one of each allele per parent if compound het
+                        if ($gene_counts->{$al[0]}->{$par[0]} == 0 && $gene_counts->{$al[0]}->{$par[1]} == 0){
+                            delete $intersect{$key};
+                            next KEY;
+                        }elsif ($gene_counts->{$al[1]}->{$par[0]} == 0 && $gene_counts->{$al[1]}->{$par[1]} == 0){
+                            delete $intersect{$key};
+                            next KEY;
                         }
                     }
                 }
@@ -1152,7 +1175,7 @@ By default only transcripts that are found to contain potentially pathogenic var
 
 =item B<-y    --num_matching_per_family>
 
-As above but for affected members per family. By default, even when using --num_matching it, biallelic variants from a given family (if a PED file was used) are only passed on for consideration if all affected samples present in the VCF contain matching biallelic variants. This argument sets the minimum number of affected samples per family for a biallelic combination of variants to be considered.  Arguably a solution in search of a problem.
+As above but for affected members per family. By default, even when using --num_matching, biallelic variants from a given family (if a PED file was used) are only passed on for consideration if all affected samples present in the VCF contain matching biallelic variants. This argument sets the minimum number of affected samples per family for a biallelic combination of variants to be considered.  Arguably a solution in search of a problem.
 
 =item B<-t    --ignore_carrier_status>
 
