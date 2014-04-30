@@ -24,6 +24,7 @@ my @reject_except = (); #reject all except these samples
 my $threshold;
 my $quality = 20;
 my $allele_depth_cutoff = 0;#even if genotype isn't called use this value to filter on reported allele depth
+my $allele_ratio_cutoff = 0;#even if genotype isn't called use this value to filter on relative reported allele depth
 my $aff_genotype_quality ;#will convert to $genotype_quality value if not specified
 my $unaff_genotype_quality ;#will convert to $genotype_quality value if not specified
 my $confirm_missing; #only consider variants where there is sufficient genotype information from all --reject samples to exclude
@@ -44,6 +45,7 @@ my %opts = ('existing' => \$ignore_non_existing,
         'aff_quality' => \$aff_genotype_quality,
         'un_quality' => \$unaff_genotype_quality,
         'depth_allele_cutoff' => \$allele_depth_cutoff,
+        'allele_ratio_cutoff' => \$allele_ratio_cutoff,
         'num_matching' => \$num_matching,
         'help' => \$help,
         "manual" => \$manual,
@@ -60,9 +62,10 @@ GetOptions(\%opts,
         'p|presence' => \$check_presence_only,
         'confirm_missing' => \$confirm_missing,
         'quality=i' => \$quality,
-        'aff_quality=i',
+        'a|aff_quality=i',
         'un_quality=i',
         'depth_allele_cutoff=f' => \$allele_depth_cutoff,
+        'z|allele_ratio_cutoff=f' => \$allele_ratio_cutoff,
         'num_matching=i' => \$num_matching,
         'help' => \$help,
         "manual" => \$manual,
@@ -73,6 +76,7 @@ pod2usage(-message=> "syntax error: --input (-i) argument is required.\n") if no
 pod2usage(-message=> "syntax error: you must specify samples using at least one of the arguments --samples (-s), --reject (-r) or --reject_all_except (-x).\n") if not @samples and not @reject and not @reject_except;
 pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) if ($quality < 0 );
 pod2usage(-message => "--depth_allele_cutoff must be a value between 0.00 and 1.00.\n", -exitval => 2) if ($allele_depth_cutoff < 0 or $allele_depth_cutoff > 1.0 );
+pod2usage(-message => "--allele_ratio_cutoff must be a value between 0.00 and 1.00.\n", -exitval => 2) if ($allele_ratio_cutoff < 0 or $allele_ratio_cutoff > 1.0 );
 if (defined $aff_genotype_quality){
     pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) 
         if $aff_genotype_quality < 0;
@@ -168,6 +172,7 @@ LINE: while (my $line = $vcf_obj->readLine){
         $next_update = $progressbar->update($line_count) if $line_count >= $next_update;
     }
     my %alleles = ();
+    my %min_allele_ratios = ();#collect the minimum allele depth ratio in called samples for comparison with --reject samples
     #do samples first for efficiency (if they don't have a variant allele)
     if (@samples){
 SAMPLE: foreach my $sample (@samples){
@@ -180,10 +185,30 @@ SAMPLE: foreach my $sample (@samples){
                         next LINE;#by default only keep variants present in all samples
                     }
                 }else{
-                    push (@{$alleles{$sample}}, $1, $2);
                     #samples only get added to %alleles hash if they are called and not reference
                     #because we compare the samples in %alleles hash only this allows variants 
                     #with no call to go through
+                    push (@{$alleles{$sample}}, $1, $2);
+                    
+                    if ($allele_ratio_cutoff){#find the min ad ratios for --samples
+                        my $ad = $vcf_obj->getSampleGenotypeField(sample => $sample, field => 'AD');
+                        if ($ad){ 
+                            my @ads = split(",", $ad);
+                            @ads = grep {! /\./ } @ads; #sometimes with no reads an AD of '.' is given
+                            my $dp = sum(@ads);
+                            if ($dp){
+                                for (my $i = 0; $i < @ads; $i++){
+                                    my $ratio = $ads[$i]/$dp;
+                                    if (exists $min_allele_ratios{$i}){
+                                        $min_allele_ratios{$i} = 
+                                            ($ratio >= $min_allele_ratios{$i} ? $ratio : $min_allele_ratios{$i});
+                                    }else{
+                                        $min_allele_ratios{$i} = $ratio;
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }else{
                 next LINE unless $check_presence_only or $num_matching;
@@ -209,9 +234,32 @@ SAMPLE: foreach my $sample (@samples){
                     my @ads = split(",", $ad);
                     @ads = grep {! /\./ } @ads; #sometimes with no reads an AD of '.' is given
                     my $dp = sum(@ads);
-                    for (my $i = 0; $i < @ads; $i++){
-                        if ($dp){
+                    if ($dp){
+                        for (my $i = 0; $i < @ads; $i++){
                             $reject_alleles{$i}++ if $ads[$i]/$dp >= $allele_depth_cutoff;
+                        }
+                    }
+                }
+            } 
+            if ($allele_ratio_cutoff){#find the max ad ratios for --reject
+                my $ad = $vcf_obj->getSampleGenotypeField(sample => $reject, field => 'AD');
+                if ($ad){ 
+                    my @ads = split(",", $ad);
+                    @ads = grep {! /\./ } @ads; #sometimes with no reads an AD of '.' is given
+                    my $dp = sum(@ads);
+                    if ($dp){
+                        for (my $i = 0; $i < @ads; $i++){
+                            my $ratio = $ads[$i]/$dp;
+                            if (exists $min_allele_ratios{$i}){
+                                #compare the ratio of $rejects ad/dp ratio to the minimum ad/dp 
+                                #for this allele in @samples
+                                if ( $min_allele_ratios{$i} == 0){
+                                    #don't div by 0, but if $ratio is greater than 0 filter
+                                    $reject_alleles{$i}++ if $ratio;
+                                }elsif ( $ratio/$min_allele_ratios{$i} >= $allele_ratio_cutoff){
+                                    $reject_alleles{$i}++;
+                                }
+                            }
                         }
                     }
                 }
@@ -342,6 +390,12 @@ Use this flag to look only for variants that are present only in --samples and a
 =item B<-d    --depth_allele_cutoff>
 
 Fraction cut-off for allele depth. When specified, the allele depth will be assessed for all samples specified using the --reject argument and any allele with a proportion of reads greater than or equal to this value will be rejected even if the sample genotypes are not called by the genotyper. For example, a value of 0.1 would reject any allele making up 10 % of reads for a sample specified by --reject even if the sample is called as homozygous reference. Must be a value between 0.0 and 1.0. 
+
+=item B<-x    --allele_ratio_cutoff>
+
+Relative fraction cut-off for allele depth between --samples and --reject.  When specified, for each allele the proportion allele depth will be calculated for all samples specified by --samples argument (if they have a genotype call for the given allele) and the minimum allele proportion identified amongst those samples. Similarly, the fraction allele depth for any of the samples specified using the --reject argument (even where the genotype has not been called) will be calculated. If the ratio of the fraction allele depth for any of the --reject samples compared to the minimum allele proportion in the --samples samples is equal to or higher than the value specified for this argument the allele will be filtered.
+
+For example, a variant allele might have a value for [allele depth]/[depth] in one --samples sample of 0.2 (i.e. the allele makes up 20 % of reads at this site for one sample). A --reject sample might have a a value for [allele depth]/[depth] value of 0.1 (i.e. the allele makes up 10 % of reads at this site for this sample). If the value for --allele_ratio_cutoff is given as 0.5 the allele will be filtered as the proportion of reads for the --reject sample is half that of a --samples sample. If the value for --allele_ratio_cutoff is given as 1.0 alleles will only be filtered if the proportion of reads for a --reject sample is equal to or higher than that of a samples --sample. If the value for --allele_ratio_cutoff is given as 0.1 alleles will be filtered if the proportion of reads for a --reject sample is 1/10th or higher than that of a samples --sample, and so on. In this manner you can filter variants if there is a similar level of evidence for the presence of the same variant in a --reject sample even if the genotype hasn't been called, in order to remove variants which are either likely spurious calls in --samples samples or spurious no-calls in --reject samples.
 
 =item B<-a    --aff_quality>
 
