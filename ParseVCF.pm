@@ -17,7 +17,6 @@ use strict;
 use warnings;
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use Data::Dumper;
-use Tabix;
 use Carp;
 use Scalar::Util qw (looks_like_number);
 our $AUTOLOAD;
@@ -589,7 +588,9 @@ sub setTabix{
         }
     }else{
         chomp ($self->{_tabix} = `which tabix`);
-        croak "Can't find tabix executable to read compressed VCF.  Please ensure it is installed and in your PATH.\n" if not $self->{_tabix};
+        croak "Can't find tabix executable to index compressed VCF.  Please ensure it is ".
+            "installed and in your PATH or index your VCF with tabix manually.\n" 
+            if not $self->{_tabix};
     }
     return $self->{_tabix} if defined wantarray;
 }
@@ -629,6 +630,9 @@ sub searchForPosition{
     return if not exists $args{pos} or not exists $args{chrom};
     #if compressed assume bgzip compression and try to read with tabix
     if ($self->{_file} =~ /\.gz$/){
+        eval "use Tabix; 1" 
+            or croak "Tabix module is not installed and VCF file $self->{_file} appears to be bgzip compressed.  ".
+            "  Please install Tabix.pm in order to search compressed VCFs.\n";
         if (not -e "$self->{_index}"){
             $self->setTabix if not $self->{_tabix}; 
             print STDERR "Indexing $self->{_file} with tabix.\n";
