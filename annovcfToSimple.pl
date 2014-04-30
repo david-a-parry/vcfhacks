@@ -33,7 +33,22 @@ Output file name. Defaults to [input name].xlsx (or [input name].txt if --text_o
 
 =item B<-s    --samples>
 
-Sample ids to output, optional. Ignored if --do_not_simplify argument is used.
+Sample ids to include in output. By default, genotypes for all samples in VCF will be written to the output, but if one or more samples are specified here only genotypes for these samples will be included in the output. Note, that this is ignored if --do_not_simplify argument is used.
+
+=item B<-p    --pedigree>
+
+If one or more valid PED files are provided here, samples found in the PED files will be included in the output if they exist in the VCF file (as opposed to the default of including all samples in the VCF). Can be used instead of or in conjunction with --samples argument.
+
+PED format - from the PLINK documentation:
+
+       The PED file is a white-space (space or tab) delimited file: the first six columns are mandatory:
+
+            Family ID
+            Individual ID
+            Paternal ID
+            Maternal ID
+            Sex (1=male; 2=female; other=unknown)
+            Phenotype
 
 =item B<-v    --vep>
 
@@ -93,7 +108,7 @@ Use with --vep option to output all available VEP fields.
 
 =item B<-d    --do_not_simplify>
 
-Use this flag to output all fields to Excel as they appear in the original VCF. Useful if you have a customised VCF but doesn't allow you to pick out individual samples.
+Use this flag to output all standard VCF fields to Excel as they appear in the original VCF, but when used in conjunction with --vep still provides information for VEP annotations in a user-friendly manner. Genotypes for all samples in the VCF will be printed when this option is used regardless of --samples or --pedigree settings.
 
 =item B<-t    --text_output>
 
@@ -146,6 +161,8 @@ use File::Basename;
 use FindBin;
 use lib "$FindBin::Bin";
 use ParseVCF;
+use ParsePedfile;
+
 
 ############
 
@@ -153,6 +170,7 @@ my $vcf;
 my @samples;
 my @classes;
 my @add;
+my @peds;
 my $output;
 my $config = {};
 my $help;
@@ -171,6 +189,7 @@ GetOptions($config,
     'input=s' =>\$vcf,
     'output=s' => \$output,
     'samples=s{,}' => \@samples,
+    'pedigree=s{,}' => \@peds,
     'manual' => \$man,
     'help' => \$help) or die "Syntax error.\n";
 pod2usage( -verbose => 2 ) if $man;
@@ -266,9 +285,22 @@ if (not @classes){
                 regulatory_region_amplification);
 }
 push (@classes, @add) if (@add);
+#check VEP classes
 foreach my $class (@classes){
         die "Error - variant class '$class' not recognised.\n" if not grep {/$class/i} @valid;
 }
+#get all samples from any peds specified
+my @ped_samples = ();
+if (@peds){
+    foreach my $pedigree (@peds){
+        my $ped_obj  = ParsePedfile->new(file => $pedigree);
+        push @ped_samples, $ped_obj->getAllSamples();
+    }
+    @ped_samples = sort @ped_samples;
+    my %seen = ();
+    @ped_samples = grep {! $seen{$_}++ } @ped_samples;
+}
+
 
 #excel related global variables
 my $workbook ;
@@ -314,6 +346,33 @@ if (defined $config->{vep}){
         }
     }
 }
+
+if (@ped_samples){
+    my @sample_found = ();
+    foreach my $s (@ped_samples){
+        if ($vcf_obj->checkSampleInVcf($s)){
+            push @sample_found, $s;
+        }
+    }
+    if (not @sample_found){
+        die "No samples from ped file(s) found in VCF.\n";
+    }
+    print "Found " . scalar(@sample_found) . " samples of " . scalar(@ped_samples) . 
+        " samples in ped files in VCF.\n";
+    push @samples, @sample_found;
+}
+#check samples or get them if none specified
+if (not @samples){
+    @samples = $vcf_obj->getSampleNames();
+}else{
+    my $header_string = $vcf_obj->getHeader(1);
+    foreach my $sample (@samples){
+        die "Can't find sample $sample in header line.\nHeader:\n$header_string\n" 
+            if not $vcf_obj->checkSampleInVcf($sample);
+    }
+}
+
+
 my $OUT;
 if (defined $config->{text_output}){
     open ($OUT, ">$output") or die "Can't open $output: $!\n";
@@ -341,17 +400,11 @@ sub process_as_text{
         print $OUT join("\t", @head_split);
         
     }else{
-        print $OUT join("\t", ("Chrom", "Pos", "SNP_ID", "Variant Percent Confidence", "Filters", "Genomic Ref", ));
-        if (not @samples){
-            @samples = $vcf_obj->getSampleNames();
-        }else{
-            foreach my $sample (@samples){
-                die "Can't find sample $sample in header line.\nHeader:\n$header_string\n" if not grep{/^$sample$/} $vcf_obj->getSampleNames();
-            }
-        }
+        #print $OUT join("\t", ("Chrom", "Pos", "SNP_ID", "Variant Percent Confidence", "Filters", "Genomic Ref", ));
+        print $OUT join("\t", ("Chrom", "Pos", "SNP_ID", "Variant Phred Quality", "Filters", "Genomic Ref", ));
         print $OUT join("\t", @samples) ."\t" ;
         print $OUT join(" Allele Depth\t", @samples) ." Allele Depth\t" ;
-        print $OUT join(" Genotype Confidence\t", @samples) ." Genotype Confidence\t" ;
+        print $OUT join(" Phred Genotype Confidence\t", @samples) ." Phred Genotype Confidence\t" ;
  #       print $OUT join(" Scaled Percent Probably Liklihoods\t", @samples) ." Scaled Percent Probably Liklihoods" ;
         if (defined $config->{gene_anno}){
             my $i = 0; 
@@ -436,7 +489,8 @@ sub write_simplified_vcf_to_text{
     foreach my $varfield ($vcf_obj->getVariantField("CHROM"), $vcf_obj->getVariantField("POS"), $vcf_obj->getVariantField("ID"),){ 
         push @output, $varfield;
     }
-    push @output, 100 - (100 * (10**(-($vcf_obj->getVariantField("QUAL"))/10)));
+    #push @output, 100 - (100 * (10**(-($vcf_obj->getVariantField("QUAL"))/10)));
+    push @output, $vcf_obj->getVariantField("QUAL");
     push @output, $vcf_obj->getVariantField("FILTER");
     push @output, $vcf_obj->getVariantField("REF");
     my @form = split(":", $vcf_obj->getVariantField("FORMAT"));
@@ -465,7 +519,8 @@ sub write_simplified_vcf_to_text{
         my $genotype_quality = "-";
         my $gq = $vcf_obj->getSampleGenotypeField(sample => $sample, field => "GQ");
         if (defined $gq && $gq =~ /(\d+\.*\d*)+/){
-            $genotype_quality = 100 - (100 * 10**(-$gq/10));
+            #$genotype_quality = 100 - (100 * 10**(-$gq/10));
+            $genotype_quality = $gq;
         }
         push (@sample_genotype_quality, $genotype_quality);
     }
@@ -579,13 +634,6 @@ sub process_as_xlsx{
             $worksheet->write($row, $col++, $_, $header_formatting);
         }
 
-        if (not @samples){
-            @samples = $vcf_obj->getSampleNames();
-        }else{
-            foreach my $sample (@samples){
-                die "Can't find sample $sample in header line.\nHeader:\n$header_string\n" if not grep{/^$sample$/} $vcf_obj->getSampleNames();
-            }
-        }
         foreach my $sample (@samples){
             $worksheet->write($row, $col++, $sample, $header_formatting);
         }
@@ -594,7 +642,7 @@ sub process_as_xlsx{
             $worksheet->write($row, $col++, "$sample Allele Depth", $header_formatting);
         }
         foreach my $sample (@samples){
-            $worksheet->write($row, $col++, "$sample Genotype Confidence", $header_formatting);
+            $worksheet->write($row, $col++, "$sample Phred Genotype Confidence", $header_formatting);
         }
         if (defined $config->{gene_anno}){
             my $i = 0; 
@@ -745,7 +793,8 @@ sub write_simplified_vcf_to_excel{
     foreach my $varfield ($vcf_obj->getVariantField("CHROM"), $vcf_obj->getVariantField("POS"), $vcf_obj->getVariantField("ID"),){ 
         write_worksheet($lines, $varfield, $worksheet, $row, $col++, $std_formatting);
     }
-    write_worksheet($lines, 100 - (100 * (10**(-($vcf_obj->getVariantField("QUAL"))/10))), $worksheet, $row, $col++, $std_formatting, );
+    #write_worksheet($lines, 100 - (100 * (10**(-($vcf_obj->getVariantField("QUAL"))/10))), $worksheet, $row, $col++, $std_formatting, );
+    write_worksheet($lines, $vcf_obj->getVariantField("QUAL"), $worksheet, $row, $col++, $std_formatting, );
     write_worksheet($lines, $vcf_obj->getVariantField("FILTER"), $worksheet, $row, $col++, $std_formatting);
     write_worksheet($lines, $vcf_obj->getVariantField("REF"), $worksheet, $row, $col++, $std_formatting);
     my @all_alleles = $vcf_obj->readAlleles();
@@ -773,7 +822,8 @@ sub write_simplified_vcf_to_excel{
         my $genotype_quality = "-";
         my $gq = $vcf_obj->getSampleGenotypeField(sample => $sample, field => "GQ");
         if (defined $gq && $gq =~ /(\d+\.*\d*)+/){
-            $genotype_quality = 100 - (100 * 10**(-$gq/10));
+       #     $genotype_quality = 100 - (100 * 10**(-$gq/10));
+            $genotype_quality = $gq;
         }
         push (@sample_genotype_quality, $genotype_quality);
     }
