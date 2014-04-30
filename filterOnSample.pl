@@ -76,7 +76,7 @@ pod2usage(-message=> "syntax error: --input (-i) argument is required.\n") if no
 pod2usage(-message=> "syntax error: you must specify samples using at least one of the arguments --samples (-s), --reject (-r) or --reject_all_except (-x).\n") if not @samples and not @reject and not @reject_except;
 pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) if ($quality < 0 );
 pod2usage(-message => "--depth_allele_cutoff must be a value between 0.00 and 1.00.\n", -exitval => 2) if ($allele_depth_cutoff < 0 or $allele_depth_cutoff > 1.0 );
-pod2usage(-message => "--allele_ratio_cutoff must be a value between 0.00 and 1.00.\n", -exitval => 2) if ($allele_ratio_cutoff < 0 or $allele_ratio_cutoff > 1.0 );
+pod2usage(-message => "--allele_ratio_cutoff must be a greater than 0.00.\n", -exitval => 2) if ($allele_ratio_cutoff < 0 );
 if (defined $aff_genotype_quality){
     pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) 
         if $aff_genotype_quality < 0;
