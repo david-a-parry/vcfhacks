@@ -4,6 +4,37 @@ This project comprises a set of perl scripts and modules that may be useful for 
 
 __UPDATE__
 
+VERSION 0.1.6:
+
+-added --aff_genotype_quality and --unaff_genotype_quality arguments to findBiallelicVep.pl, filterOnSample.pl and filterVcfOnVcf.pl
+
+-filterVcfOnVcf.pl now only filters if all ALT alleles in input are matched by the filter VCFs.
+
+-annotateSnps.pl, filterOnEvsMaf.pl and filterVcfOnVcf.pl should now do a better job of resolving different allele representations (due to addition of minimizeAlleles function in ParseVCF.pm) plus bug fixes.
+
+-removed findDenovo.pl in favour of more sophisticated options in filterOnSample.pl (see below). Recommended method for finding de novo variants is now (after normal filtering and annotation) to use a command something like: 
+
+filterOnSample.pl -i [var.vcf] -s [sample ID of child] -r [sample ID of mother] [sample ID of father] -c -d 0.1 [options]
+
+...to only output variants that are confirmed absent in the mother and father (i.e. have a called genotype) and do not have a variant allele making up 10 % or more reads in the mother or father. Alternatively:
+
+filterOnSample.pl -i [var.vcf] -s [sample ID of child] -r [sample ID of mother] [sample ID of father] -c -z 0.2 [options]
+
+...will similarly only output variants that are confirmed absent in the mother and father but also filter variants where either the mother or father have a proportion of variant allele reads equal to or greater than 20 % of the proportion of variant allele reads in the child.
+
+-filterOnSample.pl now has --confirm_missing option. When this option is used, variants are only printed to output if they are present in --samples AND are confirmed as not present in --reject samples. Variants that contain no calls (or genotype qualities below the --un_quality threshold) in --reject samples will be filtered. In this way you may identify likely de novo variants in a sample specified by --samples by specifying parental samples with the --reject option, thus avoiding variants where there is not sufficient information to confirm de novo inheritance.
+
+-filterOnSample.pl now has --depth_allele_cutoff option for assessing allele depth in all samples specified using the --reject argument. Any allele with a proportion of reads greater than or equal to this value will be rejected even if the genotypes are not called by the genotyper. For example, a value of 0.1 will reject any allele making up 10 % of reads for a sample specified by --reject even if the sample is called as homozygous reference.
+
+-filterOnSample.pl now has --allele_ratio_cutoff option for comparing the ratio of variant/total allele depths between samples specified using --samples and samples specified using --reject in order to filter variants based on these values.
+
+-added findBiallelicSnpEff.pl for identification of potential biallelic variants using SnpEff variant functional annotations.
+
+-made default output of annovcfToSimple.pl more user-friendly (plus minor bug fixes and code improvements).
+
+-added option to annovcfToSimple.pl to use PED files to specify which samples to output genotypes for.
+
+
 VERSION 0.1.5:
 
 28/3/14
