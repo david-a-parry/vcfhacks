@@ -6,6 +6,8 @@ __UPDATE__
 
 VERSION 0.1.6:
 
+-Tabix.pm installation is now only an absolute requirement if you are actually processing bgzip compressed VCFs. Scripts will only error and exit in the absence of Tabix.pm  when processing compressed VCFs.
+
 -added --aff_genotype_quality and --unaff_genotype_quality arguments to findBiallelicVep.pl, filterOnSample.pl and filterVcfOnVcf.pl
 
 -filterVcfOnVcf.pl now only filters if all ALT alleles in input are matched by the filter VCFs.
@@ -29,6 +31,8 @@ filterOnSample.pl -i [var.vcf] -s [sample ID of child] -r [sample ID of mother] 
 -filterOnSample.pl now has --allele_ratio_cutoff option for comparing the ratio of variant/total allele depths between samples specified using --samples and samples specified using --reject in order to filter variants based on these values.
 
 -added findBiallelicSnpEff.pl for identification of potential biallelic variants using SnpEff variant functional annotations.
+
+-added rankOnCaddScore.pl to rank or filter variants on their CADD score (http://cadd.gs.washington.edu/)
 
 -made default output of annovcfToSimple.pl more user-friendly (plus minor bug fixes and code improvements).
 
@@ -101,7 +105,7 @@ __INSTALLATION__
 
 Unzip the downloaded file and ensure you keep the .pl scripts in the same directory as the .pm module files.  The exceptions to this are the two Variant Effect Predictor (VEP) plugin modules (SpliceConsensus.pm and SpliceConsensusFilter.pm) which should be installed in your VEP cache 'Plugins' folder if you want to use them. The SpliceConsensus.pm can be used for variant filtering purposes in getFunctionalVariantsVep.pl and findBiallelicVep.pl.
 
-You will also need to install the Tabix.pm perl module by Heng Li. Download the latest version of tabix from github (https://github.com/samtools/tabix) or clone the git repository (git clone https://github.com/samtools/tabix.git). If you downloaded the zipped version unzip to create the tabix directory. Next, cd into the new tabix directory and run 'make', cd into the 'perl' subdirectory, run 'perl Makefile.PL' and 'make test'. If tests succeed run '[sudo] make install' to complete Tabix.pm installation. If you get the error 'Subroutine Tabix::tabix_open redefined...' this is harmless and can be removed by replacing: 
+If you want to search bgzip compressed VCFs you will also need to install the Tabix.pm perl module by Heng Li. Download the latest version of tabix from github (https://github.com/samtools/tabix) or clone the git repository (git clone https://github.com/samtools/tabix.git). If you downloaded the zipped version unzip to create the tabix directory. Next, cd into the new tabix directory and run 'make', cd into the 'perl' subdirectory, run 'perl Makefile.PL' and 'make test'. If tests succeed run '[sudo] make install' to complete Tabix.pm installation. If you get the error 'Subroutine Tabix::tabix_open redefined...' this is harmless and can be removed by replacing: 
 
 <pre><code>require XSLoader;
 XSLoader::load('Tabix', $VERSION);
