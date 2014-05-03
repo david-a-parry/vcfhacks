@@ -951,8 +951,23 @@ sub checkCoordinateSorted{
     return 1;
 }
 
-sub simplifyVariant{
-
+sub getInfoFields{
+    #return a hash of INFO IDs, to anon hashes of 
+    #Number, Type and Description
+    my ($self) = @_;
+    my %info = ();
+    foreach my $h (@{$self->{_metaHeader}}){
+        if ($h =~ /^##INFO=<ID=(\w+),Number=(\w+),Type=(\w+),Description=(.+)>$/){
+            $info{$1} = 
+                {
+                Number => $2,
+                Type => $3,
+                Description => $4,
+                };
+        }
+    }
+    $self->{INFO_FIELDS} = \%info;
+    return %info;
 }
 
 
@@ -1136,65 +1151,65 @@ sub splitMultiAllelicVariants{
         }
         push @line, $alleles[$i];
         foreach my $field (qw(QUAL FILTER INFO FORMAT)){
-                        if ($field eq 'INFO'){
+            if ($field eq 'INFO'){
                 push @line, $self->getVariantField($field) .";ParseVCF_split_variant-sample_fields_may_be_inaccurate";
-                        }else{
+            }else{
                 push @line, $self->getVariantField($field);
-                        }
+            }
         }
-                foreach my $sample ($self->getSampleNames){
-                    my @sample_string = ();
-                    my $call = $self->getSampleVariant($sample);
-                    if ($call =~ /^\.[\/\|]\.$/){#no call
-                       push @line, $call;
-                       next;
-                    }else{
-                        my $delimiter = '/';
+        foreach my $sample ($self->getSampleNames){
+            my @sample_string = ();
+            my $call = $self->getSampleVariant($sample);
+            if ($call =~ /^\.[\/\|]\.$/){#no call
+               push @line, $call;
+               next;
+            }else{
+                my $delimiter = '/';
                 foreach my $format (sort { 
-                                $self->{_currentVar}->{varFormat}->{$a} <=> $self->{_currentVar}->{varFormat}->{$b} 
-                                } keys %{$self->{_currentVar}->{varFormat}}){
-                            if ($format eq 'GT'){#convert genotype to only include REF and $alleles[$i]
-                                my $geno = $self->getSampleGenotypeField(sample => $sample, field => $format);
-                                my @gt = split(/[\/\|]/, $geno);
-                                foreach my $g (@gt){
-                                    if ($g ne '.' && $g != $call_code){#not a no call and not current allele call code
-                                        $g = 0;
-                                    }elsif($g == $call_code){
-                                        $g = 1;
-                                    }
-                                }
-                                if ($geno =~ /\d+(\||\/)\d+/){
-                                    $delimiter = $1;
-                                }
-                                push @sample_string, join($delimiter, @gt);
-                            }elsif ($format eq 'AD'){
-                                my $allele_depth = $self->getSampleGenotypeField(sample => $sample, field => $format);
-                                if ($allele_depth eq '.'){
-                                    push @sample_string, $allele_depth;
-                                }else{
-                                    my @ad = split(",", $allele_depth);
-                                    push @sample_string, "$ad[0],$ad[$call_code]";
-                                }
-                            }elsif ($format eq 'PL'){
-                            #there will be a PL for each possible genotype.
-                            #this cycles through each possible genotype and if it contains the current ALT allele we add 
-                            #it to our new PL array
-                                my @pl = split(",", $self->getSampleGenotypeField(sample => $sample, field => $format));
-                                my @new_pl = ();
-                                for (my $j = 0; $j < @possible_codes; $j++){
-                                    if ($possible_codes[$j] =~ /^(0|$call_code)[\/\|](0|$call_code)$/){
-                                        push @new_pl, $pl[$j];
-                                    }
-                                }
-                                push @sample_string, join(",", @new_pl);
-                            }else{
-                                push @sample_string, $self->getSampleGenotypeField(sample => $sample, field => $format);
+                   $self->{_currentVar}->{varFormat}->{$a} <=> $self->{_currentVar}->{varFormat}->{$b} 
+                    } keys %{$self->{_currentVar}->{varFormat}}){
+                    if ($format eq 'GT'){#convert genotype to only include REF and $alleles[$i]
+                        my $geno = $self->getSampleGenotypeField(sample => $sample, field => $format);
+                        my @gt = split(/[\/\|]/, $geno);
+                        foreach my $g (@gt){
+                            if ($g ne '.' && $g != $call_code){#not a no call and not current allele call code
+                                $g = 0;
+                            }elsif($g == $call_code){
+                                $g = 1;
                             }
                         }
-                        push @line, join(":", @sample_string);
+                        if ($geno =~ /\d+(\||\/)\d+/){
+                            $delimiter = $1;
+                        }
+                        push @sample_string, join($delimiter, @gt);
+                    }elsif ($format eq 'AD'){
+                        my $allele_depth = $self->getSampleGenotypeField(sample => $sample, field => $format);
+                        if ($allele_depth eq '.'){
+                            push @sample_string, $allele_depth;
+                        }else{
+                            my @ad = split(",", $allele_depth);
+                            push @sample_string, "$ad[0],$ad[$call_code]";
+                        }
+                    }elsif ($format eq 'PL'){
+                    #there will be a PL for each possible genotype.
+                    #this cycles through each possible genotype and if it contains the current ALT allele we add 
+                    #it to our new PL array
+                        my @pl = split(",", $self->getSampleGenotypeField(sample => $sample, field => $format));
+                        my @new_pl = ();
+                        for (my $j = 0; $j < @possible_codes; $j++){
+                            if ($possible_codes[$j] =~ /^(0|$call_code)[\/\|](0|$call_code)$/){
+                                push @new_pl, $pl[$j];
+                            }
+                        }
+                        push @sample_string, join(",", @new_pl);
+                    }else{
+                        push @sample_string, $self->getSampleGenotypeField(sample => $sample, field => $format);
                     }
                 }
-            push @splitLines, join("\t", @line);
+                push @line, join(":", @sample_string);
+            }
+        }
+        push @splitLines, join("\t", @line);
     }
     return @splitLines;
 }
@@ -1204,6 +1219,33 @@ sub getVariantID{
     $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
     return $self->{_currentVar}->{ID};
 }
+
+sub getVariantInfoField{
+    my ($self, $info_field) = @_;
+    if (not defined $self->{INFO_FIELDS}){
+        $self->getInfoFields();
+    }
+    if (not exists $self->{INFO_FIELDS}->{$info_field}){
+        carp "INFO field $info_field does not exist in VCF header.\n";
+        return;
+    }else{
+        my @info = split(';', $self->getVariantField("INFO"));
+        if ($self->{INFO_FIELDS}->{$info_field}->{Type} eq 'Flag'){
+            return 1 if grep {/^$info_field$/} @info;
+        }else{
+            #check type here?
+            #check Number here?
+            foreach my $inf (@info){
+                if ($inf =~ /^$info_field=(\S+)/){
+                    return $1;
+                }
+            }
+        }
+    }
+    return;
+}
+
+
 
 sub getVariantField{
     my ($self, $field) = @_;
@@ -1217,6 +1259,7 @@ sub getVariantField{
         return;
     }
 }
+
 
 sub getValidFields{
     my @valid_fields = qw(CHROM POS ID REF ALT QUAL FILTER INFO FORMAT);
