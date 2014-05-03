@@ -106,6 +106,10 @@ Specify one or more VEP fields to output. Use of --vep without this flag outputs
 
 Use with --vep option to output all available VEP fields.
 
+=item B<-n    --info_fields>
+
+One or more INFO field IDs from to output as columns. These are case sensitive and must appear exactly as defined in the VCF header. By default, if --info_fields is not specified, CaddPhredScore INFO fields will be written to the output automatically if found.
+
 =item B<-d    --do_not_simplify>
 
 Use this flag to output all standard VCF fields to Excel as they appear in the original VCF, but when used in conjunction with --vep still provides information for VEP annotations in a user-friendly manner. Genotypes for all samples in the VCF will be printed when this option is used regardless of --samples or --pedigree settings.
@@ -184,9 +188,10 @@ GetOptions($config,
     'do_not_simplify',
     'canonical_only',
     'vep',
-    'fields=s{,}', => @{$config->{fields}}, 
+    'fields=s{,}', => \@{$config->{fields}}, 
     'all',
-    'input=s' =>\$vcf,
+    'n|info_fields=s{,}', => \@{$config->{info_fields}},
+    'i|input=s' =>\$vcf,
     'output=s' => \$output,
     'samples=s{,}' => \@samples,
     'pedigree=s{,}' => \@peds,
@@ -319,7 +324,8 @@ if (not $output){
 }else{
     $output .= ".$out_ext" if $output !~ /\.$out_ext$/;
 }
-my @fields;
+my @fields = ();
+my @info_fields = ();
 my $vcf_obj = ParseVCF->new( file=> $vcf);
 if (defined $config->{vep}){
     my $vep_header = $vcf_obj->readVepHeader();
@@ -346,6 +352,20 @@ if (defined $config->{vep}){
         }
     }
 }
+my %info_fields = $vcf_obj->getInfoFields();
+if (@{$config->{info_fields}}){
+    foreach my $f (@{$config->{info_fields}}){
+        if (exists $info_fields{$f}){
+            push @info_fields, $f;
+        }else{
+            print STDERR "INFO field $f not found in header and will not be included in output.\n";
+        }
+    }
+}elsif(exists $info_fields{CaddPhredScore}){
+#include CaddPhredScore annotation by default if it exists
+    push @info_fields, "CaddPhredScore";
+}
+
 
 if (@ped_samples){
     my @sample_found = ();
@@ -390,6 +410,10 @@ sub process_as_text{
     if (defined $config->{vep}){
         print $OUT "#";
         print $OUT join("\t", @fields) ."\t";
+    }
+    if (@info_fields){
+        print $OUT "#" if not defined $config->{vep};
+        print $OUT join("\t", @info_fields) ."\t";
     }
     #GET HEADER INFO
     my $header_string = $vcf_obj->getHeader(1);
@@ -474,11 +498,20 @@ CLASS:          foreach my $class (@classes){
                 }
             }
             print $OUT join("\t", @csq_values) ."\t";
-            print $OUT join("\t", @output) ."\n";
         }
-    }else{
-        print $OUT join("\t", @output) ."\n";
     }
+    
+    if(@info_fields){
+        foreach my $f (@info_fields){
+            my $value = $vcf_obj->getVariantInfoField($f);
+            if ($value){
+                print $OUT "$value\t";
+            }else{
+                print $OUT ".\t";
+            }
+        }
+    }
+    print $OUT join("\t", @output) ."\n";
 }
 
 ####################################################
@@ -578,11 +611,19 @@ CLASS:          foreach my $class (@classes){
                 }
                 }
             print $OUT join("\t", @csq_values) ."\t";
-            print $OUT join("\t", @output);
         }
-    }else{
-        print $OUT join("\t", @output);
     }
+    if(@info_fields){
+        foreach my $f (@info_fields){
+            my $value = $vcf_obj->getVariantInfoField($f);
+            if ($value){
+                print $OUT "$value\t";
+            }else{
+                print $OUT ".\t";
+            }
+        }
+    }
+    print $OUT join("\t", @output);
     if (ref $gene_anno_cols eq 'ARRAY'){
         my @geneanno;
         foreach my $field (@$gene_anno_cols){
@@ -618,6 +659,11 @@ sub process_as_xlsx{
     if (defined $config->{vep}){
         foreach my $csq (@fields){
             $worksheet->write($row, $col++, $csq, $header_formatting);
+        }
+    }
+    if (@info_fields){
+        foreach my $f (@info_fields){
+            $worksheet->write($row, $col++, $f, $header_formatting);
         }
     }
     #GET HEADER INFO
@@ -749,6 +795,14 @@ sub write_line_to_excel{
         }
         $lines = 1;
     }
+    foreach my $f (@info_fields){
+        my $value = $vcf_obj->$vcf_obj->getVariantInfoField($f);
+        if (defined $value){
+            write_worksheet($lines, $value, $worksheet, $row, $col++, $std_formatting);
+        }else{
+            write_worksheet($lines, '.', $worksheet, $row, $col++, $std_formatting);
+        }
+    }
     foreach my $field (split("\t", $vcf_obj->get_currentLine)){
         write_worksheet($lines, $field, $worksheet, $row, $col++, $std_formatting);
     }
@@ -789,6 +843,14 @@ sub write_simplified_vcf_to_excel{
             $worksheet->write($row, $col++, "-");
         }
         $lines = 1;
+    }
+    foreach my $f (@info_fields){
+        my $value = $vcf_obj->getVariantInfoField($f);
+        if (defined $value){
+            write_worksheet($lines, $value, $worksheet, $row, $col++, $std_formatting);
+        }else{
+            write_worksheet($lines, '.', $worksheet, $row, $col++, $std_formatting);
+        }
     }
     foreach my $varfield ($vcf_obj->getVariantField("CHROM"), $vcf_obj->getVariantField("POS"), $vcf_obj->getVariantField("ID"),){ 
         write_worksheet($lines, $varfield, $worksheet, $row, $col++, $std_formatting);
