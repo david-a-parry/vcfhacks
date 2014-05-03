@@ -368,9 +368,6 @@ Show manual page.
 =cut
 
 
-=back
-=cut
-
 =head1 EXAMPLES
 
   rankOnCaddScore.pl -i input.vcf -o cadd_ranked.vcf -c cadd_file1.tsv.gz cadd_file2.tsv.gz
