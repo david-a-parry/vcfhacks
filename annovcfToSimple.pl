@@ -106,6 +106,10 @@ Specify one or more VEP fields to output. Use of --vep without this flag outputs
 
 Use with --vep option to output all available VEP fields.
 
+=item B<-n    --info_fields>
+
+One or more INFO field IDs from to output as columns. These are case sensitive and must appear exactly as defined in the VCF header. By default, if --info_fields is not specified, CaddPhredScore INFO fields will be written to the output automatically if found.
+
 =item B<-d    --do_not_simplify>
 
 Use this flag to output all standard VCF fields to Excel as they appear in the original VCF, but when used in conjunction with --vep still provides information for VEP annotations in a user-friendly manner. Genotypes for all samples in the VCF will be printed when this option is used regardless of --samples or --pedigree settings.
@@ -184,9 +188,10 @@ GetOptions($config,
     'do_not_simplify',
     'canonical_only',
     'vep',
-    'fields=s{,}', => @{$config->{fields}}, 
+    'fields=s{,}', => \@{$config->{fields}}, 
     'all',
-    'input=s' =>\$vcf,
+    'n|info_fields=s{,}', => \@{$config->{info_fields}},
+    'i|input=s' =>\$vcf,
     'output=s' => \$output,
     'samples=s{,}' => \@samples,
     'pedigree=s{,}' => \@peds,
@@ -319,7 +324,8 @@ if (not $output){
 }else{
     $output .= ".$out_ext" if $output !~ /\.$out_ext$/;
 }
-my @fields;
+my @fields = ();
+my @info_fields = ();
 my $vcf_obj = ParseVCF->new( file=> $vcf);
 if (defined $config->{vep}){
     my $vep_header = $vcf_obj->readVepHeader();
@@ -346,6 +352,20 @@ if (defined $config->{vep}){
         }
     }
 }
+my %info_fields = $vcf_obj->getInfoFields();
+if (@{$config->{info_fields}}){
+    foreach my $f (@{$config->{info_fields}}){
+        if (exists $info_fields{$f}){
+            push @info_fields, $f;
+        }else{
+            print STDERR "INFO field $f not found in header and will not be included in output.\n";
+        }
+    }
+}elsif(exists $info_fields{CaddPhredScore}){
+#include CaddPhredScore annotation by default if it exists
+    push @info_fields, "CaddPhredScore";
+}
+
 
 if (@ped_samples){
     my @sample_found = ();
@@ -386,7 +406,6 @@ if (defined $config->{text_output}){
 
 ###########################
 sub process_as_text{
-    open (my $OUT, ">$output") or die "Can't open $output: $!\n";
     if (defined $config->{vep}){
         print $OUT "#";
         print $OUT join("\t", @fields) ."\t";
@@ -397,19 +416,29 @@ sub process_as_text{
     my @head_split= split("\t", $header_string);
     my @anno_columns  = ();
     if (defined $config->{do_not_simplify}){
-        print $OUT join("\t", @head_split);
-        
+        if (@info_fields){
+            chomp @head_split;
+            print $OUT join("\t", @head_split);
+            print $OUT join("\t", @info_fields) ."\n";
+        }else{
+            print $OUT join("\t", @head_split);
+        }
     }else{
         #print $OUT join("\t", ("Chrom", "Pos", "SNP_ID", "Variant Percent Confidence", "Filters", "Genomic Ref", ));
         print $OUT join("\t", ("Chrom", "Pos", "SNP_ID", "Variant Phred Quality", "Filters", "Genomic Ref", ));
         print $OUT join("\t", @samples) ."\t" ;
         print $OUT join(" Allele Depth\t", @samples) ." Allele Depth\t" ;
-        print $OUT join(" Phred Genotype Confidence\t", @samples) ." Phred Genotype Confidence\t" ;
+        print $OUT join(" Phred Genotype Confidence\t", @samples) ." Phred Genotype Confidence" ;
  #       print $OUT join(" Scaled Percent Probably Liklihoods\t", @samples) ." Scaled Percent Probably Liklihoods" ;
+        if (@info_fields){
+            print $OUT "\t";
+            print $OUT join("\t", @info_fields) ;
+        }
         if (defined $config->{gene_anno}){
             my $i = 0; 
             $i++ until $head_split[$i] =~ /CHROM/;
             @anno_columns = @head_split[0..$i-1];
+            print $OUT "\t";
             print $OUT join("\t", @anno_columns);
         }
         print $OUT "\n";
@@ -429,6 +458,16 @@ sub process_as_text{
 ####################################################
 sub write_line_to_text{
     my @output = split("\t", $vcf_obj->get_currentLine);
+    if(@info_fields){
+        foreach my $f (@info_fields){
+            my $value = $vcf_obj->getVariantInfoField($f);
+            if ($value){
+                push @output, "$value\t";
+            }else{
+                push @output, ".\t";
+            }
+        }
+    }
     if (defined $config->{vep}){
         my @csq = ();
         @csq = $vcf_obj->getVepFields(\@fields);
@@ -476,9 +515,8 @@ CLASS:          foreach my $class (@classes){
             print $OUT join("\t", @csq_values) ."\t";
             print $OUT join("\t", @output) ."\n";
         }
-    }else{
-        print $OUT join("\t", @output) ."\n";
     }
+    print $OUT join("\t", @output) ."\n";
 }
 
 ####################################################
@@ -533,6 +571,22 @@ sub write_simplified_vcf_to_text{
     foreach my $sample_gq (@sample_genotype_quality){
         push @output, $sample_gq;
     }
+    if(@info_fields){
+        foreach my $f (@info_fields){
+            my $value = $vcf_obj->getVariantInfoField($f);
+            if ($value){
+                push @output, "$value\t";
+            }else{
+                push @output, ".\t";
+            }
+        }
+    }
+    if (ref $gene_anno_cols eq 'ARRAY'){
+        my @geneanno;
+        foreach my $field (@$gene_anno_cols){
+            push @output, $vcf_obj->getCustomField($field);
+        }
+    }
     if ($config->{vep}){
         my @csq = $vcf_obj->getVepFields(\@fields);
         my %vep_allele ; 
@@ -578,19 +632,11 @@ CLASS:          foreach my $class (@classes){
                 }
                 }
             print $OUT join("\t", @csq_values) ."\t";
-            print $OUT join("\t", @output);
+            print $OUT join("\t", @output) . "\n";
         }
     }else{
-        print $OUT join("\t", @output);
+        print $OUT join("\t", @output) ."\n";
     }
-    if (ref $gene_anno_cols eq 'ARRAY'){
-        my @geneanno;
-        foreach my $field (@$gene_anno_cols){
-            push @geneanno, $vcf_obj->getCustomField($field);
-        }
-        print $OUT join("\t", @geneanno);
-    }
-    print $OUT "\n";
 }
 
     
@@ -618,6 +664,11 @@ sub process_as_xlsx{
     if (defined $config->{vep}){
         foreach my $csq (@fields){
             $worksheet->write($row, $col++, $csq, $header_formatting);
+        }
+    }
+    if (@info_fields){
+        foreach my $f (@info_fields){
+            $worksheet->write($row, $col++, $f, $header_formatting);
         }
     }
     #GET HEADER INFO
@@ -749,6 +800,14 @@ sub write_line_to_excel{
         }
         $lines = 1;
     }
+    foreach my $f (@info_fields){
+        my $value = $vcf_obj->getVariantInfoField($f);
+        if (defined $value){
+            write_worksheet($lines, $value, $worksheet, $row, $col++, $std_formatting);
+        }else{
+            write_worksheet($lines, '.', $worksheet, $row, $col++, $std_formatting);
+        }
+    }
     foreach my $field (split("\t", $vcf_obj->get_currentLine)){
         write_worksheet($lines, $field, $worksheet, $row, $col++, $std_formatting);
     }
@@ -789,6 +848,14 @@ sub write_simplified_vcf_to_excel{
             $worksheet->write($row, $col++, "-");
         }
         $lines = 1;
+    }
+    foreach my $f (@info_fields){
+        my $value = $vcf_obj->getVariantInfoField($f);
+        if (defined $value){
+            write_worksheet($lines, $value, $worksheet, $row, $col++, $std_formatting);
+        }else{
+            write_worksheet($lines, '.', $worksheet, $row, $col++, $std_formatting);
+        }
     }
     foreach my $varfield ($vcf_obj->getVariantField("CHROM"), $vcf_obj->getVariantField("POS"), $vcf_obj->getVariantField("ID"),){ 
         write_worksheet($lines, $varfield, $worksheet, $row, $col++, $std_formatting);
