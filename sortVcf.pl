@@ -19,7 +19,7 @@ pod2usage (-verbose => 2) if $opts{manual};
 pod2usage (-verbose => 1) if $opts{help};
 pod2usage(-exitval => 2, -message => "Syntax error") if not $opts{input}; 
 
-my $vcf_obj = ParseVCF->new(file => $opts{input});
+my $vcf_obj = ParseVCF->new(file => $opts{input}, noLineCount => 1);
 if ($opts{output}){
     $vcf_obj->sortVcf(output => $opts{output});
 }else{
