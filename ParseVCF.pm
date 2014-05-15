@@ -956,9 +956,10 @@ sub getInfoFields{
     #return a hash of INFO IDs, to anon hashes of 
     #Number, Type and Description
     my ($self) = @_;
+    return %{$self->{INFO_FIELDS}} if exists $self->{INFO_FIELDS};
     my %info = ();
     foreach my $h (@{$self->{_metaHeader}}){
-        if ($h =~ /^##INFO=<ID=(\w+),Number=(\w+),Type=(\w+),Description=(.+)>$/){
+        if ($h =~ /^##INFO=<ID=(\w+),Number=([\.\w+]),Type=(\w+),Description=(.+)>$/){
             $info{$1} = 
                 {
                 Number => $2,
