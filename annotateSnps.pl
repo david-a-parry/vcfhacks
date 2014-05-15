@@ -83,28 +83,53 @@ for (my $i = 0; $i < @dbsnp; $i++){
     }
     #my $total_snp = $snp_obj->countLines("variants") ;
     #print STDERR "$dbsnp[$i] has $total_snp variants\n" ;
-    push @snp_headers, $snp_obj->getHeader(0);
+    push @snp_headers, split("\n", $snp_obj->getHeader(0));
 }
 
+my @add_head = ();
 if ($opts{pathogenic}){
-    if (not grep {/##INFO=<ID=CLNSIG/} @snp_headers and not grep {/##INFO=<ID=SCS/} @snp_headers ){
+    push @add_head,  grep {/##INFO=<ID=CLNSIG,/} @snp_headers;
+    push @add_head, grep {/##INFO=<ID=SCS,/} @snp_headers ;
+    if (not @add_head){
         print STDERR "WARNING - can't find CLNSIG or SCS fields in dbSNP file headers, your SNP reference files probably don't have pathogenic annotations.\n";
     }
 }
 
 if ($opts{build}){
-    if (not grep {/##INFO=<ID=dbSNPBuildID/} @snp_headers ){
+    my  @build_head = grep {/##INFO=<ID=dbSNPBuildID,/} @snp_headers;
+    if (not @build_head){
         print STDERR "WARNING - can't find dbSNPBuildID fields in dbSNP file headers, your SNP reference files probably don't have readable dbSNP build annotations.\n";
+    }else{
+        push @add_head, @build_head;
     }
 }
 if ($opts{freq}){
-    if (not grep {/##INFO=<ID=(GMAF|AF|G5A|G5)/} @snp_headers ){
-        print STDERR "WARNING - can't find allele frequency fields (GMAF, AF, G5A or G5) in dbSNP file headers, your SNP reference files probably don't have readable frequency data.\n";
+    my @freq_head = grep {/##INFO=<ID=(GMAF|CAF|G5A|G5),/} @snp_headers;
+    if (not @freq_head){
+        print STDERR "WARNING - can't find allele frequency fields (GMAF, CAF, G5A or G5) in dbSNP file headers, your SNP reference files probably don't have readable frequency data.\n";
+    }else{
+        push @add_head, @freq_head;
     }
 }
 
-print $OUT  $vcf_obj->getHeader(0) ."##annotateSnps.pl=\"";
-print $KNOWN  $vcf_obj->getHeader(0) . "##annotateSnps.pl=\"" if $KNOWN;
+print $OUT  $vcf_obj->getHeader(0) ;
+print $KNOWN  $vcf_obj->getHeader(0) if $KNOWN;
+if (@add_head){
+    my %seen = ();
+    @add_head = grep {! $seen{$_}++} @add_head;
+    foreach my $add (@add_head){
+        chomp $add;
+        $add =~ s/^##INFO=<//;
+        $add =~ s/\>$//;
+    }
+    my $headstring = "##INFO=<ID=SnpAnnotation,Number=A,Type=String,Description=\"Collection of SNP annotations per allele from dbSNP VCF files. ".
+        "Reference files had the following annotations: [" .join(" ", @add_head) ."]\">\n";
+    print $OUT $headstring;
+    print $KNOWN $headstring if $KNOWN;
+}
+print $OUT  "##annotateSnps.pl=\"";
+print $KNOWN   "##annotateSnps.pl=\"" if $KNOWN;
+
 my @opt_string = ();
 foreach my $k (sort keys %opts){
         if (not ref $opts{$k}){
@@ -155,7 +180,7 @@ VAR: while (my $line = $vcf_obj->readLine){
     my $line_should_not_be_filtered = 0; #flag in case pathogenic flag is set or somethinga and we don't want to filter this snp no matter what
     my $is_known_snp = 0;
     my $replaced_already = 0; #use this flag to allow appending of multiple IDs found in our reference file even if --replace option is in place.
-    if (defined $opts{Progress}){
+    if ($progressbar){
            $next_update = $progressbar->update($n) if $n >= $next_update;
     }
 
@@ -166,7 +191,8 @@ VAR: while (my $line = $vcf_obj->readLine){
     if (@samples){
         %sample_alleles = map{$_ => undef}  $vcf_obj->getSampleCall(multiple => \@samples, return_alleles_only => 1);
     }
-    foreach my $allele (keys %min_vars){
+    my @info;
+    foreach my $allele (sort {$a <=> $b} keys %min_vars){
         $min_vars{$allele}->{filter_snp} = 0;
         if (@samples){
             #doesn't exist in any sample...
@@ -195,9 +221,12 @@ VAR: while (my $line = $vcf_obj->readLine){
                         }
                         #perform filtering if fiters are set
                         if ($opts{build} || $opts{pathogenic} || $freq){
-                            my ($filter_snp, $dont_filter)  = evaluate_snp($opts{build}, $opts{pathogenic}, $freq, $snp_obj);
+                            my ($filter_snp, $dont_filter, %add_info)  = evaluate_snp($min_vars{$allele}, $opts{build}, $opts{pathogenic}, $freq, $snp_obj);
                             $min_vars{$allele}->{filter_snp} += $filter_snp;
                             $line_should_not_be_filtered += $dont_filter;
+                            foreach my $k (keys (%add_info)){
+                                push @{$min_vars{$allele}->{snp_info}->{$k}}, $add_info{$k};
+                            }
                         }
                     }
                 }
@@ -205,6 +234,26 @@ VAR: while (my $line = $vcf_obj->readLine){
         }
     }
     my $filter_count = 0;
+    my $inf = $vcf_obj->getVariantField('INFO');
+    my $new_inf = "$inf;SnpAnnotation=[" ;
+    my @ni = ();
+    foreach my $allele (sort {$a <=> $b} keys %min_vars){
+        my @al_inf = ();
+        if (keys %{$min_vars{$allele}->{snp_info}}){
+            foreach my $k (keys %{$min_vars{$allele}->{snp_info}}){
+                my %seen = ();
+                #remove duplicate values for allele
+                @{$min_vars{$allele}->{snp_info}->{$k}} = grep {! $seen{$_}++ } 
+                  @{$min_vars{$allele}->{snp_info}->{$k}};
+                push @al_inf, "$k=" . join ("/", @{$k=$min_vars{$allele}->{snp_info}->{$k}});
+            }
+        }else{
+            push @al_inf, '.';
+        }
+        push @ni, join("|", @al_inf);
+    }
+    $new_inf .= join(",", @ni) . "]";
+    $line = $vcf_obj->replaceVariantField('INFO', $new_inf);
     foreach my $allele (keys %min_vars){
         $filter_count++ if ($min_vars{$allele}->{filter_snp});
     }
@@ -233,7 +282,7 @@ VAR: while (my $line = $vcf_obj->readLine){
             
     }
     $found++ if $is_known_snp;
-    if (defined $opts{Progress}){
+    if ($progressbar){
         $next_update = $progressbar->update($lines) if $lines >= $next_update;
     }
 }
@@ -253,28 +302,48 @@ sub evaluate_snp{
     #returns two values - first is 1 if snp should be filtered and 0 if not, 
     #the second is 1 if shouldn't be filtered under any circumstance (at the moment only if
     #pathogenic flag is set and snp has a SCS or CLNSIG value of 4 or 5
-    my ($build, $path, $freq, $snp_obj) = @_;
-    my $snp_info = $snp_obj->getVariantField("INFO");
+    my ($min_allele, $build, $path, $freq, $snp_obj) = @_;
+    my %info_fields = $snp_obj->getInfoFields();
+    my %info_values = ();
+    foreach my $f (qw (SCS CLNSIG dbSNPBuildID G5 G5A GMAF CAF) ){
+        if (exists $info_fields{$f}){
+            my $value = $snp_obj->getVariantInfoField($f);
+            if ($value){
+                if ($info_fields{$f}->{Type} eq 'Flag'){
+                    $info_values{$f} = 1;
+                }else{
+                    $info_values{$f} = $value;
+                }
+            }
+        }
+    }
     if ($path){
-        if ($snp_info =~ /SCS=([\d])/){
-         #SCS=4 indicates probable-pathogenic, SCS=5 indicates pathogenic, print regardless of freq or build if --pathogenic option in use
-            if ($1 == 4 or $1 ==  5){
-                return (0, 1);
+        if (exists $info_values{SCS}){
+            my @scs = split(/[\,\|]/, $info_values{SCS});
+            foreach my $s (@scs){
+            #SCS=4 indicates probable-pathogenic, SCS=5 indicates pathogenic, print regardless of freq or build if --pathogenic option in use
+                if ($s eq '4' or $s eq  '5'){
+                    return (0, 1, %info_values );
+                }
             }
         }else{
             #die "No SCS field in snp line $snp_line" if $strict; #the SCS field appears to be dropped from the GATK bundle now
             #print STDERR "Warning, no SCS field in snp line $snp_line\n" unless $quiet;
         }
-        if ($snp_info =~ /CLNSIG=([\d])/){
-            if ($1 == 4 or $1 ==  5){
-                return (0, 1);
+        if (exists $info_values{CLNSIG}){
+            my @scs = split(/[\,\|]/, $info_values{CLNSIG});
+            foreach my $s (@scs){
+            #SCS=4 indicates probable-pathogenic, SCS=5 indicates pathogenic, print regardless of freq or build if --pathogenic option in use
+                if ($s eq '4' or $s eq  '5'){
+                    return (0, 1, %info_values );
+                }
             }
         }
     }
     if ($build){
-        if ($snp_info =~ /dbSNPBuildID=([\d]+)/){
-            if ($build >= $1){
-                return (1, 0);
+        if (exists $info_values{dbSNPBuildID}){
+            if ($build >= $info_values{dbSNPBuildID}){
+                return (1, 0, %info_values );
             }
         }else{
             die "No dbSNPBuildID field in snp line " .$snp_obj->get_currentLine ."\n"  if $strict;
@@ -282,34 +351,42 @@ sub evaluate_snp{
         }
     }
     if ($freq){
-        my @info = split(/\;/, $snp_info);
         if ($freq <= 0.05){
             #G5 = minor allele freq > 5 % in at least 1 pop
             #G5A = minor allele freq > 5 % in all pops
-            if (grep{/^(G5|G5A)/}@info){ 
-                return (1, 0);
+            if (exists $info_values{G5}){
+                return (1, 0, %info_values ) if $info_values{G5};
+            }
+            if (exists $info_values{G5A}){
+                return (1, 0, %info_values ) if $info_values{G5A};
             }
         }
-        my (@af) = grep {/^AF=[\d]\.[\d]+/} @info;
-        if (@af){
-            foreach my $af (@af){
-                $af =~ s/AF=//;
-                if ($freq <= $af){
-                    return (1, 0);
-                }
+        if (exists $info_values{GMAF}){
+            if ($freq <= $info_values{GMAF}){
+                return (1, 0, %info_values );
             }
         }
-        my (@gmaf) = grep {/^GMAF=[\d]\.[\d]+/} @info;
-        if (@gmaf){
-            foreach my $gmaf (@gmaf){
-                $gmaf =~ s/GMAF=//;
-                if ($freq <= $gmaf){
-                    return (1, 0);
+        if (exists $info_values{CAF}){
+            my $c = $info_values{CAF};
+            $c =~ s/^\[//;
+            $c =~ s/\]$//;
+            my @caf = split(',', $c);
+            my %snp_min = $snp_obj->minimizeAlleles();
+            foreach my $al (keys %snp_min){
+                next if $min_allele->{CHROM} ne $snp_min{$al}->{CHROM};
+                next if $min_allele->{POS} ne $snp_min{$al}->{POS};
+                next if $min_allele->{REF} ne $snp_min{$al}->{REF};
+                next if $min_allele->{ALT} ne $snp_min{$al}->{ALT};
+                die "CAF values don't match no. alleles for " .$snp_obj->get_file() . " SNP line:\n".
+                    $snp_obj->get_currentLine() ."\n" if (@caf <= $al);
+                next if $caf[$al] eq '.' ;
+                if ($freq <= $caf[$al]){
+                    return (1, 0, %info_values );
                 }
             }
         }
     }
-    return (0, 0);
+    return (0, 0, %info_values );
 }
 #################################################
 sub checkVarMatches{
@@ -433,7 +510,7 @@ University of Leeds
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2012, 2013  David A. Parry
+Copyright 2012, 2013, 2014  David A. Parry
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with this program. If not, see <http://www.gnu.org/licenses/>.
 
