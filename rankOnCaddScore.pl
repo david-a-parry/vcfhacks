@@ -117,7 +117,7 @@ while (my $line = $vcf_obj->readLine){
     my @cadd_scores = findCaddScore(\%min_vars, \%cadd_iters);
     if (grep {/^\.$/} @cadd_scores){
         $not_found++;
-        if ($NOT_FOUND){
+        if ($opts{not_found}){
             my @alts = getAltsWithoutScore(\@cadd_scores, \%min_vars);
             foreach my $al (@alts){
                 print $NOT_FOUND "$min_vars{$al}->{CHROM}\t$min_vars{$al}->{POS}".
@@ -303,7 +303,7 @@ sub getAltsWithoutScore{
     my ($cadd_scores, $vars) = @_;
     my @alts = ();
     for (my $i = 0; $i < @$cadd_scores; $i++ ){
-        if ($cadd_scores->[$i] eq '-'){
+        if ($cadd_scores->[$i] eq '.'){
             #allele 1 will be first (i.e. pos 0) in array etc. 
             #so increment by 1
             push @alts, $i + 1;
@@ -337,7 +337,7 @@ No, not a murder-solving monk, but one or more bgzip compressed and tabix indexe
 
 =item B<-o    --output>
 
-Output snp annotated/filtered file. Optional - default is STDOUT.
+Output CADD score annotated/filtered file. Optional - default is STDOUT.
 
 =item B<-n    --not_found>
 
@@ -367,9 +367,6 @@ Show manual page.
 
 =cut
 
-
-=back
-=cut
 
 =head1 EXAMPLES
 
