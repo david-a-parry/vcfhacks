@@ -4,7 +4,19 @@ This project comprises a set of perl scripts and modules that may be useful for 
 
 __UPDATE__
 
+VERSION 0.1.7:
+
+15/5/14
+
+-Fixed a bug with rankOnCaddScore.pl that meant that --not_found option never outputted anything.
+
+-annotateSnps.pl now adds SnpAnnotation information to INFO field of variants.
+
+-Fixed a bug with ParseVCF.pm where it would miss some INFO fields when Number was '.'
+
 VERSION 0.1.6:
+
+6/5/14
 
 -Tabix.pm installation is now only an absolute requirement if you are actually processing bgzip compressed VCFs. Scripts will only error and exit in the absence of Tabix.pm  when processing compressed VCFs.
 
@@ -38,6 +50,7 @@ filterOnSample.pl -i [var.vcf] -s [sample ID of child] -r [sample ID of mother] 
 
 -added option to annovcfToSimple.pl to use PED files to specify which samples to output genotypes for.
 
+-added option to annovcfToSimple.pl to output INFO fields as columns.
 
 VERSION 0.1.5:
 
@@ -103,7 +116,7 @@ VERSION 0.1.3:
 
 __INSTALLATION__
 
-Unzip the downloaded file and ensure you keep the .pl scripts in the same directory as the .pm module files.  The exceptions to this are the two Variant Effect Predictor (VEP) plugin modules (SpliceConsensus.pm and SpliceConsensusFilter.pm) which should be installed in your VEP cache 'Plugins' folder if you want to use them. The SpliceConsensus.pm can be used for variant filtering purposes in getFunctionalVariantsVep.pl and findBiallelicVep.pl.
+Unzip the downloaded file and ensure you keep the .pl scripts in the same directory as the .pm module files.  The exceptions to this are the two Variant Effect Predictor (VEP) plugin modules (SpliceConsensus.pm and SpliceConsensusFilter.pm) which should be installed in your VEP cache 'Plugins' folder if you want to use them. The SpliceConsensus.pm annotations can be used for variant filtering purposes in getFunctionalVariantsVep.pl and findBiallelicVep.pl.
 
 If you want to search bgzip compressed VCFs you will also need to install the Tabix.pm perl module by Heng Li. Download the latest version of tabix from github (https://github.com/samtools/tabix) or clone the git repository (git clone https://github.com/samtools/tabix.git). If you downloaded the zipped version unzip to create the tabix directory. Next, cd into the new tabix directory and run 'make', cd into the 'perl' subdirectory, run 'perl Makefile.PL' and 'make test'. If tests succeed run '[sudo] make install' to complete Tabix.pm installation. If you get the error 'Subroutine Tabix::tabix_open redefined...' this is harmless and can be removed by replacing: 
 
