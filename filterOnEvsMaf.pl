@@ -242,7 +242,7 @@ Output snp filtered file. Optional - default is STDOUT.
 
 =item B<-d    --dir>
 
-Directory containing ESP VCF files.
+Directory containing ESP VCF files. These can be downloaded from http://evs.gs.washington.edu/EVS/.
 
 =item B<-e    --esp_file>
 
@@ -283,7 +283,7 @@ Show manual page.
 
 =head1 DESCRIPTION
 
-This program will filter a VCF file to remove variants matching variants in VCF files from NHLBI ESP.  If --freq is set only variants in ESP with a MAF equal to or greater than --freq will be filtered.
+This program will filter a VCF file to remove variants matching variants in VCF files from NHLBI ESP.  If --freq is set only variants in ESP with a MAF equal to or greater than --freq will be filtered. ESP VCF files are available from http://evs.gs.washington.edu/EVS/.
 
 =cut
 
