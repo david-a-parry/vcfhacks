@@ -726,22 +726,22 @@ Show manual page.
 (filter on 'stop_gained' and 'stop_lost' classes only.)
 
 
-=item getFunctionalVariantsVep.pl -i var.vcf --gmaf 0.01 
+=item getFunctionalVariantsVep.pl -i var.vcf --maf 0.01 
 
-(filter on default set of consequences, filter anything with a GMAF greater than or equal to 0.01.)
+(filter on default set of consequences, filter anything with a MAF greater than or equal to 0.01 [1 %].)
 
 
-=item getFunctionalVariantsVep.pl -i var.vcf --gmaf 0.01 --damaging all 
+=item getFunctionalVariantsVep.pl -i var.vcf --maf 0.01 --damaging all 
 
 (As above but only keep missense variation predicted damaging by all annotation programs.)
 
 
-=item getFunctionalVariantsVep.pl -i var.vcf --gmaf 0.01 --damaging all --list gene_list.txt 
+=item getFunctionalVariantsVep.pl -i var.vcf --maf 0.01 --damaging all --list gene_list.txt 
 
 (As above but also filter genes in gene_list.txt file.)
 
 
-=item getFunctionalVariantsVep.pl -i var.vcf --gmaf 0.01 --damaging all --list gene_list.txt -o output.vcf
+=item getFunctionalVariantsVep.pl -i var.vcf --maf 0.01 --damaging all --list gene_list.txt -o output.vcf
 
 (As above but specifying output file)
 
