@@ -10,6 +10,8 @@ VERSION 0.1.7a:
 
 -Fixed a bug where rankOnCaddScore.pl would mix up scores of multiallelic variants.
 
+-Corrected --allele_ratio_cutoff short option from -x to -z in filterOnSample.pl
+
 VERSION 0.1.7:
 
 15/5/14
