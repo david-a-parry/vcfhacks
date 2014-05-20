@@ -391,7 +391,7 @@ Use this flag to look only for variants that are present only in --samples and a
 
 Fraction cut-off for allele depth. When specified, the allele depth will be assessed for all samples specified using the --reject argument and any allele with a proportion of reads greater than or equal to this value will be rejected even if the sample genotypes are not called by the genotyper. For example, a value of 0.1 would reject any allele making up 10 % of reads for a sample specified by --reject even if the sample is called as homozygous reference. Must be a value between 0.0 and 1.0. 
 
-=item B<-x    --allele_ratio_cutoff>
+=item B<-z    --allele_ratio_cutoff>
 
 Relative fraction cut-off for allele depth between --samples and --reject.  When specified, for each allele the proportion allele depth will be calculated for all samples specified by --samples argument (if they have a genotype call for the given allele) and the minimum allele proportion identified amongst those samples. Similarly, the fraction allele depth for any of the samples specified using the --reject argument (even where the genotype has not been called) will be calculated. If the ratio of the fraction allele depth for any of the --reject samples compared to the minimum allele proportion in the --samples samples is equal to or higher than the value specified for this argument the allele will be filtered.
 
