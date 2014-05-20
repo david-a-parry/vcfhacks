@@ -211,7 +211,7 @@ if ($opts{filter}){
 sub findCaddScore{
     my ($vars, $tabix_iter) = @_;
     my @scores = ();#return score for each allele
-ALLELE:    foreach my $al (keys %{$vars}){
+ALLELE:    foreach my $al (sort {$a<=>$b} keys %{$vars}){
         foreach my $iter (keys %{$tabix_iter}){
             my $it = $tabix_iter->{$iter}->query
                 (
