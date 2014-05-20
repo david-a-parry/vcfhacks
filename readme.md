@@ -4,6 +4,12 @@ This project comprises a set of perl scripts and modules that may be useful for 
 
 __UPDATE__
 
+VERSION 0.1.7a:
+
+20/5/14
+
+-Fixed a bug where rankOnCaddScore.pl would mix up scores of multiallelic variants.
+
 VERSION 0.1.7:
 
 15/5/14
