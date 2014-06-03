@@ -205,36 +205,6 @@ if (@classes or @add){
     $config->{functional} = 1;
 }
 
-if (not defined @{$config->{fields}} and not $config->{all}){
-    push @{$config->{fields}}, 
-        qw ( 
-            symbol
-            gene
-            feature
-            allele
-            consequence
-            cds_position
-            protein_position
-            amino_acids
-            codons
-            existing_variation
-            exon
-            intron
-            splice_consensus
-            sift
-            polyphen
-            condel
-            gmaf
-            aa_maf
-            ea_maf
-            afr_maf
-            amr_maf
-            asn_maf
-            eur_maf
-            );
-}
-
-
 
 my @valid = qw (transcript_ablation
                 splice_donor_variant
@@ -329,6 +299,34 @@ my @info_fields = ();
 my $vcf_obj = ParseVCF->new( file=> $vcf);
 if (defined $config->{vep}){
     my $vep_header = $vcf_obj->readVepHeader();
+    if (not defined @{$config->{fields}} and not $config->{all}){
+        push @{$config->{fields}}, 
+            qw ( 
+                symbol
+                gene
+                feature
+                allele
+                consequence
+                cds_position
+                protein_position
+                amino_acids
+                codons
+                existing_variation
+                exon
+                intron
+                gmaf 
+                aa_maf
+                ea_maf
+                afr_maf
+                amr_maf
+                asn_maf
+                eur_maf
+                sift
+                polyphen
+            );
+    }
+    push @{$config->{fields}}, "condel" if exists $vep_header->{condel};
+    push @{$config->{fields}}, "splice_consensus" if exists $vep_header->{splice_consensus};
     @fields = @{$config->{fields}} if defined $config->{fields};
     if (@fields){
         if(defined $config->{canonical_only}){
