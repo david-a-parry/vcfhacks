@@ -40,7 +40,7 @@ Output file. Optional - defaults to STDOUT.
 
 =item B<-f    --filter>
 
-One or more VCF files to use as to filter input. Variants that match from the input VCF will be filtered from the output.
+One or more VCF files to use as to filter input. Variants that match from the input VCF will be filtered from the output. By default, if any sample matches a variant it will be filtered but combinations of --reject, --not_samples, --allele_frequency_filter, --threshold and --filter_homozygotes can be used to modify this behaviour.
 
 =item B<-d    --directories>
 
@@ -62,9 +62,17 @@ Samples from filter VCF files to use for filtering.  If specified only variant a
 
 Samples from filter VCF files to ignore.  If specified variant alleles from all samples except these will be used to compare with the input VCF. Default is to look at all alleles.
 
+=item B<-y    --allele_frequency_filter>
+
+Reject variants if the allele frequency in all --filter VCFs is equal to or greater than this value. The value must be a float between 0 and 1. 
+
 =item B<-t    --threshold>
 
-Minimum number of samples containing at least one matching variant allele before a variant is considered a match (optional).
+Filter lines if the number of samples containing at least one matching variant allele is equal to or greater than this value.
+
+=item B<-z    --filter_homozygotes>
+
+Filter lines if a sample is homozygous for a variant. If --reject or --not_samples options are used only the relevant samples will be checked. If this option is used with --allele_frequency_filter or --threshold options lines will be filtered if the variant is homozygous in a sample regardless of allele frequency; if there is no homozygous sample lines will be filtered n frequency as normal. If used without --allele_frequency_filter or --threshold options lines will only be filtered if the variant is homozygous in at least one sample.
 
 =item B<-q    --quality>
 
@@ -129,6 +137,8 @@ my @samples;#samples in vcf input to check calls for - filter only if they conta
 my @reject;#if specified will only check alleles for these samples in filter_vcfs
 my @ignore_samples; #these samples will be ignored in either VCF 
 my $threshold = 0;#only filter if we see the allele this many times in filter_vcfs
+my $filter_homozygotes; #flag to filter if any of the reject samples are homozygous
+my $maf = 0;
 my $print_matching = 0;#flag telling the script to invert so we print matching lines and filter non-matching lines
 my $out;
 my $min_qual = 0;
@@ -148,7 +158,9 @@ my %opts = (
         'directories' => \@dirs,
         'samples=s' => \@samples,
         'reject' => \@reject,
+        'allele_frequency_filter' => \$maf,
         'threshold' => \$threshold,
+        'filter_homozygotes' => \$filter_homozygotes,
         'quality' => \$min_qual,
         'genotype_quality' => \$minGQ,
         'aff_quality' => \$aff_quality,
@@ -165,14 +177,16 @@ GetOptions(
         'expression=s' => \$regex,
         'input=s' => \$vcf,
         'output=s' => \$out,
-        'filter=s{,}' => \@filter_vcfs,
+        'f|filter=s{,}' => \@filter_vcfs,
         'directories=s{,}' => \@dirs,
         'samples=s{,}' => \@samples,
         'reject=s{,}' => \@reject,
+        'y|allele_frequency_filter=f' => \$maf,
         'threshold=i' => \$threshold,
+        'z|filter_homozygotes' => \$filter_homozygotes,
         'quality=f' => \$min_qual,
         'genotype_quality=f' => \$minGQ,
-        'aff_quality=i' => \$aff_quality,
+        'a|aff_quality=i' => \$aff_quality,
         'un_quality=i' => \$unaff_quality,
         'bar|progress' => \$progress,
         'help' => \$help,
@@ -189,6 +203,7 @@ pod2usage(-message => "Syntax error", exitval => 2) if (not $vcf or (not @filter
 pod2usage(-message => "Syntax error - cannot use --reject and --not_samples argument together", exitval => 2) if (@reject and @ignore_samples);
 pod2usage(-message => "Variant quality scores must be 0 or greater.\n", -exitval => 2) if ($min_qual < 0 );
 pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) if ($minGQ < 0 );
+pod2usage(-message => "--allele_frequency_filter (-y) value must be between 0 and 1.\n", -exitval => 2) if ($maf < 0 or $maf > 1);
 if (defined $aff_quality){
     pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) 
         if $aff_quality < 0;
@@ -232,7 +247,12 @@ if ($out){
 my $prev_chrom = 0;
 my $progressbar;
 if ($progress){
-    $progressbar = Term::ProgressBar->new({name => "Filtering", count => $vcf_obj->countLines("variants"), ETA => "linear", });
+    if (not $vcf_obj->get_inputIsStdin){
+        $progressbar = Term::ProgressBar->new({name => "Filtering", count => $vcf_obj->countLines("variants"), ETA => "linear", });
+    }else{
+        print STDERR "Can't print a progress bar when input is from STDIN\n";
+        $progress = 0;
+    }
 }
 my $next_update = 0;
 my $n = 0;
@@ -282,18 +302,21 @@ LINE: while (my $line = $vcf_obj->readLine){
         %sample_alleles = map {$_ => undef} keys %min_vars;
     }
     my %sample_matches = ();#check each allele matches in all filter_vcfs but don't reset after each file
-    my %alt_counts = ();#count samples in all filter_vcfs i.e. don't reset after each file
+    my %thresh_counts = ();#count samples in all filter_vcfs i.e. don't reset after each file
+    my %af_counts  ;#count allele occurences and total alleles to calculate allele frequency
+    my %f_genos = ();#store genotypes as keys if we're using $filter_homozygotes
     
 FILTER: foreach my $filter_obj(@filter_objs){
+        my @temp_reject = ();
+        if (@ignore_samples){
+            @temp_reject = $filter_obj->getSampleNames() ;
+            @temp_reject = grep {! $ignores{$_} } @temp_reject;
+        }else{
+            push @temp_reject, @reject;
+        }
 ALLELE:   foreach my $allele (keys %sample_alleles){
             if ($filter_obj->searchForPosition(chrom => $min_vars{$allele}->{CHROM}, pos => $min_vars{$allele}->{POS})){
                 my %f_alts = ();
-                my @temp_reject = ();
-                if (@ignore_samples){
-                    @temp_reject = $filter_obj->getSampleNames() ;
-                    @temp_reject = grep {! $ignores{$_} } @temp_reject;
-                }
-                push @temp_reject, @reject;
                 #get genotype call codes (0, 1, 2 etc.) for filter samples
 FILTER_LINE:    while (my $filter_line = $filter_obj->readPosition()){
                     my $filter_qual = $filter_obj->getVariantField('QUAL');
@@ -302,12 +325,26 @@ FILTER_LINE:    while (my $filter_line = $filter_obj->readPosition()){
                     if (@temp_reject){
                         #%f_alts = map {$_ => undef} $filter_obj->getSampleActualGenotypes(multiple => \@temp_reject, return_alleles_only => 1, minGQ => $unaff_quality);
                         %f_alts = map{$_ => undef}  $filter_obj->getSampleCall(multiple => \@temp_reject, return_alleles_only => 1, minGQ => $unaff_quality);
+                        if ($filter_homozygotes){
+                            my %genos = $filter_obj->getSampleCall(multiple => \@temp_reject, minGQ => $unaff_quality);
+                            %genos = reverse %genos;
+                            foreach my $k (keys %genos){
+                                $f_genos{$k}++;
+                            }
+                        }
                     }elsif(not @reject and not @ignore_samples){
                         #%f_alts = map {$_ => undef} $filter_obj->readAlleles(alt_alleles=>1, minGQ => $unaff_quality);
                         %f_alts = map{$_ => undef}  $filter_obj->getSampleCall(all => 1, return_alleles_only => 1, minGQ => $unaff_quality);
+                        if ($filter_homozygotes){
+                            my %genos = $filter_obj->getSampleCall(all => 1, minGQ => $unaff_quality);
+                            %genos = reverse %genos;
+                            foreach my $k (keys %genos){
+                                $f_genos{$k}++;
+                            }
+                        }
                     }
                     my $filter_match = '';#if one of the filter's ALTs matches store the ALT allele code here
-                    foreach my $alt (keys %f_alts){
+ALT:                foreach my $alt (keys %f_alts){
                         next if $alt eq '.';
                         next if $alt == 0;
                         next if $min_vars{$allele}->{POS} ne $filter_min{$alt}->{POS};
@@ -316,9 +353,19 @@ FILTER_LINE:    while (my $filter_line = $filter_obj->readPosition()){
                         $min_vars{$allele}->{CHROM} =~ s/^chr//;
                         $filter_min{$alt}->{CHROM} =~ s/^chr//;
                         next if $min_vars{$allele}->{CHROM} ne $filter_min{$alt}->{CHROM};
-                        $filter_match = $alt;
-                        $sample_matches{$allele}++;
-                        last;
+                        if ($filter_homozygotes and not $threshold and not $maf){
+                        #is using $filter_homozygotes on its own we only consider something a
+                        #'match' if it's homozygous
+                            if (exists $f_genos{"$alt/$alt"} or exists $f_genos{"$alt|$alt"}){
+                                $filter_match = $alt;
+                                $sample_matches{$allele}++;
+                                last ALT;
+                            }
+                        }else{
+                            $filter_match = $alt;
+                            $sample_matches{$allele}++;
+                            last ALT;
+                        }
                     }
                     if (not $filter_match){
                         next FILTER_LINE;
@@ -334,13 +381,22 @@ FILTER_LINE:    while (my $filter_line = $filter_obj->readPosition()){
                         foreach my $t_samp(@t_samples){
                             my %t_alleles = map { $_ => undef } $filter_obj->getSampleCall(sample => $t_samp, return_alleles_only => 1, minGQ => $unaff_quality);
                             if (exists $t_alleles{$filter_match}){
-                                $alt_counts{$allele}++;
+                                $thresh_counts{$allele}++;
                             }
                         }
                         #foreach my $alt (@alts){
-                         #   next FILTER_LINE if not exists $alt_counts{$alt};
-                          #  next FILTER_LINE if $alt_counts{$alt} < $threshold;
+                         #   next FILTER_LINE if not exists $thresh_counts{$alt};
+                          #  next FILTER_LINE if $thresh_counts{$alt} < $threshold;
                         #}
+                    }
+                    if ($maf){
+                        my %f_allele_counts = $filter_obj->countAlleles(minGQ => $unaff_quality);
+                        foreach my $f_al (keys %f_allele_counts){
+                            if ($f_al eq $filter_match){
+                                $af_counts{$allele}->{counts} += $f_allele_counts{$f_al};
+                            }
+                            $af_counts{$allele}->{total} += $f_allele_counts{$f_al};
+                        }
                     }
                 }#read pos
             }#search
@@ -348,21 +404,63 @@ FILTER_LINE:    while (my $filter_line = $filter_obj->readPosition()){
         #done each allele - see if we've got enough data to filter this line
         #and can skip other filter vcfs for win
         next FILTER if keys %sample_alleles != keys %sample_matches;#can't skip - not all alleles accounted for
+        my $homozygous_alleles = 0;
+        if ($filter_homozygotes){
+            foreach my $allele (keys %sample_alleles){
+                if (exists $f_genos{"$allele/$allele"} or exists $f_genos{"$allele|$allele"}){
+                    $homozygous_alleles++;
+                }
+            }
+            if ($homozygous_alleles == keys %sample_alleles){
+                $lines_filtered++;
+                if ($print_matching){
+                    print $OUT "$line\n";
+                    next LINE;
+                }else{
+                    next LINE;
+                }
+            }
+        }
+
         foreach my $allele (keys %sample_alleles){
             if ($threshold){
-                next FILTER if $alt_counts{$allele} < $threshold;   
+                next FILTER if $thresh_counts{$allele} < $threshold;   
             }
-        }#if we haven't gone to next FILTER we can filter this line
+        }#if we haven't gone to next FILTER and 
+        #are not filtering on allele frequency we can filter this line
         #no need to look at other filter_vcfs
-        $lines_filtered++;
-        if ($print_matching){
-            print $OUT "$line\n";
-            next LINE;
-        }else{
-            next LINE;
+        if (not $maf){
+            $lines_filtered++;
+            if ($print_matching){
+                print $OUT "$line\n";
+                next LINE;
+            }else{
+                next LINE;
+            }
         }
     }#foreach filter vcf
-    #no matching line for allele in any filter vcf
+    #no line meeting criteria for allele in any filter vcf
+    #now check allele frequency if given
+    if ($maf){
+        my $alleles_over_maf = 0;
+COUNTS: foreach my $allele (keys %sample_alleles){
+            last COUNTS if not exists $af_counts{$allele};
+            if (($af_counts{$allele}->{counts}/$af_counts{$allele}->{total}) >= $maf){
+                $alleles_over_maf++ 
+            }else{
+                last COUNTS;
+            }
+        }
+        if ($alleles_over_maf == keys %sample_alleles){
+            $lines_filtered++;
+            if ($print_matching){
+                print $OUT "$line\n";
+                next LINE;
+            }else{
+                next LINE;
+            }
+        }
+    }
     $lines_passed++;
     print $OUT "$line\n" if not $print_matching; 
 }#readline
@@ -374,7 +472,10 @@ if ($print_matching){
 }else{
     print STDERR "$lines_filtered matching variants filtered, $lines_passed printed ";
 }
-print STDERR "(" .$vcf_obj->countLines("variants") . " total)\n";
+if (not $vcf_obj->get_inputIsStdin){
+    print STDERR "(" .$vcf_obj->countLines("variants") . " total)";
+}
+print STDERR "\n";
 
 ##################
 sub get_vcfs_from_directories{
