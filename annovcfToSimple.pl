@@ -299,7 +299,7 @@ my @info_fields = ();
 my $vcf_obj = ParseVCF->new( file=> $vcf);
 if (defined $config->{vep}){
     my $vep_header = $vcf_obj->readVepHeader();
-    if (not defined @{$config->{fields}} and not $config->{all}){
+    if (not @{$config->{fields}} and not $config->{all}){
         push @{$config->{fields}}, 
             qw ( 
                 symbol
