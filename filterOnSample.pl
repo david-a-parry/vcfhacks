@@ -21,6 +21,7 @@ my $check_presence_only;
 my $ignore_non_existing;#don't exit if a sample is not found
 my @reject = ();#reject if allele is present in these samples
 my @reject_except = (); #reject all except these samples
+my $af = 0; #filter if allele frequency equal to or greater than this
 my $threshold;
 my $quality = 20;
 my $allele_depth_cutoff = 0;#even if genotype isn't called use this value to filter on reported allele depth
@@ -38,6 +39,7 @@ my %opts = ('existing' => \$ignore_non_existing,
         'samples' => \@samples,
         'reject' => \@reject,
         'reject_all_except' => \@reject_except,
+        'frequency' => \$af,
         'threshold' => \$threshold,
         'presence' => \$check_presence_only,
         'confirm_missing' => \$confirm_missing,
@@ -58,6 +60,7 @@ GetOptions(\%opts,
         'samples=s{,}' => \@samples,
         'r|reject=s{,}' => \@reject,
         'x|reject_all_except:s{,}' => \@reject_except,
+        'frequency=f' => \$af,
         'threshold=i' => \$threshold,
         'p|presence' => \$check_presence_only,
         'confirm_missing' => \$confirm_missing,
@@ -76,7 +79,8 @@ pod2usage(-message=> "syntax error: --input (-i) argument is required.\n") if no
 pod2usage(-message=> "syntax error: you must specify samples using at least one of the arguments --samples (-s), --reject (-r) or --reject_all_except (-x).\n") if not @samples and not @reject and not @reject_except;
 pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) if ($quality < 0 );
 pod2usage(-message => "--depth_allele_cutoff must be a value between 0.00 and 1.00.\n", -exitval => 2) if ($allele_depth_cutoff < 0 or $allele_depth_cutoff > 1.0 );
-pod2usage(-message => "--allele_ratio_cutoff must be a greater than 0.00.\n", -exitval => 2) if ($allele_ratio_cutoff < 0 );
+pod2usage(-message => "--allele_ratio_cutoff must be greater than 0.00.\n", -exitval => 2) if ($allele_ratio_cutoff < 0 );
+pod2usage(-message => "--frequency must be a value between 0.00 and 1.00.\n", -exitval => 2) if ($af < 0 or $af > 1.0 );
 if (defined $aff_genotype_quality){
     pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) 
         if $aff_genotype_quality < 0;
@@ -217,13 +221,15 @@ SAMPLE: foreach my $sample (@samples){
         next LINE if (keys%alleles < 1);#i.e. if only reference (0) or no calls were found
     }#otherwise we'll collect --reject alleles and see if there are any alts that aren't in %reject_alleles
 
-    my %reject_alleles;    
+    my %reject_alleles;
+    my $total_reject = 0;
     if (@reject){
         foreach my $reject (@reject){
             my $call = $vcf_obj->getSampleCall(sample => $reject, minGQ => $unaff_genotype_quality);
             if ($call =~ /(\d+)[\/\|](\d+)/){
                 $reject_alleles{$1}++; #store alleles from rejection samples as keys of %reject_alleles
                 $reject_alleles{$2}++;
+                $total_reject += 2;
             }elsif($confirm_missing){
                 next LINE;
             }
@@ -266,6 +272,20 @@ SAMPLE: foreach my $sample (@samples){
             }
         }
     }
+    my %r_allele_counts = ();
+    if ($af and @reject){
+        #if using allele frequency filtering delete any allele from %reject_alleles that has an
+        #allele frequency less than $af
+        if ($total_reject > 0){
+            foreach my $k (keys %reject_alleles){
+                if ($reject_alleles{$k}/$total_reject < $af){
+                    delete $reject_alleles{$k};
+                }
+            }
+        }
+    }elsif($af){
+        %r_allele_counts = $vcf_obj->countAlleles(minGQ => $unaff_genotype_quality);
+    }
     if (not @samples){
         my @ref_alt = $vcf_obj->readAlleles();
         for (my $i = 1; $i < @ref_alt; $i++){
@@ -277,7 +297,6 @@ SAMPLE: foreach my $sample (@samples){
     my %breached;
     my %count;
     my %genotypes = $vcf_obj->countGenotypes();
-
     foreach my $samp (keys%alleles){
     #if we're looking for alleles that match in ALL samples than we only need to check a single hash entry
 ALLELE: foreach my $allele (@{$alleles{$samp}}){
@@ -292,6 +311,11 @@ ALLELE: foreach my $allele (@{$alleles{$samp}}){
                 if ($t > $threshold){
                     $breached{$allele}++;
                     next ALLELE;
+                }
+            }
+            if ($af){
+                if (exists $r_allele_counts{$allele} and $total_reject > 0){
+                    next ALLELE if $r_allele_counts{$allele}/$total_reject >= $af;
                 }
             }
             my $allele_matches = 0;
@@ -373,11 +397,15 @@ Use this flag to print variants present in at least this many samples rather tha
 
 =item B<-r    --reject>
 
-IDs of samples to reject variants from. Variants will be rejected if present in ANY of these samples.
+IDs of samples to reject variants from. Variants will be rejected if present in ANY of these samples unless --allele_frequency is set.
 
 =item B<-x    --reject_all_except>
 
 Reject variants present in all samples except these. If used without an argument all samples in VCF that are not specified by --samples argument will be used to reject variants. If one or more samples are given as argument to this option then all samples in VCF that are not specified by --samples argument or this argument will be used to reject variants.
+
+=item B<-f    --frequency>
+
+Reject variants if the allele frequency (decimal value between 0.00 and 1.00) in the VCF is equal to or greater than this value. If --reject or --reject_all_except arguments are used only the relevent samples will be counted when calculating allele frequency. Otherwise, the allele frequency will be calculated for all samples with a variant call.
 
 =item B<-t    --threshold>
 
