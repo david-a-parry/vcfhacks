@@ -483,7 +483,7 @@ LINE: while (my $line = $vcf_obj->readLine){
         next LINE if not identical_genotypes(@samples);
     }
     #check for identical genotypes within family if using a ped file
-    if ($pedigree){
+    if ($pedigree and not $min_matching_per_family){
         foreach my $fam ($ped->getAllFamilies()){
             next LINE if not identical_genotypes($ped->getAffectedsFromFamily($fam));
         }
@@ -1246,7 +1246,7 @@ University of Leeds
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2012, 2013  David A. Parry
+Copyright 2013, 2012  David A. Parry
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with this program. If not, see <http://www.gnu.org/licenses/>.
 
