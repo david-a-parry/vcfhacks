@@ -4,6 +4,18 @@ This project comprises a set of perl scripts and modules that may be useful for 
 
 __UPDATE__
 
+VERSION 0.1.8:
+
+3/6/14
+
+-Added feature to filter on allele frequency in filterOnSample.pl and filterVcfOnVcf.pl
+
+-Added feature to filter variants that are homozygous in --reject samples in filterOnSample.pl and filterVcfOnVcf.pl
+
+-Fixed bug with findBiallelicVep.pl where it would fail to use --min_matching_per_family option properly
+
+-Fixed bug where annovcfToSimple.pl expected to see Cadd Phred Score field by default. Now it decides whether to use it by default after checking whether it is present or not in the header.
+
 VERSION 0.1.7a:
 
 20/5/14
