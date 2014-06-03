@@ -19,6 +19,7 @@ use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use Data::Dumper;
 use Carp;
 use Scalar::Util qw (looks_like_number);
+use List::Util qw(sum);
 our $AUTOLOAD;
 {
         my $_count = 0;
@@ -1916,7 +1917,62 @@ sub sampleIsHeterozygous{
         return 0;
     }
 }
-
+sub countAlleles{
+    #%allele_counts = $obj->countGenotypes(); 
+    #returns count for all samples and all genotypes
+    #%allele_counts = $obj->countGenotypes(samples=>["sample1","sample2"])
+    #$count = $obj->countGenotypes(samples=>["sample1","sample2"], genotypes => '0/1');
+    my ($self, %args) = @_;
+    if ($args{minGQ}){
+        croak "Can't invoke countAlleles method with minGQ argument when no samples/genotypes are present in VCF " if not defined $self->{_samples};
+        croak "minGQ argument must be a number " if not looks_like_number($args{minGQ});
+    }
+    my %counts; 
+    $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
+    defined $self->{INFO_FIELDS} || $self->getInfoFields();
+    if (not defined $args{samples}){
+        if (not $args{minGQ} and exists $self->{INFO_FIELDS}->{AC} 
+          and exists $self->{INFO_FIELDS}->{AN}){
+            my @ac = split(",", $self->getVariantInfoField('AC'));
+            unshift @ac,  $self->getVariantInfoField('AN') - sum(@ac);
+            for (my $i = 0; $i < @ac; $i++){
+                $counts{$i} = $ac[$i];
+            }
+            return %counts;
+        }
+    }
+    my @alleles = $self->readAlleles();
+    for (my $i = 0; $i < @alleles; $i++){
+        $counts{$i} = 0;
+    }
+    if(defined $args{samples}){
+        croak "samples argument must be an array reference " if ref $args{samples} ne 'ARRAY';
+        foreach my $sample (@{$args{samples}}){
+            my $call;
+            if (defined $args{minGQ}){
+                $call = $self->getSampleCall(sample=>$sample, minGQ => $args{minGQ});
+            }else{
+                $call= $self->getSampleCall(sample=>$sample);
+            }
+            my @ca = split(/[\/\|]/, $call);
+            @ca = grep {$_ ne '.'} @ca;
+            map {$counts{$_}++} @ca;
+        }
+    }else{
+        foreach my $sample (keys %{$self->{_samples}}){
+            my $call;
+            if (defined $args{minGQ}){
+                $call = $self->getSampleCall(sample=>$sample, minGQ => $args{minGQ});
+            }else{
+                $call= $self->getSampleCall(sample=>$sample);
+            }
+            my @ca = split(/[\/\|]/, $call);
+            @ca = grep {$_ ne '.'} @ca;
+            map {$counts{$_}++} @ca;
+        }
+    }
+    return %counts;
+}
 sub countGenotypes{
     #%genotypes = $obj->countGenotypes(); 
     #returns count for all samples and all genotypes
@@ -1925,7 +1981,7 @@ sub countGenotypes{
     #$count = $obj->countGenotypes(samples=>["sample1","sample2"], genotypes => '0/1');
     my ($self, %args) = @_;
     croak "Can't invoke countGenotypes method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
-    if ($args{minGQ}){
+    if (defined $args{minGQ}){
         croak "minGQ argument must be a number " if not looks_like_number($args{minGQ});
     }
     $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
@@ -1933,13 +1989,23 @@ sub countGenotypes{
     if(defined $args{samples}){
         croak "samples argument must be an array reference " if ref $args{samples} ne 'ARRAY';
         foreach my $sample (@{$args{samples}}){
-            my $call = $self->getSampleCall(sample=>$sample);
-            $genotypes{$call}++;
+            if (defined $args{minGQ}){
+                my $call = $self->getSampleCall(sample=>$sample, minGQ => $args{minGQ});
+                $genotypes{$call}++;
+            }else{
+                my $call = $self->getSampleCall(sample=>$sample);
+                $genotypes{$call}++;
+            }
         }
     }else{
         foreach my $sample (keys %{$self->{_samples}}){
-            my $call = $self->getSampleCall(sample=>$sample);
-            $genotypes{$call}++;
+            if (defined $args{minGQ}){
+                my $call = $self->getSampleCall(sample=>$sample, $args{minGQ});
+                $genotypes{$call}++;
+            }else{
+                my $call = $self->getSampleCall(sample=>$sample);
+                $genotypes{$call}++;
+            }
         }
     }
     if (defined $args{genotypes}){
