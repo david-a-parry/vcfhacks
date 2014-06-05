@@ -4,6 +4,16 @@ This project comprises a set of perl scripts and modules that may be useful for 
 
 __UPDATE__
 
+VERSION 0.1.8a:
+
+5/6/14
+
+-Fixed bug in findBiallelicSnpEff.pl where --1000_genomes_allele_frequency option would behave opposite to the expected manner (--maf option was not affected by this bug)
+
+-Fixed additional bug in findBiallelicVep.pl and findBiallelicSnpEff.pl when using --min_matching_per_family where unaffected parents would be checked for allele segregation even for a sample without the variant allele.
+
+-when using DBNSFP filter expressions in getFunctionalVariantsSnpEff.pl/findBiallelicSnpEff.pl numeric expressions are no longer converted to string expressions when INFO field type is String/Char if the given expression uses numeric style comparators, but users are still warned that INFO field is of type string.
+
 VERSION 0.1.8:
 
 3/6/14
