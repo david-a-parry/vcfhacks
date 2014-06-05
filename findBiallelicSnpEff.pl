@@ -772,6 +772,10 @@ sub check_segregation{
 KEY:        foreach my $key (keys %intersect){
                 my @al = split(/\//, $key);  
                 foreach my $aff (keys %affected_ped){#check parents of any affected even if affected not in VCF
+                    #IF MIN MATCHING PER FAMILY IS IN USE MAKE SURE WE ONLY CHECK AGAINST SAMPLES WITH ALLELES
+                    if ($min_matching_per_family){
+                        next if not grep { $key eq $_ } @{$biallelic_candidates{$aff}};
+                    }
                     my @par = grep { exists $unaffected{$_} } $ped->getParents($aff);
                     foreach my $u (@par){
                         #check each parent carries at least one of the alleles
