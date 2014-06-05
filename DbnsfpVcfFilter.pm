@@ -494,15 +494,26 @@ sub checkAndParseDbnsfpExpressions{
                         }
                     }elsif($t eq 'Character' or $t eq 'String'){
                         if (exists $char_comparators{$comparator}){
-                            $comparator = $char_comparators{$comparator};
+                            if (looks_like_number($v)){
+                                print STDERR "Warning: dbNSFP INFO field for $field is of "
+                                    ."type $t but value ($v) in expression ($split[$i])"
+                                    ." look like a number.\n";
+                                if (exists $num_comparators{$comparator}){
+                                    print STDERR "Interpretting as a number.\n";
+                                    print STDERR "Changing comparator ($comparator) to "
+                                        ."$num_comparators{$comparator} in expression ($split[$i]).\n"
+                                        if $num_comparators{$comparator} ne $comparator;
+                                    $comparator = $num_comparators{$comparator};
+                                }else{
+                                    print STDERR "Interpretting as a character/string.\n";
+                                    $comparator = $char_comparators{$comparator};
+                                }
+                            }else{
+                                $comparator = $char_comparators{$comparator};
+                            }
                         }else{
                             croak("Unrecognised comparator ($comparator) for "
                                 ."dbNSFP INFO field type $t\n");
-                        }
-                        if (looks_like_number($v)){
-                            print STDERR "Warning: dbNSFP INFO field for $field is of "
-                                ."type $t but value ($v) in expression ($split[$i])"
-                                ." look like a number.\n";
                         }
                     }else{
                         if ($t eq 'Flag'){
