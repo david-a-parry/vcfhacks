@@ -64,11 +64,11 @@ my $time = strftime("%H:%M:%S", localtime);
 print STDERR "[$time] Initializing input VCF\n";
 my $vcf_obj = ParseVCF->new( file=> $opts{input});
 my $total_vcf = $vcf_obj->countLines("variants") if defined $opts{Progress};
-print STDERR "$opts{input} has $total_vcf variants\n" if defined $opts{Progress};
-$time = strftime("%H:%M:%S", localtime);
+print STDERR "$opts{input} has $total_vcf variants\n" if $total_vcf;# if defined $opts{Progress};
 my @snp_objs = ();
 my @snp_headers;
 for (my $i = 0; $i < @dbsnp; $i++){
+    $time = strftime("%H:%M:%S", localtime);
     print STDERR "[$time] Initializing $dbsnp[$i] dbSNP reference VCF " .($i + 1) ." of " .scalar(@dbsnp) ."\n";
     my $snp_obj;
     if ($dbsnp[$i] =~ /\.gz$/){
@@ -104,9 +104,9 @@ if ($opts{build}){
     }
 }
 if ($opts{freq}){
-    my @freq_head = grep {/##INFO=<ID=(GMAF|CAF|G5A|G5),/} @snp_headers;
+    my @freq_head = grep {/##INFO=<ID=(GMAF|CAF|G5A|G5|AF),/} @snp_headers;
     if (not @freq_head){
-        print STDERR "WARNING - can't find allele frequency fields (GMAF, CAF, G5A or G5) in dbSNP file headers, your SNP reference files probably don't have readable frequency data.\n";
+        print STDERR "WARNING - can't find allele frequency fields (GMAF, CAF, AF, G5A or G5) in dbSNP file headers, your SNP reference files probably don't have readable frequency data.\n";
     }else{
         push @add_head, @freq_head;
     }
@@ -305,15 +305,13 @@ sub evaluate_snp{
     my ($min_allele, $build, $path, $freq, $snp_obj) = @_;
     my %info_fields = $snp_obj->getInfoFields();
     my %info_values = ();
-    foreach my $f (qw (SCS CLNSIG dbSNPBuildID G5 G5A GMAF CAF) ){
-        if (exists $info_fields{$f}){
-            my $value = $snp_obj->getVariantInfoField($f);
-            if ($value){
-                if ($info_fields{$f}->{Type} eq 'Flag'){
-                    $info_values{$f} = 1;
-                }else{
-                    $info_values{$f} = $value;
-                }
+    foreach my $f (qw (SCS CLNSIG dbSNPBuildID G5 G5A GMAF CAF AF) ){
+        my $value = $snp_obj->getVariantInfoField($f);
+        if ($value){
+            if (exists $info_fields{$f} && $info_fields{$f}->{Type} eq 'Flag'){
+                $info_values{$f} = 1;
+            }else{
+                $info_values{$f} = $value;
             }
         }
     }
@@ -381,6 +379,25 @@ sub evaluate_snp{
                     $snp_obj->get_currentLine() ."\n" if (@caf <= $al);
                 next if $caf[$al] eq '.' ;
                 if ($freq <= $caf[$al]){
+                    return (1, 0, %info_values );
+                }
+            }
+        }
+        if (exists $info_values{AF}){
+            my $c = $info_values{AF};
+            $c =~ s/^\[//;
+            $c =~ s/\]$//;
+            my @af = split(',', $c);
+            my %snp_min = $snp_obj->minimizeAlleles();
+            foreach my $al (keys %snp_min){
+                next if $min_allele->{CHROM} ne $snp_min{$al}->{CHROM};
+                next if $min_allele->{POS} ne $snp_min{$al}->{POS};
+                next if $min_allele->{REF} ne $snp_min{$al}->{REF};
+                next if $min_allele->{ALT} ne $snp_min{$al}->{ALT};
+                die "AF values don't match no. alternate alleles for " .$snp_obj->get_file() . " SNP line:\n".
+                    $snp_obj->get_currentLine() ."\n" if (@af < $al);
+                next if $af[$al-1] eq '.' ;
+                if ($freq <= $af[$al-1]){
                     return (1, 0, %info_values );
                 }
             }
