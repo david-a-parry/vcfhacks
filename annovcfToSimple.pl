@@ -475,7 +475,10 @@ $vcf_obj->DESTROY();
 ####################################################
 sub get_vcf_fields{
     my @vcf_values = ();
-    #Get preceding INFO fields (these will be one per line)
+    foreach my $field (split("\t", $vcf_obj->get_currentLine)){
+        push @vcf_values, $field;
+    }
+    #Add user-specified INFO fields after normal VCF fields
     foreach my $f (@info_fields){
         my $value = $vcf_obj->getVariantInfoField($f);
         if (defined $value){
@@ -483,9 +486,6 @@ sub get_vcf_fields{
         }else{
             push @vcf_values, '.';
         }
-    }
-    foreach my $field (split("\t", $vcf_obj->get_currentLine)){
-        push @vcf_values, $field;
     }
     return @vcf_values;
 }
@@ -494,14 +494,6 @@ sub get_vcf_fields{
 sub get_simplified_fields{
     my @vcf_values = ();
     #Get preceding INFO fields (these will be one per line)
-    foreach my $f (@info_fields){
-        my $value = $vcf_obj->getVariantInfoField($f);
-        if (defined $value){
-            push @vcf_values, $value;
-        }else{
-            push @vcf_values, '.';
-        }
-    }
     foreach my $f (qw (CHROM POS ID QUAL FILTER REF )){ 
         push @vcf_values, $vcf_obj->getVariantField($f);
     }
@@ -543,6 +535,15 @@ sub get_simplified_fields{
     }
     foreach my $sample_gq (@sample_genotype_quality){
         push @vcf_values, $sample_gq;
+    }
+    #Add user-specified INFO fields after normal VCF fields
+    foreach my $f (@info_fields){
+        my $value = $vcf_obj->getVariantInfoField($f);
+        if (defined $value){
+            push @vcf_values, $value;
+        }else{
+            push @vcf_values, '.';
+        }
     }
     return @vcf_values;
 }
@@ -605,20 +606,11 @@ CLASS:      foreach my $class (@classes){
 ####################################################################
 sub get_header{
     my @head = ();
-    my $smpl;
-    my $smend;
-    my $col = 0;
-    my $row = 0;
-    #first deal with VEP and INFO fields
+    #first deal with VEP fields
     my $vep_header;
     if (defined $config->{vep}){
         foreach my $csq (@fields){
             push @head, $csq;
-        }
-    }
-    if (@info_fields){
-        foreach my $f (@info_fields){
-            push @head, $f;
         }
     }
     #GET HEADER INFO
@@ -629,6 +621,12 @@ sub get_header{
     if (defined $config->{do_not_simplify}){
         foreach my $h (@head_split){
             push @head, $h;
+        }
+        #Put user-specified INFO fields after normal vcf fields
+        if (@info_fields){
+            foreach my $f (@info_fields){
+                push @head, $f;
+            }
         }
     }else{
         foreach my $h ("Chrom", "Pos", "SNP_ID", "Variant Quality", "Filters", "Genomic Ref", ){
@@ -644,6 +642,12 @@ sub get_header{
         }
         foreach my $sample (@samples){
             push @head, "$sample Phred Genotype Confidence";
+        }
+        #Put user-specified INFO fields after normal vcf fields
+        if (@info_fields){
+            foreach my $f (@info_fields){
+                push @head, $f;
+            }
         }
         if (defined $config->{gene_anno}){
             my $i = 0; 
