@@ -96,7 +96,12 @@ if (defined $unaff_genotype_quality){
 print STDERR "Warning - --num_matching has no effect when --presence flag is set.\n" if $check_presence_only and $num_matching;
 
 print STDERR "Initializing VCF input ($vcf)\n";
-my $vcf_obj = ParseVCF->new(file=> $vcf);
+my $vcf_obj;
+if ($progress){
+    $vcf_obj = ParseVCF->new(file=> $vcf);
+}else{
+    $vcf_obj = ParseVCF->new(file=> $vcf, noLineCount => 1);
+}
 my @not_found = ();
 my @samples_checked = ();
 my @reject_checked = ();
