@@ -371,9 +371,19 @@ if (defined $min_matching_samples){
     die "ERROR: --num_matching (-n) value [$min_matching_samples] is greater than number of --samples identified (" .scalar(@samples). ")\n"
         if $min_matching_samples > @samples;
     if ($pedigree){
-        print STDERR "WARNING: --num_matching (-n) argument should be used in ".
+        print STDERR "NOTE: --num_matching (-n) argument should be used in ".
             "conjunction with --num_matching_per_family (-y) when using a PED file ".
-            "(unless you really know what you're doing).\n" if not $min_matching_per_family;
+            "if you want to allow for missing variants within the same family.\n" if not $min_matching_per_family;
+        my $aff_count = 0;#only count one sample per family for $min_matching_samples
+        foreach my $f ($ped->getAllFamilies()){
+            $aff_count++ if ($ped->getAffectedsFromFamily($f));
+        }
+        foreach my $s (@samples){
+            $aff_count++ if not grep {$_ eq $s} $ped->getAllSamples(); 
+        }
+        die "ERROR: --num_matching (-n) value [$min_matching_samples] is greater than the number of families ".
+            "with affected members identified in $pedigree and --samples identified ($aff_count)\n"
+                if $min_matching_samples > @samples;
     }
 }
 
@@ -483,7 +493,7 @@ LINE: while (my $line = $vcf_obj->readLine){
         next LINE if not identical_genotypes(@samples);
     }
     #check for identical genotypes within family if using a ped file
-    if ($pedigree and not $min_matching_per_family){
+    if ($pedigree and not $min_matching_per_family and not $min_matching_samples){
         foreach my $fam ($ped->getAllFamilies()){
             next LINE if not identical_genotypes($ped->getAffectedsFromFamily($fam));
         }
@@ -593,10 +603,14 @@ if ($progressbar){
 ###########
 sub is_autosome{
     my ($chrom) = @_;
-    if ($chrom =~ /^(chr)*(\d+|GL\d+)/i){
-        return 1;
+    if ($chrom =~ /^(chr)*[XYM]/i){
+        return 0;
     }
-    return 0;
+    return 1;
+    #if ($chrom =~ /^(chr)*(\d+|GL\d+|Un_)/i){
+    #    return 1;
+    #}
+    #return 0;
 }
 
 ###########
@@ -724,6 +738,10 @@ sub get_alleles_to_reject{
             }
         }
     }
+    foreach my $k (keys %incompatible_alleles){
+        my %seen = ();
+        @{$incompatible_alleles{$k}} = grep {! $seen{$_}++} @{$incompatible_alleles{$k}};
+    }
     return (\%reject_genotypes, \%incompatible_alleles);
 }
 
@@ -731,8 +749,9 @@ sub get_alleles_to_reject{
 ###########
 sub get_biallelic{
 #arguments are array ref to samples, hash ref to reject genotypes, hash ref to incompatible genotypes and gene_counts hash ref
+#if $count_per_family is true only count multiple members of family once
 #returns hash of samples to arrays of potential biallelic genotypes
-    my ($aff, $reject_geno, $incompatible, $min_matches, $gene_counts) = @_;
+    my ($aff, $reject_geno, $incompatible, $min_matches, $gene_counts, $count_per_family) = @_;
     $min_matches = @$aff if (not $min_matches);
     my @keys = (keys %{$gene_counts});#keys are "chr:pos/allele"
     my %possible_biallelic_genotypes = ();#keys are samples, values are arrays of possible biallelic genotypes
@@ -763,10 +782,12 @@ sub get_biallelic{
     # so we can't use both in different affected (@$aff) samples
     
     foreach my $gt (keys %genotypes){
-        my @incompatible = ();# keep the alleles incompatible with current $gt here
+        my %incomp_gt = ();# keep the alleles incompatible with current $gt here
         my %compatible_genotypes = (); #samples are keys, values are genotypes that pass our test against incompatible alleles
         foreach my $allele (split(/\//, $gt)){
-            push (@incompatible, @{$incompatible->{$allele}}) if exists $incompatible->{$allele};
+            if (exists $incompatible->{$allele}){
+                %incomp_gt = map {$_ => undef}  @{$incompatible->{$allele}}; 
+            }
         }
         foreach my $s (@$aff){
             foreach my $s_gt (@{$possible_biallelic_genotypes{$s}}){
@@ -774,17 +795,33 @@ sub get_biallelic{
                     next if $s_gt ne $gt;
                 }
                 my @s_alleles =  (split("\/", $s_gt));
-                if (not grep { /^($s_alleles[0]|$s_alleles[1])$/ } @incompatible){
-                    push @{$compatible_genotypes{$s}}, $s_gt;
+                if (not exists $incomp_gt{$s_alleles[0]} and 
+                    not exists $incomp_gt{$s_alleles[1]}){
+                        push @{$compatible_genotypes{$s}}, $s_gt;
                 }
             }
         }
         #Test no. samples with compatible genotypes 
         #against min. no. required matching samples or if not specified all samples
         if (keys %compatible_genotypes >= $min_matches){
-            foreach my $s (keys %compatible_genotypes){
-                foreach my $sgt (@{$compatible_genotypes{$s}}){
-                    push @{$biallelic{$s}}, $sgt;
+            my $match_fam = 0;
+            if ($count_per_family){
+                my %counted_fam = ();
+                foreach my $s (keys %compatible_genotypes){
+                    if (grep {$s eq $_} $ped->getAllSamples() ){
+                        my $fam_id = $ped->getFamilyId($s);
+                        $match_fam++ if not $counted_fam{$fam_id};
+                        $counted_fam{$fam_id}++;
+                    }else{
+                        $match_fam++;
+                    }
+                }
+            }
+            if (not $count_per_family or $match_fam >= $min_matches){
+                foreach my $s (keys %compatible_genotypes){
+                    foreach my $sgt (@{$compatible_genotypes{$s}}){
+                        push @{$biallelic{$s}}, $sgt;
+                    }
                 }
             }
         }
@@ -811,7 +848,7 @@ sub check_segregation{
     #Iterate over all @reject to store %reject_genotypes and %incompatible_alleles
     my ($reject_genotypes, $incompatible_alleles) = get_alleles_to_reject(\@reject, $gene_counts);
     #Iterate overl all @samples to store possible biallelic genotypes
-    my %biallelic_candidates = get_biallelic(\@samples, $reject_genotypes, $incompatible_alleles, $min_matching_per_family, $gene_counts);
+    my %biallelic_candidates = get_biallelic(\@samples, $reject_genotypes, $incompatible_alleles, $min_matching_samples, $gene_counts);
     #Then for each family identify common biallelic genotypes but throw away anything if neither allele present in an obligate carrier
 
     foreach my $f ($ped->getAllFamilies){
@@ -873,13 +910,28 @@ KEY:        foreach my $key (keys %intersect){
             $seg_count{$al[1]} = $gene_counts->{$al[1]};
         }
     }
+    #deal with any samples not in pedigree
+    my %all_ped = map {$_ => undef} $ped->getAllSamples();
+    my @other_affected = grep { ! exists $all_ped{$_} } @samples;
+    foreach my $aff (@other_affected){
+        foreach my $bi (@{$biallelic_candidates{$aff}}){
+            my @al = split(/\//, $bi);  
+            #add viable alleles to %seg_count
+            $seg_count{$al[0]} = $gene_counts->{$al[0]};
+            $seg_count{$al[1]} = $gene_counts->{$al[1]};
+        }
+    }
     #Find any common variation by running check_all_samples_biallelic using \%seg_counts
-    return check_all_samples_biallelic(\%seg_count);
+    if ($min_matching_samples){
+        return check_all_samples_biallelic(\%seg_count, 1);
+    }else{
+        return check_all_samples_biallelic(\%seg_count);
+    }
 }
 
 ###########
 sub check_all_samples_biallelic{
-    my ($gene_counts) = @_;
+    my ($gene_counts, $count_per_family) = @_;
     
     #we need to go through every possible combination of biallelic alleles 
     #(represented as chr:pos/allele) to compare between @samples and against @$reject
@@ -891,7 +943,7 @@ sub check_all_samples_biallelic{
     # assuming presence of two alleles in a reject sample means either they are in cis or are harmless when in trans
     #also note alleles that can't BOTH be pathogenic storing them in %incompatible alleles
     my ($reject_genotypes, $incompatible_alleles) = get_alleles_to_reject(\@reject, $gene_counts);
-    my %biallelic_candidates = get_biallelic(\@samples, $reject_genotypes, $incompatible_alleles, $min_matching_samples, $gene_counts);
+    my %biallelic_candidates = get_biallelic(\@samples, $reject_genotypes, $incompatible_alleles, $min_matching_samples, $gene_counts, $count_per_family);
     #%biallelic_candidates - keys are samples, values are arrays of biallelic genotypes
     foreach my $s (keys %biallelic_candidates){
         foreach my $gt (@{$biallelic_candidates{$s}}){
@@ -1013,7 +1065,7 @@ File to print a list of genes containing biallelic variants to. If you use this 
 
 =item B<-s    --samples>
 
-One or more samples to identify biallelic genes from.  When more than one sample is given only genes with biallelic variants in ALL samples will be returned.
+One or more samples to identify biallelic genes from.  When more than one sample is given only genes with biallelic variants in ALL samples will be returned unless --num_matching option is used.
 
 =item B<-r    --reject>
 
@@ -1175,11 +1227,11 @@ Check all samples in VCF. Assumes all samples are affected.
 
 =item B<-n    --num_matching>
 
-By default only transcripts that are found to contain potentially pathogenic variation in ALL affected samples are considered. Use this option to specify a minimum number of matching samples if you want to consider the possibility that one or more samples may not have a causative mutation in the same gene or to allow for no calls/calls falling below --quality threshold. If using a ped file also use the --num_matching_per_family (-y) argument to allow for missing variants within families.
+By default only transcripts that are found to contain potentially pathogenic variation in ALL affected samples are considered. Use this option to specify a minimum number of matching samples if you want to consider the possibility that one or more samples may not have a causative mutation in the same gene or to allow for no calls/calls falling below --quality threshold. If using a ped file, multiple samples from the same family will only count as a single match. For example, if you have two families and another sample specified using --samples you may use "--num_matching 2" to identify transcripts with matching variants in either both families or one family and the extra sample.  You may also use the --num_matching_per_family (-y) argument to allow for missing variants within families.
 
 =item B<-y    --num_matching_per_family>
 
-As above but for affected members per family. By default, even when using --num_matching, biallelic variants from a given family (if a PED file was used) are only passed on for consideration if all affected samples present in the VCF contain matching biallelic variants. This argument sets the minimum number of affected samples per family for a biallelic combination of variants to be considered.  Arguably a solution in search of a problem.
+As above but for affected members per family. By default, even when using --num_matching, biallelic variants from a given family (if a PED file was used) are only passed on for consideration if all affected samples from that family present in the VCF contain matching biallelic variants. This argument sets the minimum number of affected samples per family for a biallelic combination of variants to be considered. 
 
 =item B<-t    --ignore_carrier_status>
 
@@ -1250,7 +1302,7 @@ University of Leeds
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2013, 2012  David A. Parry
+Copyright 2014, 2013, 2012  David A. Parry
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with this program. If not, see <http://www.gnu.org/licenses/>.
 
