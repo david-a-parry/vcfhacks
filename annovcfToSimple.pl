@@ -158,6 +158,7 @@ use strict;
 use warnings;
 use Getopt::Long;
 use Data::Dumper;
+use Data::Dumper;
 use Excel::Writer::XLSX;
 use Excel::Writer::XLSX::Utility;
 use Pod::Usage;
@@ -166,6 +167,7 @@ use FindBin;
 use lib "$FindBin::Bin";
 use ParseVCF;
 use ParsePedfile;
+use TextToExcel;
 
 
 ############
@@ -375,7 +377,7 @@ if (@ped_samples){
     if (not @sample_found){
         die "No samples from ped file(s) found in VCF.\n";
     }
-    print "Found " . scalar(@sample_found) . " samples of " . scalar(@ped_samples) . 
+    print STDERR "Found " . scalar(@sample_found) . " samples of " . scalar(@ped_samples) . 
         " samples in ped files in VCF.\n";
     push @samples, @sample_found;
 }
@@ -390,478 +392,119 @@ if (not @samples){
     }
 }
 
-
 my $OUT;
+my $xl_obj;
+
+my ($header, $gene_anno_cols) = get_header();
 if (defined $config->{text_output}){
-    open ($OUT, ">$output") or die "Can't open $output: $!\n";
-    process_as_text();
-}else{
-    process_as_xlsx();
-}
-
-
-
-
-###########################
-sub process_as_text{
-    if (defined $config->{vep}){
-        print $OUT "#";
-        print $OUT join("\t", @fields) ."\t";
-    }
-    #GET HEADER INFO
-    my $header_string = $vcf_obj->getHeader(1);
-    my %header_columns = $vcf_obj->getHeaderColumns();
-    my @head_split= split("\t", $header_string);
-    my @anno_columns  = ();
-    if (defined $config->{do_not_simplify}){
-        if (@info_fields){
-            chomp @head_split;
-            print $OUT join("\t", @head_split);
-            print $OUT join("\t", @info_fields) ."\n";
-        }else{
-            print $OUT join("\t", @head_split);
-        }
+    if ($output){
+        open ($OUT, ">$output") or die "Can't open $output: $!\n";
     }else{
-        #print $OUT join("\t", ("Chrom", "Pos", "SNP_ID", "Variant Percent Confidence", "Filters", "Genomic Ref", ));
-        print $OUT join("\t", ("Chrom", "Pos", "SNP_ID", "Variant Phred Quality", "Filters", "Genomic Ref", ));
-        print $OUT join("\t", @samples) ."\t" ;
-        print $OUT join(" Allele Depth\t", @samples) ." Allele Depth\t" ;
-        print $OUT join(" Phred Genotype Confidence\t", @samples) ." Phred Genotype Confidence" ;
- #       print $OUT join(" Scaled Percent Probably Liklihoods\t", @samples) ." Scaled Percent Probably Liklihoods" ;
-        if (@info_fields){
-            print $OUT "\t";
-            print $OUT join("\t", @info_fields) ;
-        }
-        if (defined $config->{gene_anno}){
-            my $i = 0; 
-            $i++ until $head_split[$i] =~ /CHROM/;
-            @anno_columns = @head_split[0..$i-1];
-            print $OUT "\t";
-            print $OUT join("\t", @anno_columns);
-        }
-        print $OUT "\n";
+        $OUT = \*STDOUT;
     }
-
-
-    LINE: while (my $vcf_line = $vcf_obj->readLine){
-        if (defined $config->{do_not_simplify}){
-            write_line_to_text()
-        }else{
-            write_simplified_vcf_to_text(\@anno_columns);
-        }
-    }
-
-}    
-
-####################################################
-sub write_line_to_text{
-    my @output = split("\t", $vcf_obj->get_currentLine);
-    if(@info_fields){
-        foreach my $f (@info_fields){
-            my $value = $vcf_obj->getVariantInfoField($f);
-            if ($value){
-                push @output, "$value\t";
-            }else{
-                push @output, ".\t";
-            }
-        }
-    }
-    if (defined $config->{vep}){
-        my @csq = ();
-        @csq = $vcf_obj->getVepFields(\@fields);
-        my %vep_allele ; 
-        if ($config->{samples}){
-            my @sample_alleles = $vcf_obj->getSampleActualGenotypes(multiple => $config->{samples}, return_alleles_only => 1);
-            foreach my $allele (@sample_alleles){
-                my $v_allele = $vcf_obj->altsToVepAllele(alt => $allele);
-                $vep_allele{$v_allele} = $allele;
-            }
-        }
-ANNOT:  foreach my $annot (@csq){
-            my @csq_values = ();
-              if ($config->{canonical_only}){
-                  next if (not $annot->{canonical} );
-              }
-            if ($config->{functional}){
-                my $match = 0;
-CLASS:          foreach my $class (@classes){
-                    my @anno_csq = split(/\&/, $annot->{consequence});
-                    if (grep {/NMD_transcript_variant/i} @anno_csq){
-                        next ANNOT;
-                    }else{
-                         foreach my $ac (@anno_csq){
-                              if (lc$ac eq lc$class){
-                                $match++;
-                                last CLASS;
-                            }
-                        }
-                    }
-                }
-                next ANNOT if not $match;
-            }
-            if ($config->{samples}){
-                next if not exists $vep_allele{$annot->{allele}};
-            }
-            foreach my $vep  (@fields){
-                my $value = $annot->{$vep};
-                if (defined $value && $value ne ''){
-                    push @csq_values, $value;
-                }else{
-                    push @csq_values, ".";
-                }
-            }
-            print $OUT join("\t", @csq_values) ."\t";
-            print $OUT join("\t", @output) ."\n";
-        }
-    }
-    print $OUT join("\t", @output) ."\n";
+    print $OUT join("\t", @$header) ."\n";
+}else{
+    $xl_obj = TextToExcel->new( file=> $output);
+    $header_formatting = $xl_obj->createFormat(bold => 1);
+    $url_format = $xl_obj->createFormat(color => 'blue', underline => 1, );
+    $xl_obj->writeLine(line => $header, format => $header_formatting);
 }
 
-####################################################
-sub write_simplified_vcf_to_text{
-    my ($gene_anno_cols) = @_;
-    my @output = ();
-        
-    foreach my $varfield ($vcf_obj->getVariantField("CHROM"), $vcf_obj->getVariantField("POS"), $vcf_obj->getVariantField("ID"),){ 
-        push @output, $varfield;
-    }
-    #push @output, 100 - (100 * (10**(-($vcf_obj->getVariantField("QUAL"))/10)));
-    push @output, $vcf_obj->getVariantField("QUAL");
-    push @output, $vcf_obj->getVariantField("FILTER");
-    push @output, $vcf_obj->getVariantField("REF");
-    my @form = split(":", $vcf_obj->getVariantField("FORMAT"));
-    my @all_alleles = ($vcf_obj->getVariantField("REF"), split(",", $vcf_obj->getVariantField("ALT")));
-    my @sample_calls = ();
-    my @sample_allele_depths = ();
-    my @sample_genotype_quality = ();
-    foreach my $sample (@samples){
-        my $genotype = $vcf_obj->getSampleActualGenotypes(sample=>$sample);
-        if (defined $genotype){ 
-            push (@sample_calls, $genotype);
+LINE: while (my $vcf_line = $vcf_obj->readLine){
+    my @preceding = ();
+    my @line = ();
+    my @following = ();
+    #Get preceding VEP columns (there may be multiple rows per line)
+    if (defined $config->{vep}){
+        my ($prec, $canonical_found, $functional_found, $sample_found) = get_vep_fields() ; 
+        if (@$prec > 0){
+            @preceding = @$prec;
         }else{
-            push @sample_calls, "-";
-        }
-        my $ad = $vcf_obj->getSampleGenotypeField(sample => $sample, field => "AD"); 
-        my $allele_depths = '-';
-        if (defined $ad && $ad =~ /(\d+,*)+/){
-            my @ads = split(",", $ad);
-            my @allele_depth = ();
-            for (my $n = 0; $n < @ads; $n++){
-                push (@allele_depth, "$all_alleles[$n]=$ads[$n]");
+            my $e_string;
+            my @temp_prec;
+            if (not $canonical_found){
+                $e_string = "No canonical variant";
+            }elsif (not $functional_found){
+                $e_string = "No valid functional variant";
+            }elsif (not $sample_found){
+                $e_string = "No valid variant in samples";
             }
-            $allele_depths = join("/", @allele_depth);
-        }
-        push (@sample_allele_depths, $allele_depths);
-        my $genotype_quality = "-";
-        my $gq = $vcf_obj->getSampleGenotypeField(sample => $sample, field => "GQ");
-        if (defined $gq && $gq =~ /(\d+\.*\d*)+/){
-            #$genotype_quality = 100 - (100 * 10**(-$gq/10));
-            $genotype_quality = $gq;
-        }
-        push (@sample_genotype_quality, $genotype_quality);
-    }
-    foreach my $call (@sample_calls){
-        push @output, $call;
-    }
-    foreach my $sample_depth (@sample_allele_depths){
-        push @output, $sample_depth;
-    }
-    foreach my $sample_gq (@sample_genotype_quality){
-        push @output, $sample_gq;
-    }
-    if(@info_fields){
-        foreach my $f (@info_fields){
-            my $value = $vcf_obj->getVariantInfoField($f);
-            if ($value){
-                push @output, "$value\t";
-            }else{
-                push @output, ".\t";
+            push @temp_prec, $e_string;
+            for (my $i = 1; $i < @fields; $i++){
+                push @temp_prec, "-";
             }
+            push @preceding, \@temp_prec;
         }
+
+    }
+    
+    #Get values for line
+    if (defined $config->{do_not_simplify}){
+        @line = get_vcf_fields();    
+    }else{
+        @line = get_simplified_fields();    
     }
     if (ref $gene_anno_cols eq 'ARRAY'){
-        my @geneanno;
         foreach my $field (@$gene_anno_cols){
-            push @output, $vcf_obj->getCustomField($field);
+            push @line, $vcf_obj->getCustomField($field);
         }
     }
-    if ($config->{vep}){
-        my @csq = $vcf_obj->getVepFields(\@fields);
-        my %vep_allele ; 
-        if ($config->{samples}){
-            my @sample_alleles = $vcf_obj->getSampleActualGenotypes(multiple => $config->{samples}, return_alleles_only => 1);
-            foreach my $allele (@sample_alleles){
-                my $v_allele = $vcf_obj->altsToVepAllele(alt => $allele);
-                $vep_allele{$v_allele} = $allele;
+    #now write to text or excel as appropriate
+    if (defined $config->{text_output}){
+        #only @preceding should span multiple rows
+        if (@preceding){
+            foreach my $p (@preceding){
+                print $OUT join("\t", @$p);
+                print $OUT join("\t", @line). "\n";
             }
-        }
-ANNOT:  foreach my $annot (@csq){
-            my @csq_values = ();
-            if ($config->{canonical_only}){
-                next if (not $annot->{canonical} );
-            }
-            if ($config->{functional}){
-                my $match = 0;
-CLASS:          foreach my $class (@classes){
-                    my @anno_csq = split(/\&/, $annot->{consequence});
-                    if (grep {/NMD_transcript_variant/i} @anno_csq){
-                        next ANNOT;
-                    }else{
-                         foreach my $ac (@anno_csq){
-                              if (lc$ac eq lc$class){
-                                $match++;
-                                last CLASS;
-                            }
-                        }
-                    }
-                }
-                next ANNOT if not $match;
-            }
-
-            if ($config->{samples}){
-                next if not exists $vep_allele{$annot->{allele}};
-            }
-            foreach my $vep  (@fields){
-                my $value = $annot->{$vep};
-                if (defined $value && $value ne ''){
-                    push @csq_values, $value;
-                }else{
-                    push @csq_values, ".";
-                }
-                }
-            print $OUT join("\t", @csq_values) ."\t";
-            print $OUT join("\t", @output) . "\n";
-        }
-    }else{
-        print $OUT join("\t", @output) ."\n";
-    }
-}
-
-    
-###########################
-
-sub process_as_xlsx{
-    $workbook  = Excel::Writer::XLSX->new($output);
-    $worksheet = $workbook->add_worksheet();
-    #my ($ent, $go_acc, $go_desc, $rif, $sum) = (0,0,0,0,0);
-    my $smpl;
-    my $smend;
-    my $col = 0;
-    my $row = 0;
-    $header_formatting = $workbook->add_format(bold => 1);
-    $std_formatting = $workbook->add_format();
-    $url_format = $workbook->add_format(color => 'blue', underline => 1, );
-#    $worksheet->set_column( 0, 0, 10);
-#    $worksheet->set_column( 1, 1, 12);
-#    $worksheet->set_column( 2, 2, 25);
-#    $worksheet->set_column( 4, 4, 9);
-#    $worksheet->set_column( 10, 10, 11);
-#    $worksheet->set_column( 11, 11, 13);
-#    $worksheet->set_column( 12, 15, 20);
-    my $vep_header;
-    if (defined $config->{vep}){
-        foreach my $csq (@fields){
-            $worksheet->write($row, $col++, $csq, $header_formatting);
-        }
-    }
-    if (@info_fields){
-        foreach my $f (@info_fields){
-            $worksheet->write($row, $col++, $f, $header_formatting);
-        }
-    }
-    #GET HEADER INFO
-    my $header_string = $vcf_obj->getHeader(1);
-    my %header_columns = $vcf_obj->getHeaderColumns();
-    my @head_split= split("\t", $header_string);
-    my @anno_columns = ();
-    if (defined $config->{do_not_simplify}){
-        foreach (@head_split){
-            $worksheet->write($row, $col++, $_, $header_formatting);
-        }
-    }else{
-        foreach ("Chrom", "Pos", "SNP_ID", "Variant Percent Confidence", "Filters", "Genomic Ref", ){
-            $worksheet->write($row, $col++, $_, $header_formatting);
-        }
-
-        foreach my $sample (@samples){
-            $worksheet->write($row, $col++, $sample, $header_formatting);
-        }
-
-        foreach my $sample (@samples){
-            $worksheet->write($row, $col++, "$sample Allele Depth", $header_formatting);
-        }
-        foreach my $sample (@samples){
-            $worksheet->write($row, $col++, "$sample Phred Genotype Confidence", $header_formatting);
-        }
-        if (defined $config->{gene_anno}){
-            my $i = 0; 
-            $i++ until $head_split[$i] =~ /CHROM/;
-            @anno_columns = @head_split[0..$i-1];
-            foreach my $anno_col (@anno_columns){
-                $worksheet->write($row, $col++, $anno_col, $header_formatting);
-            }
-        }
-    }
-
-
-    LINE: while (my $vcf_line = $vcf_obj->readLine){
-        $row++;
-        $col = 0;
-        if (defined $config->{do_not_simplify}){
-            $row += write_line_to_excel($row, $col, );
         }else{
-            $row += write_simplified_vcf_to_excel($row, $col, \@anno_columns);
+            print $OUT join("\t", @line). "\n";
         }
+    }else{
+        $xl_obj->writeLine(
+                line => \@line, 
+                preceding => \@preceding, 
+                );
     }
-    $workbook -> close();
-
-}    
-
-
-####################################################
-sub write_vep_fields{
-    my ($row, $col) = @_;
-    my @csq = $vcf_obj->getVepFields(\@fields);
-    my $lines = 0;
-    my ($canonical_found, $functional_found, $sample_found) = (0, 0, 0);
-    my $temp_col;
-    my %vep_allele = ();
-    if ($config->{samples}){
-        my @sample_alleles = $vcf_obj->getSampleActualGenotypes(multiple => $config->{samples}, return_alleles_only => 1);
-        foreach my $allele (@sample_alleles){
-            my $v_allele = $vcf_obj->altsToVepAllele(alt => $allele);
-            $vep_allele{$v_allele} = $allele;
-        }
-     }
-ANNOT:  foreach my $annot (@csq){
-        if ($config->{canonical_only}){
-              next if (not $annot->{'canonical'} );
-        }
-        $canonical_found++;
-        if ($config->{functional}){
-            my $match = 0;
-CLASS:      foreach my $class (@classes){
-                my @anno_csq = split(/\&/, $annot->{consequence});
-                if (grep {/NMD_transcript_variant/i} @anno_csq){
-                    next ANNOT;
-                }else{
-                     foreach my $ac (@anno_csq){
-                          if (lc$ac eq lc$class){
-                            $match++;
-                            last CLASS;
-                        }
-                    }
-                }
-            }
-            next ANNOT if not $match;
-        }
-        $functional_found++;
-        if ($config->{samples}){
-            next if not exists $vep_allele{$annot->{allele}};
-        }
-        $sample_found++;
-        $temp_col = $col;
-        foreach my $vep  (@fields){
-            my $value = $annot->{$vep};
-            $worksheet->write($row, $temp_col++, $value);
-        }
-        $lines++;
-        $row++;
-    }   
-    return ($lines, $temp_col, $canonical_found, $functional_found, $sample_found);
 }
+if ($xl_obj){
+    $xl_obj->DESTROY();
+}
+$vcf_obj->DESTROY();
+
 ####################################################
-sub write_line_to_excel{
-#return no. of merged rows in order to increment $row
-    my ($row, $col, ) = @_;
-    my $lines = 1;
-    my ($canonical_found, $functional_found, $sample_found) = (0, 0, 0);
-    if (defined $config->{vep}){
-        ($lines, $col, $canonical_found, $functional_found, $sample_found) = write_vep_fields($row, $col);
-    }
-    if ($lines < 1){
-    #this happens if --canonical_only argument is in effect and we haven't got a canonical transcript for this variant
-    #or if we haven't found a functional variant 
-    #or if we haven't got a variant in our sample
-    #we won't have printed anything for the consequence fields
-        my $e_string ;
-        if (not $canonical_found){
-            $e_string = "No canonical variant";
-        }elsif (not $functional_found){
-           $e_string = "No valid functional variant";
-        }elsif (not $sample_found){
-            $e_string = "No valid variant in samples";
-        }
-        $worksheet->write($row, $col++, $e_string);
-        for (my $i = 1; $i < @fields; $i++){
-            $worksheet->write($row, $col++, "-");
-        }
-        $lines = 1;
-    }
+sub get_vcf_fields{
+    my @vcf_values = ();
+    #Get preceding INFO fields (these will be one per line)
     foreach my $f (@info_fields){
         my $value = $vcf_obj->getVariantInfoField($f);
         if (defined $value){
-            write_worksheet($lines, $value, $worksheet, $row, $col++, $std_formatting);
+            push @vcf_values, $value;
         }else{
-            write_worksheet($lines, '.', $worksheet, $row, $col++, $std_formatting);
+            push @vcf_values, '.';
         }
     }
     foreach my $field (split("\t", $vcf_obj->get_currentLine)){
-        write_worksheet($lines, $field, $worksheet, $row, $col++, $std_formatting);
+        push @vcf_values, $field;
     }
-    #for (my $i = 0; $i < $lines; $i++){
-    #    my $temp_col = $col;
-    #    foreach my $field (split("\t", $vcf_obj->get_currentLine)){
-    #        $worksheet->write($row, $temp_col++, $field);
-    #    }
-    #    $row++;
-    #}
-    return $lines - 1 ;
-
+    return @vcf_values;
 }
+
 ####################################################
-sub write_simplified_vcf_to_excel{
-#return no. of merged rows in order to increment $row
-    my ($row, $col, $gene_anno_cols) = @_;
-    my $lines = 1;
-    my ($canonical_found, $functional_found, $sample_found) = (0, 0, 0);
-    if (defined $config->{vep}){
-        ($lines, $col, $canonical_found, $functional_found, $sample_found) = write_vep_fields($row, $col);
-    }
-    if ($lines < 1){
-    #this happens if --canonical_only argument is in effect and we haven't got a canonical transcript for this variant
-    #or if we haven't found a functional variant 
-    #or if we haven't got a variant in our sample
-    #we won't have printed anything for the consequence fields
-        my $e_string ;
-        if (not $canonical_found){
-            $e_string = "No canonical variant";
-        }elsif (not $functional_found){
-           $e_string = "No valid functional variant";
-        }elsif (not $sample_found){
-            $e_string = "No valid variant in samples";
-        }
-        $worksheet->write($row, $col++, $e_string);
-        for (my $i = 1; $i < @fields; $i++){
-            $worksheet->write($row, $col++, "-");
-        }
-        $lines = 1;
-    }
+sub get_simplified_fields{
+    my @vcf_values = ();
+    #Get preceding INFO fields (these will be one per line)
     foreach my $f (@info_fields){
         my $value = $vcf_obj->getVariantInfoField($f);
         if (defined $value){
-            write_worksheet($lines, $value, $worksheet, $row, $col++, $std_formatting);
+            push @vcf_values, $value;
         }else{
-            write_worksheet($lines, '.', $worksheet, $row, $col++, $std_formatting);
+            push @vcf_values, '.';
         }
     }
-    foreach my $varfield ($vcf_obj->getVariantField("CHROM"), $vcf_obj->getVariantField("POS"), $vcf_obj->getVariantField("ID"),){ 
-        write_worksheet($lines, $varfield, $worksheet, $row, $col++, $std_formatting);
+    foreach my $f (qw (CHROM POS ID QUAL FILTER REF )){ 
+        push @vcf_values, $vcf_obj->getVariantField($f);
     }
-    #write_worksheet($lines, 100 - (100 * (10**(-($vcf_obj->getVariantField("QUAL"))/10))), $worksheet, $row, $col++, $std_formatting, );
-    write_worksheet($lines, $vcf_obj->getVariantField("QUAL"), $worksheet, $row, $col++, $std_formatting, );
-    write_worksheet($lines, $vcf_obj->getVariantField("FILTER"), $worksheet, $row, $col++, $std_formatting);
-    write_worksheet($lines, $vcf_obj->getVariantField("REF"), $worksheet, $row, $col++, $std_formatting);
     my @all_alleles = $vcf_obj->readAlleles();
     my @sample_calls = ();
     my @sample_allele_depths = ();
@@ -893,49 +536,126 @@ sub write_simplified_vcf_to_excel{
         push (@sample_genotype_quality, $genotype_quality);
     }
     foreach my $call (@sample_calls){
-        write_worksheet($lines, $call, $worksheet, $row, $col++, $std_formatting);
+        push @vcf_values, $call;
     }
     foreach my $sample_depth (@sample_allele_depths){
-        write_worksheet($lines, $sample_depth, $worksheet, $row, $col++, $std_formatting);
+        push @vcf_values, $sample_depth;
     }
     foreach my $sample_gq (@sample_genotype_quality){
-        write_worksheet($lines, $sample_gq, $worksheet, $row, $col++, $std_formatting, );
+        push @vcf_values, $sample_gq;
     }
-    if (ref $gene_anno_cols eq 'ARRAY'){
-        foreach my $field (@$gene_anno_cols){
-            write_worksheet($lines, $vcf_obj->getCustomField($field), $worksheet, $row, $col++, $std_formatting);
-        }
-    }
-    return $lines - 1 ;#return additional rows added due to multiple annotations
-}
-
-
-
-####################################################
-sub get_possible_genotypes{
-    my ($allele_ref) = @_;
-    my @combinations = ();
-    for (my $n = 0; $n < @$allele_ref; $n++){
-        for (my $m = 0; $m <= $n; $m++){
-            push (@combinations, "$$allele_ref[$m]/$$allele_ref[$n]");
-        }
-    }
-    return @combinations;
+    return @vcf_values;
 }
 
 ####################################################
-sub write_worksheet{
-#if we have multiple geneIDs then we need to write as a merged cell
-    my ($gene_ids, $string, $worksheet, $row, $col, $formatting, $type) = @_;
-    $type = 'string' if not $type;
-    if ($string =~ /^\d+(\.\d+)*]$/){
-        $type = 'number';
+sub get_vep_fields{
+    #returns a 2D array of VEP values
+    my ($row, $col) = @_;
+    my @csq = $vcf_obj->getVepFields(\@fields);
+    my ($canonical_found, $functional_found, $sample_found) = (0, 0, 0);
+    my %vep_allele = ();
+    my @vep_values = ();
+    if ($config->{samples}){
+        my @sample_alleles = $vcf_obj->getSampleActualGenotypes(multiple => $config->{samples}, return_alleles_only => 1);
+        foreach my $allele (@sample_alleles){
+            my $v_allele = $vcf_obj->altsToVepAllele(alt => $allele);
+            $vep_allele{$v_allele} = $allele;
+        }
+     }
+ANNOT:  foreach my $annot (@csq){
+        my @csq_values = ();
+        if ($config->{canonical_only}){
+              next if (not $annot->{'canonical'} );
+        }
+        $canonical_found++;
+        if ($config->{functional}){
+            my $match = 0;
+CLASS:      foreach my $class (@classes){
+                my @anno_csq = split(/\&/, $annot->{consequence});
+                if (grep {/NMD_transcript_variant/i} @anno_csq){
+                    next ANNOT;
+                }else{
+                     foreach my $ac (@anno_csq){
+                          if (lc$ac eq lc$class){
+                            $match++;
+                            last CLASS;
+                        }
+                    }
+                }
+            }
+            next ANNOT if not $match;
+        }
+        $functional_found++;
+        if ($config->{samples}){
+            next if not exists $vep_allele{$annot->{allele}};
+        }
+        $sample_found++;
+        foreach my $vep  (@fields){
+            my $value = $annot->{$vep};
+            if (defined $value){
+                push @csq_values, $value;
+            }else{
+                push @csq_values, '.';
+            }
+        }
+        push @vep_values, \@csq_values;
+    }   
+    return (\@vep_values, $canonical_found, $functional_found, $sample_found);
+}
+####################################################################
+sub get_header{
+    my @head = ();
+    my $smpl;
+    my $smend;
+    my $col = 0;
+    my $row = 0;
+    #first deal with VEP and INFO fields
+    my $vep_header;
+    if (defined $config->{vep}){
+        foreach my $csq (@fields){
+            push @head, $csq;
+        }
     }
-    if ($gene_ids > 1){
-        my $top_cell = xl_rowcol_to_cell($row, $col);
-            my $bottom_cell = xl_rowcol_to_cell($row + $gene_ids-1, $col);
-        $worksheet->merge_range_type($type, "$top_cell:$bottom_cell", $string, $formatting);
+    if (@info_fields){
+        foreach my $f (@info_fields){
+            push @head, $f;
+        }
+    }
+    #GET HEADER INFO
+    my $header_string = $vcf_obj->getHeader(1);
+    my %header_columns = $vcf_obj->getHeaderColumns();
+    my @head_split= split("\t", $header_string);
+    my @anno_columns = ();
+    if (defined $config->{do_not_simplify}){
+        foreach my $h (@head_split){
+            push @head, $h;
+        }
     }else{
-        $worksheet->write($row, $col, $string);
+        foreach my $h ("Chrom", "Pos", "SNP_ID", "Variant Quality", "Filters", "Genomic Ref", ){
+            push @head, $h;
+        }
+
+        foreach my $sample (@samples){
+            push @head, $sample;
+        }
+
+        foreach my $sample (@samples){
+            push @head, "$sample Allele Depth";
+        }
+        foreach my $sample (@samples){
+            push @head, "$sample Phred Genotype Confidence";
+        }
+        if (defined $config->{gene_anno}){
+            my $i = 0; 
+            $i++ until $head_split[$i] =~ /CHROM/;
+            @anno_columns = @head_split[0..$i-1];
+            foreach my $anno_col (@anno_columns){
+                push @head, $anno_col;
+            }
+        }
     }
+    return \@head, \@anno_columns;
 }
+
+
+
