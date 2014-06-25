@@ -147,7 +147,7 @@ print STDERR "Preparing regions...\n";
 my @regions = ();
 if (@bedfile){
     foreach my $bedfile (@bedfile){
-        open (BED, $bedfile) || die "can't open $bedfile";
+        open (BED, $bedfile) || die "can't open $bedfile: $!";
         my @temp = ();
         while (my $temp =  <BED>){
             chomp $temp;
@@ -176,7 +176,7 @@ my $reg_obj = SortGenomicCoordinates -> new(array => \@regions, type => 'bed', c
 $reg_obj->prep();
 my $OUT;
 if ($outfile){
-    open ($OUT, ">$outfile") || die "Can't open $outfile for writing\n";
+    open ($OUT, ">$outfile") || die "Can't open $outfile for writing: $!";
 }else{
     $OUT = *STDOUT;
 }
