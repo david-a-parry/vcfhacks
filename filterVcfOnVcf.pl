@@ -64,7 +64,7 @@ Samples from filter VCF files to ignore.  If specified variant alleles from all 
 
 =item B<-y    --allele_frequency_filter>
 
-Reject variants if the allele frequency in all --filter VCFs is equal to or greater than this value. The value must be a float between 0 and 1. 
+Reject variants if the allele frequency in all --filter VCFs is equal to or greater than this value. All samples will be used to calculate allele frequency regardless of --reject or --not_samples settings, although variants will only be counted if the genotype quality is greater than the value given for --un_quality. The value must be a float between 0 and 1. 
 
 =item B<-t    --threshold>
 
@@ -156,7 +156,7 @@ my %opts = (
         'output' => \$out,
         'filter' => \@filter_vcfs,
         'directories' => \@dirs,
-        'samples=s' => \@samples,
+        'samples' => \@samples,
         'reject' => \@reject,
         'allele_frequency_filter' => \$maf,
         'threshold' => \$threshold,
@@ -319,8 +319,10 @@ ALLELE:   foreach my $allele (keys %sample_alleles){
                 my %f_alts = ();
                 #get genotype call codes (0, 1, 2 etc.) for filter samples
 FILTER_LINE:    while (my $filter_line = $filter_obj->readPosition()){
-                    my $filter_qual = $filter_obj->getVariantField('QUAL');
-                    next FILTER_LINE if $filter_qual < $min_qual;
+                    if ($min_qual){
+                        my $filter_qual = $filter_obj->getVariantField('QUAL');
+                        next FILTER_LINE if $filter_qual < $min_qual;
+                    }
                     my %filter_min = $filter_obj->minimizeAlleles();
                     if (@temp_reject){
                         #%f_alts = map {$_ => undef} $filter_obj->getSampleActualGenotypes(multiple => \@temp_reject, return_alleles_only => 1, minGQ => $unaff_quality);
