@@ -61,23 +61,23 @@ our $AUTOLOAD;
 
 sub DESTROY{
         my ($self) = @_;
-        close $self->{_filehandle};
+        close $self->{_filehandle} if $self->{_filehandle};
         $self -> _decr_count( );
 }
 
 sub new {
-        my ($class, %args) = @_;
-        my $self = bless { }, $class;
-        foreach my $attr ($self -> _all_attrs( ) ){
-                my ($arg) = ($attr =~ /^_(.*)/);
-                if (exists $args{$arg}){
-                        $self->{$attr} = $args{$arg};
-                }elsif($self->_accessible($attr, "required")){
-                        croak "$attr argument required";
-                }else{
-                        $self->{$attr} = $self->_attr_default($attr);
-                }
+    my ($class, %args) = @_;
+    my $self = bless { }, $class;
+    foreach my $attr ($self -> _all_attrs( ) ){
+        my ($arg) = ($attr =~ /^_(.*)/);
+        if (exists $args{$arg}){
+            $self->{$attr} = $args{$arg};
+        }elsif($self->_accessible($attr, "required")){
+            croak "$attr argument required";
+        }else{
+            $self->{$attr} = $self->_attr_default($attr);
         }
+    }
     if ($self->{_file} eq '-'){
         $self->{_inputIsStdin} = 1;
         $self->{_filehandle} = $self -> _openFileHandle();
@@ -150,7 +150,7 @@ sub _openFileHandle{
     my ($self) = @_;
     my $FH;
     croak "file argument is not defined! " if not defined $self->{_file};
-    if ($self->{_file} =~ /\.gz/){
+    if ($self->{_file} =~ /\.gz$/){
         $FH = new IO::Uncompress::Gunzip $self->{_file}, MultiStream => 1 or croak "IO::Uncompress::Gunzip failed while opening $self->{_file} for reading: \n$GunzipError";
     }else{
         open ($FH, $self->{_file}) or croak "Can't open VCF file $self->{_file}: $! ";
@@ -319,20 +319,6 @@ sub altsToVepAllele{
 sub _altToVep{
     my ($alt, $ref) = @_;
     if (length($alt) == length($ref)){
-#i think the cut code below is wrong, VEP just returns the Allele as is regardless of whether it's > 1 nt
-=cut        if (length($alt) == 1){#SNV - no need to edit
-
-            return $alt;
-        }else{#same length but both are longer than one nt
-            #if they overlap trim overlap
-            my $i;
-            for ($i = 1; $i < length($alt); $i++){#get overlap index
-                my $substr = substr($alt, 0, $i);
-                last if $ref !~ /^$substr/;
-            }
-            return  substr($alt, $i -1);
-        }
-=cut
         return $alt;
     }elsif(length($alt) > length($ref)){#insertion - VEP trims first base
        return substr($alt, 1);
@@ -501,8 +487,6 @@ sub readSnpEffHeader{
     return @eff_fields if wantarray;#return an array of fields in order
     return $self->{_snpEffHeader} if defined wantarray;
 }
-
-#TO DO - GET EFFECT (before brackets) and TIDY UP OTHER FIELDS
 
 #implementation of getVepFields but for snpEff annotations
 sub getSnpEffFields{
@@ -1228,20 +1212,20 @@ sub getVariantInfoField{
     if (not defined $self->{INFO_FIELDS}){
         $self->getInfoFields();
     }
-    if (not exists $self->{INFO_FIELDS}->{$info_field}){
-        carp "INFO field $info_field does not exist in VCF header.\n";
-        return;
+    #if (not exists $self->{INFO_FIELDS}->{$info_field}){
+       #return;
+       # carp "INFO field $info_field does not exist in VCF header.\n";
+    #}
+    my @info = split(';', $self->getVariantField("INFO"));
+    if (exists $self->{INFO_FIELDS}->{$info_field} && 
+        $self->{INFO_FIELDS}->{$info_field}->{Type} eq 'Flag'){
+        return 1 if grep {/^$info_field$/} @info;
     }else{
-        my @info = split(';', $self->getVariantField("INFO"));
-        if ($self->{INFO_FIELDS}->{$info_field}->{Type} eq 'Flag'){
-            return 1 if grep {/^$info_field$/} @info;
-        }else{
-            #check type here?
-            #check Number here?
-            foreach my $inf (@info){
-                if ($inf =~ /^$info_field=(\S+)/){
-                    return $1;
-                }
+        #check type here?
+        #check Number here?
+        foreach my $inf (@info){
+            if ($inf =~ /^$info_field=(\S+)/){
+                return $1;
             }
         }
     }
