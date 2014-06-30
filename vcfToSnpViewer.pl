@@ -51,7 +51,7 @@ if (not @{$opts{samples}}){
 }else{
 #for each sample check it exists in input vcf 
     foreach my $sample (@samples){
-    if (not grep{/^$sample$/} $vcf_obj->getSampleNames()){
+    if (not grep{$sample eq $_} $vcf_obj->getSampleNames()){
             die "Can't find sample $sample in $opts{input}. Found these samples: "
             .join(", ", $vcf_obj->getSampleNames()) . "\n";
         }
@@ -175,6 +175,8 @@ if (defined $progressbar){
 foreach my $sample (@samples){
     $filehandles{$sample}->close;
 }
+
+$vcf_obj->DESTROY();
 
 =head1 NAME
 
