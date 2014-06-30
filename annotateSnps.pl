@@ -52,7 +52,6 @@ if ($opts{known_snps}){
 }
 my $progressbar;
 my $next_update = 0;
-$freq /= 100 if ($freq);
 my $prev_percent = 0;
 my $n = 0;
 my $kept = 0; #variants not filtered
@@ -154,6 +153,7 @@ print $KNOWN join(" ", @opt_string) ."\"\n" . $vcf_obj->getHeader(1) if $KNOWN;
 $time = strftime("%H:%M:%S", localtime);
 print STDERR "[$time] SNP annotation starting\n";
 
+$freq /= 100 if ($freq);
 if ($opts{build} || $freq){
     print STDERR "Filtering variants on following criteria:\n";
     print STDERR ">in dbSNP$opts{build} or previous\n" if defined $opts{build} && $opts{build} ;
