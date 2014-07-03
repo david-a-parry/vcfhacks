@@ -158,7 +158,6 @@ use strict;
 use warnings;
 use Getopt::Long;
 use Data::Dumper;
-use Data::Dumper;
 use Excel::Writer::XLSX;
 use Excel::Writer::XLSX::Utility;
 use Pod::Usage;
@@ -174,16 +173,16 @@ use TextToExcel;
 
 my $vcf;
 my @samples;
-my @classes;
-my @add;
+my @vep_classes;
+my @vep_add;
 my @peds;
 my $output;
 my $config = {};
 my $help;
 my $man;
 GetOptions($config,
-    'classes=s{,}' => \@classes,
-    'additional_classes=s{,}' => \@add,
+    'classes=s{,}' => \@vep_classes,
+    'additional_classes=s{,}' => \@vep_add,
     'functional',
     'gene_anno',
     'text_output',
@@ -203,12 +202,12 @@ pod2usage( -verbose => 2 ) if $man;
 pod2usage( -verbose => 1 ) if $help;
 pod2usage( -exitval => 2, -message => "--input is required" ) if (not $vcf);
 
-if (@classes or @add){
+if (@vep_classes or @vep_add){
     $config->{functional} = 1;
 }
 
 
-my @valid = qw (transcript_ablation
+my @vep_valid = qw (transcript_ablation
                 splice_donor_variant
                 splice_acceptor_variant
                 stop_gained
@@ -243,8 +242,8 @@ my @valid = qw (transcript_ablation
                 feature_truncation
                 intergenic_variant);
 
-if (not @classes){
-        @classes = qw (transcript_ablation
+if (not @vep_classes){
+        @vep_classes = qw (transcript_ablation
                 splice_donor_variant
                 splice_acceptor_variant
                 splice_region_variant
@@ -261,10 +260,10 @@ if (not @classes){
                 regulatory_region_ablation
                 regulatory_region_amplification);
 }
-push (@classes, @add) if (@add);
+push (@vep_classes, @vep_add) if (@vep_add);
 #check VEP classes
-foreach my $class (@classes){
-        die "Error - variant class '$class' not recognised.\n" if not grep {/$class/i} @valid;
+foreach my $class (@vep_classes){
+        die "Error - variant class '$class' not recognised.\n" if not grep {/$class/i} @vep_valid;
 }
 #get all samples from any peds specified
 my @ped_samples = ();
@@ -298,7 +297,22 @@ if (not $output){
 }
 my @fields = ();
 my @info_fields = ();
+my @gene_anno_fields = ();
 my $vcf_obj = ParseVCF->new( file=> $vcf);
+my %info_fields = $vcf_obj->getInfoFields();
+if (defined $config->{gene_anno}){
+    if (not exists $info_fields{GeneAnno}){
+        die "GeneAnno INFO field not found in VCF header - please annotate ".
+            "your VCF with ensemblGeneAnnotator.pl or rerun this program without ".
+            "the --gene_anno option.\n";
+    }
+    if ($info_fields{GeneAnno}->{Description} =~ /Format: ([\w+\|]+)\"/){
+        @gene_anno_fields = split(/\|/, $1);
+    }else{
+        die "Could not parse GeneAnno description field - please annotate ".
+            "your VCF with ensemblGeneAnnotator.pl or report this error if it recurs.\n";
+    }
+}
 if (defined $config->{vep}){
     my $vep_header = $vcf_obj->readVepHeader();
     if (not @{$config->{fields}} and not $config->{all}){
@@ -352,7 +366,6 @@ if (defined $config->{vep}){
         }
     }
 }
-my %info_fields = $vcf_obj->getInfoFields();
 if (@{$config->{info_fields}}){
     foreach my $f (@{$config->{info_fields}}){
         if (exists $info_fields{$f}){
@@ -394,20 +407,21 @@ if (not @samples){
 
 my $OUT;
 my $xl_obj;
-
-my ($header, $gene_anno_cols) = get_header();
+#old way
+#my ($header, $gene_anno_cols) = get_header();
+#new way
+my @header = get_header();
 if (defined $config->{text_output}){
     if ($output){
         open ($OUT, ">$output") or die "Can't open $output: $!\n";
     }else{
         $OUT = \*STDOUT;
     }
-    print $OUT join("\t", @$header) ."\n";
+    print $OUT join("\t", @header) ."\n";
 }else{
     $xl_obj = TextToExcel->new( file=> $output);
     $header_formatting = $xl_obj->createFormat(bold => 1);
-    $url_format = $xl_obj->createFormat(color => 'blue', underline => 1, );
-    $xl_obj->writeLine(line => $header, format => $header_formatting);
+    $xl_obj->writeLine(line => \@header, format => $header_formatting);
 }
 
 LINE: while (my $vcf_line = $vcf_obj->readLine){
@@ -437,38 +451,77 @@ LINE: while (my $vcf_line = $vcf_obj->readLine){
         }
 
     }
-    
+    if (defined $config->{gene_anno}){
+        my $g_anno = $vcf_obj->getVariantInfoField('GeneAnno');
+        my @g_annots = split(",", $g_anno);
+        foreach my $g (@g_annots){
+            my @temp_follow = ();
+            #Parse each field from @gene_anno_fields
+            #convert back to normal text without ensemblGeneAnnotator replacements
+            $g =~ tr/^`_/;, /;
+            my @annots = split(/\|/, $g);
+            foreach my $ann (@annots){
+                $ann =~ s/::/\|/g;#use | as multivalue separator (ensemblGeneAnnotator uses ::)
+                push @temp_follow, $ann;
+            }
+            push @following, \@temp_follow;
+        }
+    }
     #Get values for line
     if (defined $config->{do_not_simplify}){
         @line = get_vcf_fields();    
     }else{
         @line = get_simplified_fields();    
     }
-    if (ref $gene_anno_cols eq 'ARRAY'){
-        foreach my $field (@$gene_anno_cols){
-            push @line, $vcf_obj->getCustomField($field);
-        }
-    }
+    #old way
+#    if (ref $gene_anno_cols eq 'ARRAY'){
+#        foreach my $field (@$gene_anno_cols){
+#            push @line, $vcf_obj->getCustomField($field);
+#        }
+#    }
     #now write to text or excel as appropriate
     if (defined $config->{text_output}){
-        #only @preceding should span multiple rows
+        #@preceding will often span multiple rows
         if (@preceding){
             foreach my $p (@preceding){
                 print $OUT join("\t", @$p);
-                print $OUT join("\t", @line). "\n";
+                print $OUT join("\t", @line);
             }
         }else{
-            print $OUT join("\t", @line). "\n";
+            print $OUT join("\t", @line);
         }
+        if (@following){
+        #for text format we'll keep the gene annotations the same
+        #for each line, enclosing values for different genes with []
+            my @fol_text = ();
+            for (my $i = 0; $i < @{$following[0]}; $i++){
+                my @temp_fol = ($following[0]->[$i]);
+                for (my $j = 1; $j < @following; $j++){
+                    push @temp_fol, $following[$j]->[$i];
+                }
+                if (@following > 1){
+                    foreach my $t (@temp_fol){
+                        $t = "[$t]";
+                    }
+                }
+                push @fol_text, join("", @temp_fol);
+            }
+            print $OUT "\t" . join("\t", @fol_text);
+        }
+        print $OUT "\n";
     }else{
         $xl_obj->writeLine(
                 line => \@line, 
                 preceding => \@preceding, 
+                succeeding => \@following, 
                 );
     }
 }
 if ($xl_obj){
     $xl_obj->DESTROY();
+}
+if ($OUT){
+    close $OUT;
 }
 $vcf_obj->DESTROY();
 
@@ -513,7 +566,7 @@ sub get_simplified_fields{
         if (defined $ad && $ad =~ /(\d+,*)+/){
             my @ads = split(",", $ad);
             my @allele_depth = ();
-            for (my $n = 0; $n < @ads; $n++){
+            for (my $n = 0; $n < @ads and $n < @all_alleles; $n++){
                 push (@allele_depth, "$all_alleles[$n]=$ads[$n]");
             }
             $allele_depths = join("/", @allele_depth);
@@ -571,13 +624,13 @@ ANNOT:  foreach my $annot (@csq){
         $canonical_found++;
         if ($config->{functional}){
             my $match = 0;
-CLASS:      foreach my $class (@classes){
+CLASS:      foreach my $class (@vep_classes){
                 my @anno_csq = split(/\&/, $annot->{consequence});
                 if (grep {/NMD_transcript_variant/i} @anno_csq){
                     next ANNOT;
                 }else{
-                     foreach my $ac (@anno_csq){
-                          if (lc$ac eq lc$class){
+                    foreach my $ac (@anno_csq){
+                        if (lc$ac eq lc$class){
                             $match++;
                             last CLASS;
                         }
@@ -596,7 +649,7 @@ CLASS:      foreach my $class (@classes){
             if (defined $value){
                 push @csq_values, $value;
             }else{
-                push @csq_values, '.';
+                push @csq_values, '-';
             }
         }
         push @vep_values, \@csq_values;
@@ -649,16 +702,24 @@ sub get_header{
                 push @head, $f;
             }
         }
+
         if (defined $config->{gene_anno}){
-            my $i = 0; 
-            $i++ until $head_split[$i] =~ /CHROM/;
-            @anno_columns = @head_split[0..$i-1];
-            foreach my $anno_col (@anno_columns){
-                push @head, $anno_col;
+        #old way
+#            my $i = 0; 
+#            $i++ until $head_split[$i] =~ /CHROM/;
+#            @anno_columns = @head_split[0..$i-1];
+#            foreach my $anno_col (@anno_columns){
+#                push @head, $anno_col;
+#            }
+        #new way
+            foreach my $g (@gene_anno_fields){
+                push @head, $g;
             }
         }
+
     }
-    return \@head, \@anno_columns;
+#    return \@head, \@anno_columns;
+    return @head;
 }
 
 
