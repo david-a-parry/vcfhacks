@@ -3,6 +3,8 @@ use strict;
 use warnings;
 use Carp;
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
+use IO::Compress::Gzip qw(gzip $GzipError) ;
+use Fcntl 'SEEK_SET';
 use Data::Dumper;
 require Exporter;
 our @ISA = qw(Exporter);
@@ -19,6 +21,9 @@ my %vcf_fields = (
     INFO    => 7, 
     FORMAT  => 8,
     );
+
+#index every 0-9999 bp of a chrom
+my $REGION_SPANS = 10000;
 
 #header utilities
 sub getHeader{
@@ -38,6 +43,32 @@ sub getHeader{
     close $FH;
     croak "No header found for VCF file $vcf " if not @header;
     return @header;
+}
+
+sub getMetaHeader{
+    my $vcf = shift; 
+    croak "printMetaHeader method requires a file as an argument" if not $vcf;
+    my @header = grep {/^##/} getHeader($vcf);
+    return join("\n", @header) ;
+}
+
+sub getColumnHeader{
+    my $vcf = shift; 
+    croak "printColumnHeader method requires a file as an argument" if not $vcf;
+    my @header = grep {/^#CHROM/} getHeader($vcf);
+    if (@header < 1){
+        croak "No column header found for $vcf ";
+    }
+    if (@header > 1){
+        carp "Warning - more than 1 column header found for $vcf ";
+    }
+    return "$header[-1]";
+}
+
+sub printHeader{
+    my $vcf = shift; 
+    croak "printHeader method requires a file as an argument" if not $vcf;
+    print join("\n", getHeader($vcf));
 }
 
 sub checkHeader{
@@ -143,32 +174,31 @@ sub getInfoFields{
 
 sub getContigOrder{
     my ($vcf) = shift;
-    croak "getHeader method requires a file as an argument" if not $vcf;
-    my $contig_index = "$vcf.vrdict";
+    croak "getContigOrder method requires a file as an argument" if not $vcf;
     my %contigs = ();
-    if (not -e $contig_index){
-        print STDERR "indexing $vcf... ";
-        indexVcf($vcf);
-        print STDERR "Done.\n";
-        croak "Indexing failed? $contig_index does not exist " if not -e $contig_index;
-    }
-    open (my $CONTIG, $contig_index) or croak "Can't open $contig_index for reading: $! ";
-    while (my $line = <$CONTIG>){
-        chomp $line;
-        croak "Contig index $contig_index is corrupt - extraneous white space found - please delete and re-index" if $line =~ /\s/;
-        if (exists $contigs{$line}){
-            if ($contigs{$line}  != scalar(keys%contigs) -1 ){
-                croak "Contig index $contig_index is corrupt - duplicate entries ";
+    if ($vcf =~ /\.gz$/){
+        eval "use Tabix; 1" 
+            or croak "Tabix module is not installed and VCF file $vcf appears to be (b)gzip compressed.  ".
+            "  Please install Tabix.pm in order to quickly extract contigs from bgzip compressed VCFs.\n";
+        my $index = "$vcf.tbi";
+        if (not -e $index){
+            print STDERR "Indexing $vcf with tabix...\n";
+            indexVcf($vcf);
+            croak "Tabix indexing failed? $index does not exist " if (not -e $index);
+        }
+        my $t = getTabixIterator($vcf, $index);
+        my $n = 0;
+        %contigs = map {$_ => $n++} $t->getnames();
+    }else{
+        my %idx = readIndex($vcf);
+        foreach my $k (keys %idx){
+            if (ref $idx{$k} eq 'HASH' && exists $idx{$k}->{order}){
+                $contigs{$k} = $idx{$k}->{order};
             }
-        }else{
-            $contigs{$line}  = scalar(keys%contigs);
         }
     }
-    close $CONTIG;
     return %contigs;
 }
-
-#file utilities
 
 sub getLineCount{
     my $vcf = shift; 
@@ -176,58 +206,151 @@ sub getLineCount{
     my $line_count = 0;
     my $FH = _openFileHandle($vcf);
     if ($vcf =~ /\.gz$/){
-        $line_count ++ while (<$FH>);
+        $line_count++ while (<$FH>);
     }else{
-        $line_count += tr/\n/\n/ while sysread($FH, $_, 2 ** 16);
+        my $index = "$vcf.vridx";
+        if (-e $index){
+            $line_count = getFileLengthFromIndex($vcf, $index); 
+        }else{
+            $line_count += tr/\n/\n/ while sysread($FH, $_, 2 ** 16);
+        }
     }
     close $FH;
     return $line_count;
 }
 
+sub checkCoordinateSorted{
+#return 1 if vcf is coordinate sorted (not checking chrom order)
+    my ($vcf) = @_;
+    my $FH = _openFileHandle($vcf);
+    my %contigs = ();
+    my $prev_pos = 0;
+    while (my $line = <$FH>){
+        next if $line =~ /^#/;
+        my @split = split("\t", $line);
+        if (exists $contigs{$split[0]}){
+            if ($contigs{$split[0]}  != scalar(keys%contigs) -1 ){
+                return 0; #not sorted - encountered contig twice with another inbetween
+            }
+            return 0 if $split[1] < $prev_pos;
+        }else{
+            $contigs{$split[0]}  = scalar(keys%contigs);
+        }
+        $prev_pos = $split[1];
+    }
+    return 1;
+}
 
 sub indexVcf{
+    local $Data::Dumper::Terse = 1;
+    local $Data::Dumper::Useqq = 1;
     my ($vcf) = @_;
     if ($vcf =~ /\.gz$/){
         chomp (my $tabix = `which tabix`);
         croak "Can't find tabix executable to index compressed VCF.  Please ensure it is ".
             "installed and in your PATH or index your VCF with tabix manually. "
             if not $tabix; 
-        print STDERR "Indexing $vcf with tabix.\n";
         my $er = `$tabix -p vcf $vcf 2>&1`;
         croak "Tabix indexing failed, code $?: $er\n" if $?;
         return;
     }
     my $index = "$vcf.vridx";
-    open (my $INDEX, "+>$index") or croak "can't open $index for writing index: $! ";
+    #open (my $INDEX, "+>$index") or croak "can't open $index for writing index: $! ";
+    my $gz = new IO::Compress::Gzip $index
+        or croak "IO::Compress::Gzip failed to write index: $GzipError\n";
     my $offset = 0;
-    my $contig_index = "$vcf.vrdict";
-    open (my $CONTIGS, ">$contig_index") or croak "Can't open $contig_index file for writing contig order: $! ";
-    my %contigs = ();
-    my $pack = "N";
-    $pack = "Q" if -s $vcf >= 4294967296;
+    my $prev_offset = 0;
     my $prev_pos = 0;
+    my %contigs = ();
+    my $is_var = 0;
+    my $n = 0;
+    my $last_line_indexed = 0;
+    
     my $FH = _openFileHandle($vcf);
     while (my $line = scalar readline $FH){
-        print $INDEX pack($pack, $offset);
+        $n++;
+        $prev_offset = $offset;
+        #print $INDEX pack($pack, $offset);
         $offset = tell $FH;
         next if $line =~ /^#/;
-        my $chrom = (split "\t", $line)[$vcf_fields{CHROM}];
-        my $pos = (split "\t", $line)[$vcf_fields{POS}];
+        $is_var++;
+        if ($is_var == 1){
+            $contigs{first_line} = $n;
+            $contigs{first_offset} = $prev_offset;
+        }
+        my @s = split ("\t", $line);
+        my $chrom = $s[$vcf_fields{CHROM}];
+        my $pos = $s[$vcf_fields{POS}];
+        my $span = $s[$vcf_fields{POS}] + length($s[$vcf_fields{REF}]) - 1;
+        my $pos_rounddown = int($pos/$REGION_SPANS) * $REGION_SPANS;
+        my $span_rounddown = int($span/$REGION_SPANS) * $REGION_SPANS;
         if (exists $contigs{$chrom}){
-            if ($contigs{$chrom}  != scalar(keys%contigs) -1 or $pos < $prev_pos){
-                close $INDEX;
+            if ($contigs{$chrom}->{order}  != scalar(keys%contigs) -1 or $pos < $prev_pos){
+                $gz->close();
                 unlink $index or carp "Couldn't delete partial index $index - please delete manually: $!" ;
                 croak "Can't index VCF - $vcf not sorted properly ";
             }
+            if (exists $contigs{$chrom}->{regions}->{$pos_rounddown}){
+                my $merged = 0;
+                foreach my $offs (@{$contigs{$chrom}->{regions}->{$pos_rounddown}}){
+                    if ($offs->{line_end} +1  eq $n){
+                        #if lines are contiguous create a single region
+                        $offs->{offset_end} = $offset;
+                        $offs->{line_end} = $n;
+                        $offs->{pos_end} = $span if ($span > $offs->{pos_end});
+                        $merged++;
+                        last;
+                    }
+                }
+                if (not $merged){
+                    push @{$contigs{$chrom}->{regions}->{$pos_rounddown}},
+                        {offset_start=> $prev_offset,  offset_end => $offset,
+                        line_start => $n, line_end => $n, pos_start => $pos, pos_end => $span};
+                }
+            }else{
+                push @{$contigs{$chrom}->{regions}->{$pos_rounddown}},
+                    {offset_start=> $prev_offset,  offset_end => $offset,
+                    line_start => $n, line_end => $n, pos_start => $pos, pos_end => $span};
+            }
+            if (exists $contigs{$chrom}->{regions}->{$span_rounddown}){
+                my $merged = 0;
+                foreach my $offs (@{$contigs{$chrom}->{regions}->{$span_rounddown}}){
+                    if ($offs->{line_end} eq $n){
+                        #already merged
+                        $merged++;
+                        last;
+                    }elsif ($offs->{line_end} +1  eq $n){
+                        #if lines are contiguous create a single region
+                        $offs->{offset_end} = $offset;
+                        $offs->{line_end} = $n;
+                        $offs->{pos_end} = $span if ($span > $offs->{pos_end});
+                        $merged++;
+                        last;
+                    }
+                }
+                if (not $merged){
+                    push @{$contigs{$chrom}->{regions}->{$span_rounddown}},
+                        {offset_start=> $prev_offset,  offset_end => $offset,
+                        line_start => $n, line_end => $n, pos_start => $pos, pos_end => $span};
+                }
+            }else{
+                push @{$contigs{$chrom}->{regions}->{$span_rounddown}},
+                    {offset_start=> $prev_offset,  offset_end => $offset,
+                    line_start => $n, line_end => $n, pos_start => $pos, pos_end => $span};
+            }
         }else{
-            $contigs{$chrom}  = scalar(keys%contigs);
-            print $CONTIGS "$chrom\n";
+            $contigs{$chrom}->{order}  = scalar(keys%contigs);
+            push @{$contigs{$chrom}->{regions}->{$pos_rounddown}},
+                {offset_start=> $prev_offset,  offset_end => $offset,
+                line_start => $n, line_end => $n, pos_start => $pos, pos_end => $span};
         }
         $prev_pos = $pos;
     }
-    close $CONTIGS;
-    close $INDEX;
+    $contigs{last_line} = $n;
+    $contigs{last_offset} = $prev_offset;
     close $FH;
+    print $gz Dumper \%contigs;
+    close $gz;
 }
 
 sub _lineWithIndex{
@@ -254,7 +377,7 @@ sub _openFileHandle{
     if ($vcf =~ /\.gz$/){
         $FH = new IO::Uncompress::Gunzip $vcf, MultiStream => 1 or croak "IO::Uncompress::Gunzip failed while opening $vcf for reading: \n$GunzipError";
     }else{
-        open (my $FH, $vcf) or croak "Failed to open $vcf for reading: $! ";
+        open ($FH, $vcf) or croak "Failed to open $vcf for reading: $! ";
     }
     return $FH;
 }
@@ -281,6 +404,24 @@ sub getVariantField{
         }
     }
     return $split[$vcf_fields{$field}];
+}
+
+sub getVariantInfoField{
+    my ($line, $info_field) = @_;
+    my @split = ();
+    if (ref $line eq 'ARRAY'){
+        @split = @$line;
+    }else{
+        @split = split("\t", $line);
+    }
+    my @info = split(';', getVariantField(\@split, "INFO"));
+    foreach my $inf (@info){
+        if ($inf =~ /^$info_field(=(.+))*/){
+            return $2 if defined $2;
+            return 1;
+        }
+    }
+    return;
 }
 
 sub readAlleles{
@@ -420,17 +561,14 @@ sub getSampleGenotypeField{
         return %values if defined wantarray;
         carp "getSampleGenotypeField called in a void context ";
     }elsif (defined $args{sample}){
+        my $col = $args{sample};
         if (defined $args{sample_to_columns}){
-            $var = getSampleVariant(
-                                $args{line}, 
-                                $args{sample_to_columns}->{$args{sample}},
-                                );
-        }else{
-            $var = getSampleVariant(
-                                $args{line}, 
-                                $args{sample},
-                                );
+            $col = $args{sample_to_columns}->{$args{sample}};
         }
+        $var = getSampleVariant(
+                            $args{line}, 
+                            $args{sample_to_columns}->{$args{sample}},
+                            );
     }elsif (defined $args{column}){
         $var = getSampleVariant(
                                 $args{line}, 
@@ -460,8 +598,8 @@ sub getSampleCall{
         if (ref $args{sample_to_columns} ne 'HASH'){
             croak "\"sample_to_columns\" argument passed to getSampleCall must be a hash reference ";
         }
-    }elsif(defined $args{sample} or $args{multiple}){
-        croak "\"multiple\" and \"sample\" arguments can only be used in conjunction with \"sample_to_columns\" option for getSampleCall method ";
+#    }elsif(defined $args{sample} or $args{multiple}){
+#        croak "\"multiple\" and \"sample\" arguments can only be used in conjunction with \"sample_to_columns\" option for getSampleCall method ";
     }
     my @split = ();
     if (ref $args{line} eq 'ARRAY'){
@@ -472,20 +610,36 @@ sub getSampleCall{
     my $var; 
     my %calls = ();
     if ($args{all}){
-        foreach my $sample (keys %{$args{sample_to_columns}}){
-            if (exists $args{minGQ} and $args{minGQ} > 0){
-                $calls{$sample} = _getGenotype(
+        if (defined $args{sample_to_columns}){
+            foreach my $sample (keys %{$args{sample_to_columns}}){
+                if (exists $args{minGQ} and $args{minGQ} > 0){
+                    $calls{$sample} = _getGenotype(
                                             $args{line},
                                             $args{sample_to_columns}->{$sample}, 
                                             $args{minGQ}
                                             );
-            }else{
-                $calls{$sample} = _getGenotype(
-                                                $args{line},
-                                                $args{sample_to_columns}->{$sample}, 
-                                                );
+                }else{
+                    $calls{$sample} = _getGenotype(
+                                                    $args{line},
+                                                    $args{sample_to_columns}->{$sample}, 
+                                                    );
+                }
             }
-
+        }else{
+            foreach my $col (9..$#split){
+                if (exists $args{minGQ} and $args{minGQ} > 0){
+                    $calls{$col} = _getGenotype(
+                                            $args{line},
+                                            $col, 
+                                            $args{minGQ}
+                                            );
+                }else{
+                    $calls{$col} = _getGenotype(
+                                                $args{line},
+                                                $col, 
+                                            );
+                }
+            }
         }
         if ($args{return_alleles_only}){
             my %rev_calls = reverse %calls;
@@ -503,18 +657,35 @@ sub getSampleCall{
         carp "getSampleCall called in a void context ";
     }elsif($args{multiple}){
         croak "multiple argument must be an array reference " if ref $args{multiple} ne 'ARRAY';
-        foreach my $sample (@{$args{multiple}}){
-            if (exists $args{minGQ} and $args{minGQ} > 0){
-                $calls{$sample} = _getGenotype(
-                                            $args{line},
-                                            $args{sample_to_columns}->{$sample}, 
-                                            $args{minGQ}
-                                            );
-            }else{
-                $calls{$sample} = _getGenotype(
+        if (defined $args{sample_to_columns}){
+            foreach my $sample (@{$args{multiple}}){
+                if (exists $args{minGQ} and $args{minGQ} > 0){
+                    $calls{$sample} = _getGenotype(
                                                 $args{line},
                                                 $args{sample_to_columns}->{$sample}, 
+                                                $args{minGQ}
                                                 );
+                }else{
+                    $calls{$sample} = _getGenotype(
+                                                    $args{line},
+                                                    $args{sample_to_columns}->{$sample}, 
+                                                    );
+                }
+            }
+        }else{
+            foreach my $col (@{$args{multiple}}){
+                if (exists $args{minGQ} and $args{minGQ} > 0){
+                    $calls{$col} = _getGenotype(
+                                                $args{line},
+                                                $col, 
+                                                $args{minGQ}
+                                                );
+                }else{
+                    $calls{$col} = _getGenotype(
+                                                    $args{line},
+                                                    $col, 
+                                                    );
+                }
             }
         }
         if ($args{return_alleles_only}){
@@ -531,40 +702,28 @@ sub getSampleCall{
             return %calls if defined wantarray;
         }
         carp "getSampleCall called in a void context ";
-    }elsif (defined $args{sample}){
+    }else{
         my $call;
-        if (exists $args{minGQ} and $args{minGQ} > 0){
-            $call = _getGenotype(
-                        $args{line},
-                        $args{sample_to_columns}->{$args{sample}}, 
-                        $args{minGQ}
-                        );
-        }else{
-            $call = _getGenotype(
-                        $args{line},
-                        $args{sample_to_columns}->{$args{sample}}, 
-                        );
-        }
-        if ($args{return_alleles_only}){
-            if ($call eq './.'){
-                return '.' if defined wantarray;
+        my $col = 9;#default is to get first sample
+        if (defined $args{sample}){
+            if (defined $args{sample_to_columns}){
+                $col = $args{sample_to_columns}->{$args{sample}};
+            }else{
+                $col = $args{sample};
             }
-            my @al = split(/[\/\|]/, $call);
-            return @al if defined wantarray;
-        }else{
-            return $call if defined wantarray;
+        }elsif (defined $args{column}){
+            $col = $args{column};
         }
-    }else{#otherwise just look at first sample
-        my $call;
         if (exists $args{minGQ} and $args{minGQ} > 0){
             $call = _getGenotype(
                         $args{line},
-                        9,
+                        $col,
                         $args{minGQ}
                         );
         }else{
             $call = _getGenotype(
                         $args{line},
+                        $col,
                         );
         }
         if ($args{return_alleles_only}){
@@ -578,6 +737,141 @@ sub getSampleCall{
         }
     }
     carp "getSampleCall called in a void context ";
+}
+
+
+sub getSampleActualGenotypes{
+    my ($self, %args) = @_;
+    croak "\"line\" argument must be passed to getSampleActualGenotypes " if not defined $args{line};
+    carp "WARNING Both multiple and sample arguments supplied to getSampleActualGenotypes method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
+    my @split = ();
+    if (ref $args{line} eq 'ARRAY'){
+        @split = @{$args{line}};
+    }else{
+        @split = split("\t", $args{line});
+    }
+    if (defined $args{sample_to_columns}){
+        if (ref $args{sample_to_columns} ne 'HASH'){
+            croak "\"sample_to_columns\" argument passed to getSampleActualGenotypes must be a hash reference ";
+        }
+    #}elsif(defined $args{sample} or $args{multiple}){
+    #    croak "\"multiple\" and \"sample\" arguments can only be used in conjunction with \"sample_to_columns\" option for getSampleCall method ";
+    }
+    my @alleles = $self -> readAlleles(line => \@split);
+    my %multiple = ();
+    my $genotype;
+    my @sample_alleles = ();
+    my $var;
+    if ($args{all}){
+        if (defined $args{sample_to_columns}){
+            foreach my $sample (keys %{$args{sample_to_columns}}){
+                $var = getSampleVariant(\@split, $args{sample_to_columns}->{$sample});
+                my $call = (split ":", $var)[0];
+                if ($call =~ /(\d+)[\/\|](\d+)/){
+                    if ($args{return_alleles_only}){
+                        push (@sample_alleles, ($alleles[$1], $alleles[$2]));
+                    }else{
+                        $multiple{$sample} = "$alleles[$1]/$alleles[$2]";
+                    }
+                }else{
+                    if (not $args{return_alleles_only}){
+                        $multiple{$sample} = "-/-";
+                    }
+                }
+            }
+        }else{
+            foreach my $col (9..$#split){
+                $var = getSampleVariant(\@split, $col);
+                my $call = (split ":", $var)[0];
+                if ($call =~ /(\d+)[\/\|](\d+)/){
+                    if ($args{return_alleles_only}){
+                        push (@sample_alleles, ($alleles[$1], $alleles[$2]));
+                    }else{
+                        $multiple{$col} = "$alleles[$1]/$alleles[$2]";
+                    }
+                }else{
+                    if (not $args{return_alleles_only}){
+                        $multiple{$col} = "-/-";
+                    }
+                }
+            }
+        }
+        if ($args{return_alleles_only}){
+            my %seen = ();
+            @sample_alleles = grep {!$seen{$_}++} @sample_alleles;#remove duplicates
+            return @sample_alleles;
+        }else{
+            return %multiple;
+        }
+    }elsif($args{multiple}){
+        croak "multiple argument must be an array reference " if ref $args{multiple} ne 'ARRAY';
+        if (defined $args{sample_to_columns}){
+            foreach my $sample (@{$args{multiple}}){
+                $var = getSampleVariant(\@split, $args{sample_to_columns}->{$sample});
+                my $call = (split ":", $var)[0];
+                if ($call =~ /(\d+)[\/\|](\d+)/){
+                    if ($args{return_alleles_only}){
+                        push (@sample_alleles, ($alleles[$1], $alleles[$2]));
+                    }else{
+                        $multiple{$sample} = "$alleles[$1]/$alleles[$2]";
+                    }
+                }else{
+                    if (not $args{return_alleles_only}){
+                        $multiple{$sample} = "-/-";
+                    }
+                }
+            }
+        }else{
+            foreach my $col (@{$args{multiple}}){
+                $var = getSampleVariant(\@split, $col);
+                my $call = (split ":", $var)[0];
+                if ($call =~ /(\d+)[\/\|](\d+)/){
+                    if ($args{return_alleles_only}){
+                        push (@sample_alleles, ($alleles[$1], $alleles[$2]));
+                    }else{
+                        $multiple{$col} = "$alleles[$1]/$alleles[$2]";
+                    }
+                }else{
+                    if (not $args{return_alleles_only}){
+                        $multiple{$col} = "-/-";
+                    }
+                }
+            }
+        }
+        if ($args{return_alleles_only}){
+            my %seen = ();
+            @sample_alleles = grep {!$seen{$_}++} @sample_alleles;#remove duplicates
+            return @sample_alleles;
+        }else{
+            return %multiple;
+        }
+    }else{
+        my $col = 9;
+        if ($args{sample}){
+            if (defined $args{sample_to_columns}){
+                $col = $args{sample_to_columns}->{$args{sample}};
+            }
+        }elsif ($args{column}){
+            $col = $args{column};
+        }
+        $var = getSampleVariant(\@split, $col);
+        my $call = (split ":", $var)[0];
+        if ($call =~ /(\d+)[\/\|](\d+)/){
+            if ($args{return_alleles_only}){
+                push (@sample_alleles, ($alleles[$1], $alleles[$2]));
+                my %seen = ();
+                @sample_alleles = grep {!$seen{$_}++} @sample_alleles;#remove duplicates
+                return @sample_alleles;
+                
+            }else{
+                $genotype = "$alleles[$1]/$alleles[$2]";
+            }
+        }else{
+            $genotype = "-/-";
+        }
+        return if $args{return_alleles_only};
+        return $genotype 
+    }
 }
 
 sub _getGenotype{
@@ -612,12 +906,13 @@ sub _getGenotype{
     return $call;
 }
 
-=cut
+
+
 
 #returns genotype codes - e.g. 0/0, 0/1, 1/1
 sub getAllPossibleGenotypeCodes{
-    my ($self, $line) = @_;
-    my @alleles = $self -> readAlleles($line);
+    my ($line) = @_;
+    my @alleles = readAlleles(line => $line);
     my @combinations = ();
     for (my $n = 0; $n < @alleles; $n++){
         for (my $m = 0; $m <= $n; $m++){
@@ -630,8 +925,8 @@ sub getAllPossibleGenotypeCodes{
 
 #returns actual allele genotypes - e.g. A/A, A/T, T/T
 sub getAllPossibleGenotypes{
-    my ($self, $line) = @_;
-    my @alleles = $self -> readAlleles($line);
+    my ($line) = @_;
+    my @alleles = readAlleles(line => $line);
     my @combinations = ();
     for (my $n = 0; $n < @alleles; $n++){
         for (my $m = 0; $m <= $n; $m++){
@@ -642,209 +937,261 @@ sub getAllPossibleGenotypes{
     carp "getAllPossibleGenotypes called in void context ";
 }
 
-sub getSampleActualGenotypes{
-    my ($self, %args) = @_;
-    croak "Can't invoke getSampleActualGenotypes method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
-    croak "\"line\" argument must be passed to getSampleActualGenotypes " if not defined $args{line};
-    carp "WARNING Both multiple and sample arguments supplied to getSampleActualGenotypes method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
-    my @split = ();
-    if (ref $args{line} eq 'ARRAY'){
-        @split = @{$args{line}};
-    }else{
-        @split = split("\t", $args{line});
-    }
-    my @alleles = $self -> readAlleles(line => \@split);
-    my %multiple = ();
-    my $genotype;
-    my @sample_alleles = ();
-    my $var;
-    if ($args{all}){
-        foreach my $sample (keys %{$self->{_samples}}){
-            $var = $self->getSampleVariant(\@split, $sample);
-            my $call = (split ":", $var)[0];
-            if ($call =~ /(\d+)[\/\|](\d+)/){
-                if ($args{return_alleles_only}){
-                    push (@sample_alleles, ($alleles[$1], $alleles[$2]));
-                }else{
-                    $multiple{$sample} = "$alleles[$1]/$alleles[$2]";
-                }
-            }else{
-                if (not $args{return_alleles_only}){
-                    $multiple{$sample} = "-/-";
-                }
-            }
-        }
-        if ($args{return_alleles_only}){
-            my %seen = ();
-            @sample_alleles = grep {!$seen{$_}++} @sample_alleles;#remove duplicates
-            return @sample_alleles;
-        }else{
-            return %multiple;
-        }
-    }elsif($args{multiple}){
-        croak "multiple argument must be an array reference " if ref $args{multiple} ne 'ARRAY';
-        foreach my $sample (@{$args{multiple}}){
-            $var = $self->getSampleVariant(\@split, $sample);
-            my $call = (split ":", $var)[0];
-            if ($call =~ /(\d+)[\/\|](\d+)/){
-                if ($args{return_alleles_only}){
-                    push (@sample_alleles, ($alleles[$1], $alleles[$2]));
-                }else{
-                    $multiple{$sample} = "$alleles[$1]/$alleles[$2]";
-                }
-            }else{
-                if (not $args{return_alleles_only}){
-                    $multiple{$sample} = "-/-";
-                }
-            }
-        }
-        if ($args{return_alleles_only}){
-            my %seen = ();
-            @sample_alleles = grep {!$seen{$_}++} @sample_alleles;#remove duplicates
-            return @sample_alleles;
-        }else{
-            return %multiple;
-        }
-    }elsif ($args{sample}){
-        $var = $self->getSampleVariant(\@split, $args{sample});
-    }else{
-        $var = $self->getSampleVariant(\@split);
-    }
-    my $call = (split ":", $var)[0];
-    if ($call =~ /(\d+)[\/\|](\d+)/){
-        if ($args{return_alleles_only}){
-            push (@sample_alleles, ($alleles[$1], $alleles[$2]));
-            my %seen = ();
-            @sample_alleles = grep {!$seen{$_}++} @sample_alleles;#remove duplicates
-            return @sample_alleles;
-            
-        }else{
-            $genotype = "$alleles[$1]/$alleles[$2]";
-        }
-    }else{
-        $genotype = "-/-";
-    }
-    return if $args{return_alleles_only};
-    return $genotype 
-}
-
 sub replaceVariantField{
-    my ($self, $line, $field, $replacement) = @_;
+    my ($line, $field, $replacement) = @_;
     $field =~ s/^#+//;
-    $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
-    my @valid_fields = $self->getValidFields;#qw(CHROM POS ID REF ALT QUAL FILTER INFO FORMAT);
-    croak "Invalid field ($field) passed to getVariantField method " if not grep {$field eq $_} @valid_fields;
+    croak "Invalid field ($field) passed to getVariantField method " if not exists $vcf_fields{$field};
     my @split = ();
     if (ref $line eq 'ARRAY'){
         @split = @$line;
     }else{
         @split = split("\t", $line);
     }
-    my @new_line = ();
-    foreach my $f ( split ("\t", $self->{_header})){
-        $f =~ s/^#+//;
-        if ($f eq $field){
-            push @new_line, $replacement;
-        }else{
-            push @new_line, $self->getCustomField(\@split, $f);
-        }
-    }
-    return join("\t", @new_line) if defined wantarray;
+    splice(@split, $vcf_fields{$field}, 1, $replacement);
+    return join("\t", @split) if defined wantarray;
     carp "replaceVariantField called in void context ";
 }
 
-sub searchForPosition{
-#my @matching lines = $obj->searchForPosition(chrom => 1, pos = 2000000)
-    my ($self, %args) = @_;
-    croak "Can't use searchForPosition method when noLineCount option is set and input is not bgzip compressed " if $self->{_noLineCount} and not $self->{_file} =~ /\.gz$/;
-    croak "Can't use searchForPosition method when reading from STDIN" if $self->{_inputIsStdin} ;
-    carp "chrom argument is required for searchForPosition method " if not exists $args{chrom};
-    carp "pos argument is required for searchForPosition method " if not exists $args{pos};
-    return if not exists $args{pos} or not exists $args{chrom};
-    #if compressed assume bgzip compression and try to read with tabix
-    if ($self->{_file} =~ /\.gz$/){
-        eval "use Tabix; 1" 
-            or croak "Tabix module is not installed and VCF file $self->{_file} appears to be (b)gzip compressed.  ".
-            "  Please install Tabix.pm in order to search compressed VCFs.\n";
-        if (not -e "$self->{_index}"){
-            $self->setTabix if not $self->{_tabix}; 
-            print STDERR "Indexing $self->{_file} with tabix.\n";
-            my $er = `$self->{_tabix} -p vcf $self->{_file} 2>&1`;
-            croak "Tabix indexing failed, code $?: $er\n" if $?;
-        }
-
-#FIX THIS!
-#DO WE NEED ONE TABIX ITERATOR PER POTENTIAL THREAD?!
-
-        if (not $self->{_tabixIterator}){
-            $self->{_tabixIterator} = Tabix->new(-data =>  $self->{_file}, -index => $self->{_index});
-        }
-        my $iter = $self->{_tabixIterator}->query($args{chrom}, $args{pos} -1, $args{pos});
-        return if not defined $iter->{_}; #$iter->{_} will be undef if our chromosome isn't in the vcf file
-        my @matches;
-        while (my $result = $self->{_tabixIterator} ->read($iter)){ 
-            push @matches, $result;
-        }
-        $self->{_searchMatches} = \@matches;
-        return @matches if defined wantarray;
-        return;
-    }
-
-    #otherwise use our own line indexing method
-    if (not $self->{_indexHandle}){
-        if (not -e $self->{_index}){
-            $self->{_indexHandle} = $self->indexVcf;
-        }else{
-            open ($self->{_indexHandle}, $self->{_index}) or croak "Can't open index file $self->{_index} for reading: $! ";
-        }
-    }
-    if (not $self->{_contigOrder}){
-        $self->{_contigIndex} ||= $self->{_file}.".pvdict";
-        if (not -e $self->{_contigIndex}){
-            $self->{_indexHandle} = $self->indexVcf;
-        }else{
-            open (my $CONTIGS, $self->{_contigIndex}) or croak "Can't open contig index $self->{_contigIndex} for reading: $! ";
-            my %contigs = ();
-            while (my $line = <$CONTIGS>){
-                chomp $line;
-                croak "Contig index $self->{_contigIndex} is corrupt - extraneous white space found " if $line =~ /\s/;
-                if (exists $contigs{$line}){
-                    if ($contigs{$line}  != scalar(keys%contigs) -1 ){
-                        croak "Contig index $self->{_contigIndex} is corrupt - duplicate entries ";
-                    }
-                }else{
-                    $contigs{$line}  = scalar(keys%contigs);
-                }
-            }
-            close $CONTIGS;
-            croak "Could not find any contigs in contig index ($self->{_contigIndex}). Try deleting $self->{_contigIndex} and rerunning "  if (not %contigs); 
-            $self->{_contigOrder} = \%contigs;
-        }
-    }
-    my @matches = $self->_searchVcf(chrom => $args{chrom}, pos => $args{pos});
-    $self->{_searchMatches} = \@matches;
-    return @matches if defined wantarray;
+sub getTabixIterator{
+    my ($vcf, $index) = @_;
+    $index ||= "$vcf.tbi";
+    return Tabix->new(-data =>  $vcf, -index => $index) ;
 }
 
+sub getSearchArguments{
+#returns hash of arguments and values for passing to searchForPosition method
+#return hash of vcf, file_handle, index_handle and contig_order 
+#for uncompressed files
+#or tabix_iterator for bgzip compressed files
+    my ($vcf, $contig_index) = @_;
+    if ($vcf =~ /\.gz/){ 
+        eval "use Tabix; 1" 
+            or croak "Tabix module is not installed and VCF file $vcf appears to be (b)gzip compressed.  ".
+            "  Please install Tabix.pm in order to search bgzip compressed VCFs.\n";
+        my $index = "$vcf.tbi";
+        if (not -e $index){
+            print STDERR "Indexing $vcf with tabix...";
+            indexVcf($vcf);
+            croak "Tabix indexing failed? $index does not exist " if (not -e $index);
+            print STDERR " Done.\n";
+        }
+        return (tabix_iterator => getTabixIterator($vcf, $index));
+    }else{
+        my $FH = _openFileHandle($vcf);
+        if ($contig_index){
+            if (ref ($contig_index) ne 'HASH'){
+                croak "second argument passed to getSearchArguments method must be a hash reference to a contig index ";
+            }
+        }else{
+            my $index = "$vcf.vridx" ;
+            if (not -e $index){
+                print STDERR "$index does not exist - indexing $vcf...\n";
+                indexVcf($vcf);
+                croak "Indexing failed? $index does not exist " if (not -e $index);
+                print STDERR " Done.\n";
+            }
+            my %contig_order  = readIndex($vcf);
+            $contig_index = \%contig_order;
+        }
+        return (file_handle => $FH, contig_order => $contig_index);
+    }
+}
+
+sub searchForPosition{
+#if vcf argument is provided will use Tabix.pm (searchForPositionCompressed) or internal method (searchForPositionUncompressed)
+#depending on file extension
+#otherwise will use Tabix.pm if tabix_iterator argument is provided
+#or internal method if file_handle argument is provided
+#my @matching lines = $obj->searchForPosition(chrom => 1, pos = 2000000)
+    my (%args) = @_;
+    croak "chrom argument is required for searchForPosition method " if not exists $args{chrom};
+    croak "pos argument is required for searchForPosition method " if not exists $args{pos};
+    if (exists $args{vcf}){
+        if ($args{vcf} =~ /\.gz$/){
+            return searchForPositionCompressed(%args);
+        }else{
+            return searchForPositionUncompressed(%args);
+        }
+    }elsif(exists $args{tabix_iterator}){
+        return searchForPositionCompressed(%args);
+    }elsif(exists $args{file_handle}){
+        croak "file_handle argument can only be used without vcf argument if contig_order is provided "
+            if not $args{contig_order};
+        return searchForPositionUncompressed(%args);
+    }else{
+        croak "vcf or tabix_iterator arguments are required for searchForPosition method " ;
+    }
+}
+ 
+sub searchForPositionCompressed{
+    my (%args) = @_;
+    croak "vcf or tabix_iterator arguments are required for searchForPositionCompressed method " 
+        if not exists $args{vcf} and not exists $args{tabix_iterator};
+    eval "use Tabix; 1" 
+        or croak "Tabix module is not installed and VCF file $args{vcf} appears to be (b)gzip compressed.  ".
+        "  Please install Tabix.pm in order to search bgzip compressed VCFs.\n";
+    
+    my $tabixIterator; 
+    if ($args{tabix_iterator}){
+        $tabixIterator = $args{tabix_iterator};
+    }else{
+        my $index = defined $args{index} ? $args{index} : "$args{vcf}.tbi";
+        if (not -e $index){
+            print STDERR "Indexing $args{vcf} with tabix...";
+            indexVcf($args{vcf});
+            croak "Tabix indexing failed? $index does not exist " if (not -e $index);
+            print STDERR " Done.\n";
+        }
+        $tabixIterator = Tabix->new(-data =>  $args{vcf}, -index => $index) ;
+    }
+    my $iter = $tabixIterator->query($args{chrom}, $args{pos} -1, $args{pos});
+    return if not defined $iter->{_}; #$iter->{_} will be undef if our chromosome isn't in the vcf file
+    my @matches = ();
+    while (my $m =  $tabixIterator->read($iter)){
+        push @matches, $m;
+    } 
+    return @matches if defined wantarray;
+    carp "searchForPosition called in void context ";     
+}           
+
+sub searchForPositionUncompressed{
+    my (%args) = @_;
+    croak "vcf or file_handle arguments are required for searchForPositionCompressed method " 
+        if not exists $args{vcf} and not exists $args{file_handle};
+    my $contig_order;
+    my $blocks;
+    my $FH = exists $args{file_handle} ? $args{file_handle} : _openFileHandle($args{vcf});
+    my $index;
+    my $contig_index;
+    if ($args{vcf}){
+        $index = defined  $args{index} ?  $args{index} : "$args{vcf}.vridx" ;
+    }
+    if (exists $args{contig_order}){
+        if (ref $args{contig_order} eq 'HASH'){
+            $contig_order = $args{contig_order};
+        }else{
+            croak "contig_order argument passed to searchForPosition method must be a hash reference ";
+        }
+    }else{
+        croak "contig_order argument is required to use searchForPositionUncompressed without vcf argument "
+            if not exists $args{vcf};
+    }
+    if (not $contig_order){
+        my %c  = readIndex($args{vcf});
+        $contig_order = \%c;
+        if (not %{$contig_order}){
+            croak "Could not find any contigs in contig index $args{vcf}.vridx. Try deleting $args{vcf}.vridx and rerunning " ;
+        }
+    }
+
+    my @matches = _searchVcf(
+                            chrom           => $args{chrom}, 
+                            pos             => $args{pos},
+                            contig_order    => $contig_order,
+                            fh              => $FH,
+                            );
+    return @matches if defined wantarray;
+    carp "searchForPosition called in void context ";     
+}
+
+sub readIndex{
+    my ($vcf) = @_;
+    if ($vcf =~/\.gz/){
+        #if compressed just create index if it doesn't exist and return
+        my $index = "$vcf.tbi"; 
+        if (not -e $index){
+            print STDERR "$index does not exist - indexing $vcf...\n";
+            indexVcf($vcf);
+            croak "Indexing failed? $index does not exist " if (not -e $index);
+            print STDERR " Done.\n";
+        }
+        return;
+    }
+    my $index = "$vcf.vridx"; 
+    my %contigs = ();
+    my $block_dump;
+    if (not -e $index){
+        print STDERR "$index does not exist - indexing $vcf...\n";
+        indexVcf($vcf);
+        croak "Indexing failed? $index does not exist " if (not -e $index);
+        print STDERR " Done.\n";
+    }
+    my $z = new IO::Uncompress::Gunzip $index
+        or die "gunzip failed to read index $index: $GunzipError\n";
+    {
+        local $/;
+        $block_dump = <$z>;
+    }
+    close ($z);
+    %contigs = %{ eval $block_dump };
+    return %contigs;
+}
+
+sub _searchVcf{
+    my (%args) = @_;
+    croak "chrom argument is required for _searchVcf method " if not exists $args{chrom};
+    croak "pos argument is required for _searchVcf method " if not exists $args{pos};
+    croak "contig_order argument is required for _searchVcf method " if not exists $args{contig_order};
+    #croak "index argument is required for _searchVcf method " if not exists $args{index};
+    croak "fh argument is required for _searchVcf method " if not exists $args{fh};
+    #my $total_lines = exists $args{length} ? $args{length} : get_file_length_from_index($args{fh}, $args{index}); 
+    my @matches = ();
+    my $total_lines = $args{contig_order}->{last_line};
+    my $pos_rounddown = int($args{pos}/$REGION_SPANS) * $REGION_SPANS;
+    return if not (exists $args{contig_order}->{$args{chrom}}->{regions}->{$pos_rounddown});
+    foreach my $reg (@{$args{contig_order}->{$args{chrom}}->{regions}->{$pos_rounddown}}){
+        next if $reg->{pos_start} > $args{pos};
+        next if $reg->{pos_end} < $args{pos};
+        my @lines = _readLinesByOffset($reg->{offset_start}, $reg->{offset_end}, $args{fh});
+        foreach my $l (@lines){
+            my @sp = split("\t", $l);
+            my $l_pos =  $sp[$vcf_fields{POS}]; 
+            last if $l_pos > $args{pos};
+            if ($l_pos == $args{pos}){
+                push @matches, $l;
+                next;
+            }
+            my $span = $l_pos + length($sp[$vcf_fields{REF}]) -1;
+            if ($l_pos <= $args{pos} and $span >= $args{pos}){
+                push @matches, $l;
+            }
+        }
+    }
+    return @matches;
+}
+
+sub _readLinesByOffset{
+    my ($start, $end, $fh) = @_;
+    my $data = '';
+    sysseek ($fh, $start, SEEK_SET);
+    sysread($fh, $data, $end - $start, 0);
+    return split("\n", $data);
+}
+
+
 sub _binSearch{
-    my ($self, %args) = @_;
-    my $u = $self->{_totalLines};
+    my (%args) = @_;
+    my $total_lines = exists $args{length} ? $args{length} : get_file_length_from_index($args{fh}, $args{index}); 
+    return 0 if not exists $args{contig_order}->{$args{chrom}};
+    my $u = $args{length};
     my $l = 1;
-    return 0 if not exists $self->{_contigOrder}->{$args{chrom}};
+    if (ref $args{blocks} eq 'ARRAY'){
+        ($u, $l) = _getUpperLower($args{chrom}, $args{pos}, $args{blocks}, $args{contig_order});
+    }
     my $i = 0;
     while ($l <= $u){
         $i = int(($l + $u)/2);
-        my $line =  $self->_lineWithIndex($i);
+        my $line =  _lineWithIndex($args{fh}, $args{index},$i);
         if ($line =~ /^#/){
             $l = $i+1;
             next;
         }
         my @split = split("\t", $line);
-        if ($self->{_contigOrder}->{$args{chrom}}  < $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]} or
-            ($self->{_contigOrder}->{$args{chrom}} == $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]} and $args{pos} < $split[$self->{_fields}->{POS}]) ){
+        if ($args{contig_order}->{$args{chrom}}  < $args{contig_order}->{$split[0]} or
+            ($args{contig_order}->{$args{chrom}} == $args{contig_order}->{$split[0]} and $args{pos} < $split[1]) ){
                 $u = $i -1;
-        }elsif($self->{_contigOrder}->{$args{chrom}}  > $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]} or
-            ($self->{_contigOrder}->{$args{chrom}} == $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]} and $args{pos} > $split[$self->{_fields}->{POS}]) ){
+        }elsif($args{contig_order}->{$args{chrom}}  > $args{contig_order}->{$split[0]} or
+            ($args{contig_order}->{$args{chrom}} == $args{contig_order}->{$split[0]} and $args{pos} > $split[1]) ){
                 $l = $i + 1;
         }else{
             return $i;
@@ -852,25 +1199,25 @@ sub _binSearch{
     }
     #FIND OVERLAPPING VARIANTS (DELETIONS/MNVs) NOT NECESSARILY OF SAME COORDINATE
     for (my $j = $i - 1; $j > 0; $j--){#look at previous lines
-        my $line =  $self->_lineWithIndex($j);
+        my $line =  _lineWithIndex($args{fh}, $args{index},$j);
         last if ($line =~ /^#/);
         my @split = split("\t", $line);
         #skip if we're at the next chrom...
         next if 
-            $self->{_contigOrder}->{$args{chrom}}  < $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]};
+            $args{contig_order}->{$args{chrom}}  < $args{contig_order}->{$split[0]};
         #...or downstream
         next if 
-            $self->{_contigOrder}->{$args{chrom}} == $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]}
-	            and $args{pos} < $split[$self->{_fields}->{POS}];
+            $args{contig_order}->{$args{chrom}} == $args{contig_order}->{$split[0]}
+	            and $args{pos} < $split[1];
         #we're done if we've got to the previous chromosome...
         last if 
-            $self->{_contigOrder}->{$args{chrom}}  > $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]};
+            $args{contig_order}->{$args{chrom}}  > $args{contig_order}->{$split[0]};
         #and let's assume we're not going to have detected any del/mnv larger than 200 bp (is there a better way?)
         last if 
-            $self->{_contigOrder}->{$args{chrom}} == $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]} 
-                and $args{pos} < ($split[$self->{_fields}->{POS}] - 200);
-        my $ref_length = length($split[$self->{_fields}->{REF}]);
-        if ($ref_length > 1 and ($ref_length + $split[$self->{_fields}->{POS}] - 1) >= $args{pos}){
+            $args{contig_order}->{$args{chrom}} == $args{contig_order}->{$split[0]} 
+                and $args{pos} < ($split[1] - 200);
+        my $ref_length = length($split[3]);
+        if ($ref_length > 1 and ($ref_length + $split[1] - 1) >= $args{pos}){
             #we've found a deletion/mnv that overlaps our pos
             return $j;
         }
@@ -878,52 +1225,34 @@ sub _binSearch{
     return 0;
 }
 
-sub _searchVcf{
-    my ($self, %args) = @_;
-    croak "chrom argument is required for _searchVcf method " if not exists $args{chrom};
-    croak "pos argument is required for _searchVcf method " if not exists $args{pos};
-    my $i = $self->_binSearch(chrom=>$args{chrom}, pos => $args{pos});
-    if ($i){
-        my @hits;
-        for (my $j = $i - 1; $j > 0; $j--){#look at previous lines
-            my $line = $self->_lineWithIndex($j);
-            last if ($line =~ /^#/);
-            my @split = split("\t", $line);
-            if ($split[$self->{_fields}->{CHROM}] eq $args{chrom} and $split[$self->{_fields}->{POS}] == $args{pos}){
-                push @hits, $line;
-            }else{
-                #FIND OVERLAPPING VARIANTS (DELETIONS/MNVs) NOT NECESSARILY OF SAME COORDINATE
-                #we're done if we've got to the previous chromosome...
-                last if 
-                    $self->{_contigOrder}->{$args{chrom}}  > $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]};
-                #and let's assume we're not going to have detected any del/mnv larger than 200 bp (is there a better way?)
-                last if 
-                    $self->{_contigOrder}->{$args{chrom}} == $self->{_contigOrder}->{$split[$self->{_fields}->{CHROM}]} 
-                        and $args{pos} < ($split[$self->{_fields}->{POS}] - 200);
-                my $ref_length = length($split[$self->{_fields}->{REF}]);
-                if ($ref_length > 1 and ($ref_length + $split[$self->{_fields}->{POS}] - 1) >= $args{pos}){
-                    #we've found a deletion/mnv that overlaps our pos
-                    push @hits, $line;
-                }
-            }
+
+sub _getUpperLower{
+    my ($chrom, $pos, $blocks, $contigs) = @_;
+    my ($u, $l, $i) = ($#{$blocks}, 0, 0);
+    my ($upper, $lower) = (0, 0);
+    while ($l < $u-1){
+        $i = int(($l + $u)/2);
+        if ($contigs->{$chrom}  < $contigs->{$blocks->[$i]->{chrom}} or
+            ($contigs->{$chrom} == $contigs->{$blocks->[$i]->{chrom}} and $pos < $blocks->[$i]->{pos}) ){
+                $u = $i ;
+        }elsif($contigs->{$chrom}  > $contigs->{$blocks->[$i]->{chrom}} or
+            ($contigs->{$chrom} == $contigs->{$blocks->[$i]->{chrom}} and $pos > $blocks->[$i]->{pos}) ){
+                $l = $i;
+        }else{
+            return ($blocks->[$i]->{line}, $blocks->[$i]->{line});
         }
-        @hits = reverse(@hits);#put in original order
-        push @hits, $self->_lineWithIndex($i);#add original hit
-        for (my $j = $i + 1; $j <= $self->{_totalLines}; $j++){#look at next lines
-            my $line = $self->_lineWithIndex($j);
-             my @split = split("\t", $line);
-            if ($split[$self->{_fields}->{CHROM}] eq $args{chrom} and $split[$self->{_fields}->{POS}] == $args{pos}){
-                push @hits, $line;
-            }else{
-                last;
-            }
-        }
-        return @hits;
-    }else{
-        return;
     }
+    $lower = $blocks->[$l-1]->{line};
+    $upper = $blocks->[$u+1]->{line}; 
+    return ($upper, $lower);   
 }
-=cut
+
+
+sub getFileLengthFromIndex{
+    my $vcf = shift;
+    my %idx = readIndex($vcf);
+    return $idx{last_line};
+}
 
 sub countVariants{
     my $vcf = shift;
