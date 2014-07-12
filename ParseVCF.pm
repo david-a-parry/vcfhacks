@@ -92,6 +92,7 @@ sub new {
         }
         $self->{_fileSize} = -s $self->{_file};
     }
+    $self->{_validFields} = $self->_getValidFields();
     #if user has supplied header seperately
     if ($self->{_header}){
         my $success = $self->changeHeader(string=>$self->{_header});
@@ -102,8 +103,15 @@ sub new {
         $self -> _readHeader();
         $self -> _readHeaderInfo();
     }
-        $class -> _incr_count();
-        return $self;
+    $class -> _incr_count();
+    return $self;
+}
+
+
+sub _getValidFields{
+    my ($self) = @_;
+    my %valid_fields = map {$_ => undef } qw(CHROM POS ID REF ALT QUAL FILTER INFO FORMAT);
+    return \%valid_fields;
 }
 
 sub _getLineCount{
@@ -194,10 +202,28 @@ sub sortVcf{
     my %contigs = ();
     my $add_ids = 0;
     my $i = 0;
-    foreach my $head (@{$self->{_metaHeader}}){
-        if ($head =~ /##contig=<ID=([^,>]+),\S+/){
-            $contigs{$1} = $i++;
+    if (not $self->{_contigOrder}){
+        foreach my $head (@{$self->{_metaHeader}}){
+            if ($head =~ /##contig=<ID=([^,>]+),\S+/){
+                $contigs{$1} = $i++;
+            }
         }
+        if (not keys(%contigs)){
+            print "WARNING - no contig lines found in header for $self->{_file}, will gather contigs and sort arbitrarily.\n";
+            $add_ids++;
+            $self->reopenFileHandle();#ensure we're at the start of the file
+            my %chroms = ();
+            while (my $line = scalar readline $self->{_filehandle}){
+                next if $line =~ /^#/;
+                $chroms{(split "\t", $line)[$self->{_fields}->{CHROM}]}++;
+            }
+            $i = 0;
+            %contigs = map {$_ => $i++} sort _byContigs(keys%chroms);
+        }
+        croak "No contigs found in $self->{_file}, cannot sort\n" if not keys(%contigs);
+        $self->{_contigOrder} = \%contigs;
+    }else{
+        %contigs = %{$self->{_contigOrder}};
     }
     my $SORTOUT;
     if (exists $args{output}){
@@ -206,19 +232,6 @@ sub sortVcf{
     }else{
         $SORTOUT = \*STDOUT;
     }
-    if (not keys(%contigs)){
-        print "WARNING - no contig lines found in header for $self->{_file}, will gather contigs and sort arbitrarily.\n";
-        $add_ids++;
-        $self->reopenFileHandle();#ensure we're at the start of the file
-        my %chroms = ();
-        while (my $line = scalar readline $self->{_filehandle}){
-            next if $line =~ /^#/;
-            $chroms{(split "\t", $line)[$self->{_fields}->{CHROM}]}++;
-        }
-        $i = 0;
-        %contigs = map {$_ => $i++} sort _byContigs(keys%chroms);
-    }
-    croak "No contigs found in $self->{_file}, cannot sort\n" if not keys(%contigs);
     eval "use Sort::External; 1" or carp "The Sort::External module was not found - will attempt to sort in memory. For huge files it is recommended to install Sort::External via CPAN.\n";
     $self->reopenFileHandle();#ensure we're at the start of the file
     if ($@){#no Sort::External , sort in memory
@@ -288,6 +301,43 @@ sub sortVcf{
     print STDERR " Done.\n";
     $self->reopenFileHandle();#reset file
     return $args{output} if defined wantarray
+}
+
+sub sortVariants{
+#sort a list of vcf lines
+    my ($self, $list) = @_;
+    croak "sortVariants required an array reference as an argument " if (ref $list ne 'ARRAY');
+    my %contigs = ();
+    my $add_ids = 0;
+    my $i = 0;
+    if (not $self->{_contigOrder}){
+        foreach my $head (@{$self->{_metaHeader}}){
+            if ($head =~ /##contig=<ID=([^,>]+),\S+/){
+                $contigs{$1} = $i++;
+            }
+        }
+        if (not keys(%contigs)){
+            print "WARNING - no contig lines found in header for $self->{_file}, will gather contigs and sort arbitrarily.\n";
+            $add_ids++;
+            $self->reopenFileHandle();#ensure we're at the start of the file
+            my %chroms = ();
+            while (my $line = scalar readline $self->{_filehandle}){
+                next if $line =~ /^#/;
+                $chroms{(split "\t", $line)[$self->{_fields}->{CHROM}]}++;
+            }
+            $i = 0;
+            %contigs = map {$_ => $i++} sort _byContigs(keys%chroms);
+        }
+        croak "No contigs found in $self->{_file}, cannot sort\n" if not keys(%contigs);
+        $self->{_contigOrder} = \%contigs;
+    }else{
+        %contigs = %{$self->{_contigOrder}};
+    }
+    my @sort = sort {$contigs{(split "\t", $a)[$self->{_fields}->{CHROM}]} <=> $contigs{(split "\t", $b)[$self->{_fields}->{CHROM}]} || 
+                        (split "\t", $a)[$self->{_fields}->{POS}] <=> (split "\t", $b)[$self->{_fields}->{POS}]
+                    } @$list;
+    return @sort if defined wantarray;
+    carp "sortVariants method called in void context ";
 }
 
 sub altsToVepAllele{
@@ -645,6 +695,7 @@ sub searchForPosition{
             $self->{_indexHandle} = $self->indexVcf;
         }else{
             open ($self->{_indexHandle}, $self->{_index}) or croak "Can't open index file $self->{_index} for reading: $! ";
+            binmode $self->{_indexHandle};
         }
     }
     if (not $self->{_contigOrder}){
@@ -817,6 +868,7 @@ sub indexVcf{
     close $CONTIGS;
     close $INDEX;
     open ($INDEX, $self->{_index}) or croak "can't open $self->{_index} for reading index: $!";
+    binmode $INDEX;
     return $INDEX if defined wantarray;
 }
 
@@ -1103,7 +1155,7 @@ sub countLines{
     }
     $type = "variants" if not $type;
     my @valid_types = qw/total header remaining variants/;
-    croak "invalid type $type passed to countLines method " if not grep {/$type/} @valid_types;
+    croak "invalid type $type passed to countLines method " if not grep {$type eq $_} @valid_types;
     my $header_count = 0;
     if ($self->{_oldHeaderCount}){#if we've replaced the header already
         $header_count = $self->{_oldHeaderCount};
@@ -1238,8 +1290,7 @@ sub getVariantField{
     my ($self, $field) = @_;
     $field =~ s/^#+//;
     $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
-    my @valid_fields = $self->getValidFields;#qw(CHROM POS ID REF ALT QUAL FILTER INFO FORMAT);
-    croak "Invalid field ($field) passed to getVariantField method " if not grep {/$field/} @valid_fields;
+    croak "Invalid field ($field) passed to getVariantField method " if not exists $self->{_validFields}->{$field} ;
     if (exists $self->{_currentVar}->{$field}){
         return $self->{_currentVar}->{$field};
     }else{
@@ -1247,15 +1298,6 @@ sub getVariantField{
     }
 }
 
-
-sub getValidFields{
-    my @valid_fields = qw(CHROM POS ID REF ALT QUAL FILTER INFO FORMAT);
-    if (defined wantarray){
-        return @valid_fields;
-    }else{    
-        carp "getValidFields method called in void context ";
-    }
-}
 
 sub getCustomField{
     my ($self, $field) = @_;
@@ -1275,8 +1317,7 @@ sub replaceVariantField{
     my ($self, $field, $replacement) = @_;
     $field =~ s/^#+//;
     $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
-    my @valid_fields = $self->getValidFields;#qw(CHROM POS ID REF ALT QUAL FILTER INFO FORMAT);
-    croak "Invalid field ($field) passed to getVariantField method " if not grep {/$field/} @valid_fields;
+    croak "Invalid field ($field) passed to replaceVariantField method " if not exists $self->{_validFields}->{$field} ;
     $self->{_currentVar}->{$field} = $replacement;
     my @line = ();
     foreach my $f ( split ("\t", $self->{_header})){
