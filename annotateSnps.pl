@@ -1,7 +1,12 @@
 #!/usr/bin/perl
 use warnings;
 use strict;
+
+#use threads;
+#use threads::shared;
+use Parallel::ForkManager;
 use Getopt::Long;
+use Sys::CPU;
 use Pod::Usage;
 use Term::ProgressBar;
 use Data::Dumper;
@@ -9,223 +14,596 @@ use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use POSIX qw/strftime/;
 use FindBin;
 use lib "$FindBin::Bin";
-use ParseVCF;
+use VcfReader;
 my @samples;
-my @dbsnp;
+my @dbsnp : shared;
 my $freq;
 my $quiet;
 my $strict;
-my %opts = (samples => \@samples, dbsnp_file => \@dbsnp, freq => \$freq, quiet=>\$quiet, Strict => \$strict);
+my $cores = Sys::CPU::cpu_count();
 
-GetOptions(\%opts,
-        "output=s",
-        "input=s",
-        "known_snps=s",
-        "replace",
-        "samples=s{,}",
-        "dbsnp_file=s{,}",
-        "help",
-        "manual",
-        "build=i",
-        "freq=f",
-        "pathogenic",
-        "quiet",
-        "Progress",
-        ) or pod2usage(-exitval => 2, -message => "Syntax error") ;
-pod2usage (-verbose => 2) if $opts{manual};
-pod2usage (-verbose => 1) if $opts{help};
-pod2usage(-exitval => 2, -message => "Syntax error") if not $opts{input} or not @{$opts{dbsnp_file}};
-if (defined $freq){
-        pod2usage(-exitval => 2, -message => "value for --freq argument must be greater than 0 and less than 50") if $freq > 50 or $freq <= 0;
+#use 12 forks by default if we have that many cores
+# otherwise use one fork per core
+my $forks = $cores < 12 ? $cores : 12;
+my $buffer_size;
+my %opts = (
+    cache      => \$buffer_size,
+    forks      => \$forks,
+    samples    => \@samples,
+    dbsnp_file => \@dbsnp,
+    freq       => \$freq,
+    quiet      => \$quiet,
+    Strict     => \$strict
+);
+
+GetOptions(
+    \%opts,    "output=s",     "input=s",         "known_snps=s",
+    "replace", "samples=s{,}", "dbsnp_file=s{,}", "help",
+    "manual",  "build=i",
+    "f|freq=f"  => \$freq,
+    "t|forks=i" => \$forks,
+    "cache=i", "pathogenic", "quiet", "Progress",
+    "VERBOSE",
+) or pod2usage( -exitval => 2, -message => "Syntax error" );
+pod2usage( -verbose => 2 ) if $opts{manual};
+pod2usage( -verbose => 1 ) if $opts{help};
+pod2usage( -exitval => 2, -message => "Syntax error" )
+  if not $opts{input}
+  or not @{ $opts{dbsnp_file} };
+
+if ( $forks < 2 ) {
+    $forks = 0;    #no point having overhead of forks for one fork
+    $buffer_size = 1000 if not $buffer_size;
 }
-pod2usage(-exitval => 2, -message => "value for --build argument must be equal to or greater than 0") if defined $opts{build} && $opts{build} < 0;
+else {
+    if ( not $buffer_size ) {
+        $buffer_size = 10000 > $forks * 1000 ? 10000 : $forks * 1000;
+    }
+}
+print STDERR
+"[INFO] Processing in batches of $buffer_size variants split among $forks forks.\n";
+if ( defined $freq ) {
+    pod2usage(
+        -exitval => 2,
+        -message =>
+          "value for --freq argument must be greater than 0 and less than 50"
+    ) if $freq > 50 or $freq <= 0;
+}
+pod2usage(
+    -exitval => 2,
+    -message => "value for --build argument must be equal to or greater than 0"
+) if defined $opts{build} && $opts{build} < 0;
 
 my $OUT;
-if ($opts{output}){
-        open ($OUT, ">$opts{output}") || die "Can't open $opts{output} for writing: $!";
-}else{
-        $OUT = *STDOUT;
+if ( $opts{output} ) {
+    open( $OUT, ">$opts{output}" )
+      || die "Can't open $opts{output} for writing: $!";
+}
+else {
+    $OUT = *STDOUT;
 }
 my $KNOWN;
-if ($opts{known_snps}){
-        open ($KNOWN, ">$opts{known_snps}") || die "Can't open $opts{known_snps} for writing: $!";
+if ( $opts{known_snps} ) {
+    open( $KNOWN, ">$opts{known_snps}" )
+      || die "Can't open $opts{known_snps} for writing: $!";
 }
 my $progressbar;
-my $next_update = 0;
-my $prev_percent = 0;
-my $n = 0;
-my $kept = 0; #variants not filtered
-my $filtered = 0; #variants filtered
+my $next_update     = 0;
+my $prev_percent    = 0;
+my $kept            = 0;    #variants not filtered
+my $filtered        = 0;    #variants filtered
 my $pathogenic_snps = 0;
-my $found = 0; #variants that match a known SNP
-my $lines = 0; 
-my $time = strftime("%H:%M:%S", localtime);
-print STDERR "[$time] Initializing input VCF\n";
-my $vcf_obj = ParseVCF->new( file=> $opts{input});
-my $total_vcf = $vcf_obj->countLines("variants") if defined $opts{Progress};
-print STDERR "$opts{input} has $total_vcf variants\n" if $total_vcf;# if defined $opts{Progress};
-my @snp_objs = ();
+my $found           = 0;    #variants that match a known SNP
+my $total_vcf       = 0;
+my $time = strftime( "%H:%M:%S", localtime );
+print STDERR "[$time] Initializing input VCF... ";
+
+if ( defined $opts{Progress} ) {
+    VcfReader::checkHeader( vcf => $opts{input} );
+    $total_vcf = VcfReader::countVariants( $opts{input} );
+    print STDERR "$opts{input} has $total_vcf variants\n";
+}
+my %contigs       = VcfReader::getContigOrder( $opts{input} );
+my %sample_to_col = ();
+if (@samples) {
+    %sample_to_col = VcfReader::getSamples(
+        vcf         => $opts{input},
+        get_columns => 1,
+    );
+}
+
+$time = strftime( "%H:%M:%S", localtime );
+print STDERR "[$time] Finished initializing input VCF\n";
 my @snp_headers;
-for (my $i = 0; $i < @dbsnp; $i++){
-    $time = strftime("%H:%M:%S", localtime);
-    print STDERR "[$time] Initializing $dbsnp[$i] dbSNP reference VCF " .($i + 1) ." of " .scalar(@dbsnp) ."\n";
-    my $snp_obj;
-    if ($dbsnp[$i] =~ /\.gz$/){
-        #must be bgzip compressed and tabix will index if not already - no need to check if sorted
-        $snp_obj = ParseVCF->new( file => $dbsnp[$i], noLineCount =>1);
-    }else{
-        $snp_obj = ParseVCF->new( file => $dbsnp[$i], noLineCount =>0);
-    }
-    push @snp_objs, $snp_obj;
-    if (not -e $snp_obj->get_index){
-        $snp_obj->indexVcf();
-    }
-    #my $total_snp = $snp_obj->countLines("variants") ;
-    #print STDERR "$dbsnp[$i] has $total_snp variants\n" ;
-    push @snp_headers, split("\n", $snp_obj->getHeader(0));
-}
+my %dbsnp_to_index = ();
+my $dbpm           = Parallel::ForkManager->new($forks);
+for ( my $i = 0 ; $i < @dbsnp ; $i++ ) {
+    $dbpm->run_on_finish(    # called BEFORE the first call to start()
+        sub {
+            my ( $pid, $exit_code, $ident, $exit_signal, $core_dump,
+                $data_structure_reference )
+              = @_;
 
+            if ( defined($data_structure_reference) )
+            {                # children are not forced to send anything
+                if ( ref $data_structure_reference eq 'ARRAY' ) {
+                    push @snp_headers, @{ $data_structure_reference->[0] };
+                    $dbsnp_to_index{ $data_structure_reference->[2] } =
+                      $data_structure_reference->[1];
+                }
+                else {
+                    die
+                      "Unexpected return from dbSNP reference initialization:\n"
+                      . Dumper $data_structure_reference;
+                }
+            }
+            else
+            { # problems occuring during storage or retrieval will throw a warning
+                die "No message received from child process $pid!\n";
+            }
+        }
+    );
+    $time = strftime( "%H:%M:%S", localtime );
+    print STDERR "[$time] Initializing $dbsnp[$i] dbSNP reference VCF "
+      . ( $i + 1 ) . " of "
+      . scalar(@dbsnp) . "\n";
+    $dbpm->start() and next;
+    my @head_and_index = initializeDbsnpVcfs( $dbsnp[$i] );
+    push @head_and_index, $dbsnp[$i];
+    $time = strftime( "%H:%M:%S", localtime );
+    print STDERR
+      "[$time] Finished initializing $dbsnp[$i] dbSNP reference VCF.\n";
+    $dbpm->finish( 0, \@head_and_index );
+}
+print STDERR "Waiting for children...\n" if $opts{VERBOSE};
+$dbpm->wait_all_children;
 my @add_head = ();
-if ($opts{pathogenic}){
-    push @add_head,  grep {/##INFO=<ID=CLNSIG,/} @snp_headers;
-    push @add_head, grep {/##INFO=<ID=SCS,/} @snp_headers ;
-    if (not @add_head){
-        print STDERR "WARNING - can't find CLNSIG or SCS fields in dbSNP file headers, your SNP reference files probably don't have pathogenic annotations.\n";
+if ( $opts{pathogenic} ) {
+    push @add_head, grep { /##INFO=<ID=CLNSIG,/ } @snp_headers;
+    push @add_head, grep { /##INFO=<ID=SCS,/ } @snp_headers;
+    if ( not @add_head ) {
+        print STDERR
+"WARNING - can't find CLNSIG or SCS fields in dbSNP file headers, your SNP reference files probably don't have pathogenic annotations.\n";
     }
 }
 
-if ($opts{build}){
-    my  @build_head = grep {/##INFO=<ID=dbSNPBuildID,/} @snp_headers;
-    if (not @build_head){
-        print STDERR "WARNING - can't find dbSNPBuildID fields in dbSNP file headers, your SNP reference files probably don't have readable dbSNP build annotations.\n";
-    }else{
+if ( $opts{build} ) {
+    my @build_head = grep { /##INFO=<ID=dbSNPBuildID,/ } @snp_headers;
+    if ( not @build_head ) {
+        print STDERR
+"WARNING - can't find dbSNPBuildID fields in dbSNP file headers, your SNP reference files probably don't have readable dbSNP build annotations.\n";
+    }
+    else {
         push @add_head, @build_head;
     }
 }
-if ($opts{freq}){
-    my @freq_head = grep {/##INFO=<ID=(GMAF|CAF|G5A|G5|AF),/} @snp_headers;
-    if (not @freq_head){
-        print STDERR "WARNING - can't find allele frequency fields (GMAF, CAF, AF, G5A or G5) in dbSNP file headers, your SNP reference files probably don't have readable frequency data.\n";
-    }else{
+if ( $opts{freq} ) {
+    my @freq_head = grep { /##INFO=<ID=(GMAF|CAF|G5A|G5|AF),/ } @snp_headers;
+    if ( not @freq_head ) {
+        print STDERR
+"WARNING - can't find allele frequency fields (GMAF, CAF, AF, G5A or G5) in dbSNP file headers, your SNP reference files probably don't have readable frequency data.\n";
+    }
+    else {
         push @add_head, @freq_head;
     }
 }
 
-print $OUT  $vcf_obj->getHeader(0) ;
-print $KNOWN  $vcf_obj->getHeader(0) if $KNOWN;
-if (@add_head){
+my $meta_head = VcfReader::getMetaHeader( $opts{input} );
+print $OUT "$meta_head\n";
+print $KNOWN "$meta_head\n" if $KNOWN;
+if (@add_head) {
     my %seen = ();
-    @add_head = grep {! $seen{$_}++} @add_head;
-    foreach my $add (@add_head){
+    @add_head = grep { !$seen{$_}++ } @add_head;
+    foreach my $add (@add_head) {
         chomp $add;
         $add =~ s/^##INFO=<//;
         $add =~ s/\>$//;
     }
-    my $headstring = "##INFO=<ID=SnpAnnotation,Number=A,Type=String,Description=\"Collection of SNP annotations per allele from dbSNP VCF files. ".
-        "Reference files had the following annotations: [" .join(" ", @add_head) ."]\">\n";
+    my $headstring =
+"##INFO=<ID=SnpAnnotation,Number=A,Type=String,Description=\"Collection of SNP annotations per allele from dbSNP VCF files. "
+      . "Reference files had the following annotations: ["
+      . join( " ", @add_head )
+      . "]\">\n";
     print $OUT $headstring;
     print $KNOWN $headstring if $KNOWN;
 }
-print $OUT  "##annotateSnps.pl=\"";
-print $KNOWN   "##annotateSnps.pl=\"" if $KNOWN;
+print $OUT "##annotateSnpsMulti.pl=\"";
+print $KNOWN "##annotateSnpsMulti.pl=\"" if $KNOWN;
 
 my @opt_string = ();
-foreach my $k (sort keys %opts){
-        if (not ref $opts{$k}){
-                push @opt_string, "$k=$opts{$k}";
-        }elsif (ref $opts{$k} eq 'SCALAR'){
-                if (defined ${$opts{$k}}){
-                        push @opt_string, "$k=${$opts{$k}}";
-                }else{
-                        push @opt_string, "$k=undef";
-                }
-        }elsif (ref $opts{$k} eq 'ARRAY'){
-                if (@{$opts{$k}}){
-                        push @opt_string, "$k=" .join(",", @{$opts{$k}});
-                }else{
-                        push @opt_string, "$k=undef";
-                }
+foreach my $k ( sort keys %opts ) {
+    if ( not ref $opts{$k} ) {
+        push @opt_string, "$k=$opts{$k}";
+    }
+    elsif ( ref $opts{$k} eq 'SCALAR' ) {
+        if ( defined ${ $opts{$k} } ) {
+            push @opt_string, "$k=${$opts{$k}}";
         }
+        else {
+            push @opt_string, "$k=undef";
+        }
+    }
+    elsif ( ref $opts{$k} eq 'ARRAY' ) {
+        if ( @{ $opts{$k} } ) {
+            push @opt_string, "$k=" . join( ",", @{ $opts{$k} } );
+        }
+        else {
+            push @opt_string, "$k=undef";
+        }
+    }
 }
-print $OUT join(" ", @opt_string) . "\"\n" .  $vcf_obj->getHeader(1);
-print $KNOWN join(" ", @opt_string) ."\"\n" . $vcf_obj->getHeader(1) if $KNOWN;
+my $col_header = VcfReader::getColumnHeader( $opts{input} );
+print $OUT join( " ", @opt_string ) . "\"\n" . $col_header . "\n";
+print $KNOWN join( " ", @opt_string ) . "\"\n" . $col_header . "\n"
+  if $KNOWN;
 
-$time = strftime("%H:%M:%S", localtime);
+$time = strftime( "%H:%M:%S", localtime );
 print STDERR "[$time] SNP annotation starting\n";
 
 $freq /= 100 if ($freq);
-if ($opts{build} || $freq){
+if ( $opts{build} || $freq ) {
     print STDERR "Filtering variants on following criteria:\n";
-    print STDERR ">in dbSNP$opts{build} or previous\n" if defined $opts{build} && $opts{build} ;
-    print STDERR ">with a minor allele frequency equal to or greater than $freq (" . $freq * 100 . " %)\n" if defined $freq && $freq ;
-    print STDERR ">without \"pathogenic\" or \"probably pathogenic\" annotations\n" if defined $opts{pathogenic} && $opts{pathogenic} ;
-}elsif ($opts{pathogenic}){
-    if ($KNOWN){
-        print STDERR "Annotating output and printing variants with \"pathogenic\" or \"probably pathogenic\" annotations to $opts{known_snps}\n";
-    }else{
-        print STDERR "WARNING: --pathogenic flag acheives nothing if neither --build or --freq filtering is in effect and --known_out output is not specified\n";
+    print STDERR ">in dbSNP$opts{build} or previous\n"
+      if defined $opts{build} && $opts{build};
+    print STDERR
+      ">with a minor allele frequency equal to or greater than $freq ("
+      . $freq * 100 . " %)\n"
+      if defined $freq && $freq;
+    print STDERR
+      ">without \"pathogenic\" or \"probably pathogenic\" annotations\n"
+      if defined $opts{pathogenic} && $opts{pathogenic};
+}
+elsif ( $opts{pathogenic} ) {
+    if ($KNOWN) {
+        print STDERR
+"Annotating output and printing variants with \"pathogenic\" or \"probably pathogenic\" annotations to $opts{known_snps}\n";
+    }
+    else {
+        print STDERR
+"WARNING: --pathogenic flag acheives nothing if neither --build or --freq filtering is in effect and --known_out output is not specified\n";
     }
 }
-if (defined $opts{Progress} and $total_vcf){
-        if ($opts{build} || $freq){
-            $progressbar = Term::ProgressBar->new({name => "Filtering", count => $total_vcf, ETA => "linear", });
-        }else{
-            $progressbar = Term::ProgressBar->new({name => "Annotating", count => $total_vcf, ETA => "linear", });
-        }
-        #$progressbar->minor(0);
+my $prog_total;
+if ( defined $opts{Progress} and $total_vcf ) {
+    my $x_prog = 3;
+    $x_prog = 4 if $KNOWN;
+    $prog_total = $total_vcf * $x_prog;
+    if ( $opts{build} || $freq ) {
+        $progressbar = Term::ProgressBar->new(
+            { name => "Filtering", count => ($prog_total), ETA => "linear", } );
+    }
+    else {
+        $progressbar = Term::ProgressBar->new(
+            { name => "Annotating", count => ($prog_total), ETA => "linear", }
+        );
+    }
+
+    #$progressbar->minor(0);
 }
 
-VAR: while (my $line = $vcf_obj->readLine){
+my $n                = 0;
+my @lines_to_process = ();
+my $VCF              = VcfReader::_openFileHandle( $opts{input} )
+  ;    # or die "Can't open $opts{input} for reading: $!\n";
+VAR: while ( my $line = <$VCF> ) {
+    next if $line =~ /^#/;
     $n++;
-    my $line_should_not_be_filtered = 0; #flag in case pathogenic flag is set or somethinga and we don't want to filter this snp no matter what
-    my $is_known_snp = 0;
-    my $replaced_already = 0; #use this flag to allow appending of multiple IDs found in our reference file even if --replace option is in place.
-    if ($progressbar){
-           $next_update = $progressbar->update($n) if $n >= $next_update;
+    chomp $line;
+    my @split_line = split( "\t", $line );
+
+    #our VcfReader methods will be more efficient on pre-split lines
+    push @lines_to_process, \@split_line;
+    if ($progressbar) {
+        $next_update = $progressbar->update($n) if $n >= $next_update;
+    }
+    if ( @lines_to_process >= $buffer_size ) {
+        process_buffer();
+        @lines_to_process = ();
+    }
+}
+
+process_buffer();
+
+if ( defined $opts{Progress} ) {
+    $progressbar->update($prog_total) if $prog_total >= $next_update;
+}
+$time = strftime( "%H:%M:%S", localtime );
+print STDERR "\nTime finished: $time\n";
+print STDERR "$found known SNPs identified.\n";
+print STDERR "$filtered SNPs filtered, $kept variants retained.\n";
+print STDERR
+  "$pathogenic_snps pathogenic or probable pathogenic variants identified.\n"
+  if $pathogenic_snps;
+
+################################################
+#####################SUBS#######################
+################################################
+
+sub process_buffer {
+
+    #these three arrays are arrays of refs to batches
+    # so that we can quickly sort our batches rather than
+    # performing a big sort on all lines
+    my @lines_to_print;
+    my @lines_to_filter;
+    my @known;
+    my $i               = 0;
+    my $t               = 0;
+    my $lines_per_slice = @lines_to_process;
+    if ( $forks > 0 ) {
+        $lines_per_slice = int( @lines_to_process / $forks );
+    }
+    my @batch = ();
+
+    #get a batch for each thread
+    for ( my $i = 0 ; $i < @lines_to_process ; $i += $lines_per_slice ) {
+        my $last =
+          ( $i + $lines_per_slice - 1 ) < $#lines_to_process
+          ? $i + $lines_per_slice - 1
+          : $#lines_to_process;
+        my @temp = @lines_to_process[ $i .. $last ];
+        push @batch, \@temp;
+    }
+    my $pm = Parallel::ForkManager->new($forks);
+    $pm->run_on_finish(    # called BEFORE the first call to start()
+        sub {
+            my ( $pid, $exit_code, $ident, $exit_signal, $core_dump,
+                $data_structure_reference )
+              = @_;
+
+            if ( defined($data_structure_reference) )
+            {              # children are not forced to send anything
+                my %res = %{$data_structure_reference}
+                  ;        # child passed a string reference
+                if ( ref $res{keep} eq 'ARRAY' ) {
+                    push @lines_to_print, \@{ $res{keep} } if @{ $res{keep} };
+                }
+                if ( ref $res{filter} eq 'ARRAY' ) {
+                    push @lines_to_filter, \@{ $res{filter} }
+                      if @{ $res{filter} };
+                }
+                if ( ref $res{known} eq 'ARRAY' ) {
+                    push @known, \@{ $res{known} } if @{ $res{known} };
+                }
+                if ($progressbar) {
+                    $n += $res{batch_size};
+                    $next_update = $progressbar->update($n)
+                      if $n >= $next_update;
+                }
+            }
+            else
+            { # problems occuring during storage or retrieval will throw a warning
+                print STDERR "No message received from child process $pid!\n";
+            }
+        }
+    );
+    foreach my $b (@batch) {
+        $pm->start() and next;
+        my %results = process_batch($b);
+        $pm->finish( 0, \%results );
+    }
+    print STDERR "Waiting for children...\n" if $opts{VERBOSE};
+    $pm->wait_all_children;
+    print STDERR "Done a batch...\n" if $opts{VERBOSE};
+
+    #print them
+    @lines_to_print = sort by_first_last_line (@lines_to_print);
+    my $incr_per_batch = @lines_to_process / @lines_to_print;
+    foreach my $batch (@lines_to_print) {
+        my $incr_per_line = $incr_per_batch / @$batch;
+        foreach my $l (@$batch) {
+            if ( ref $l eq 'ARRAY' ) {
+                print $OUT join( "\t", @$l ) . "\n";
+            }
+            else {
+                print $OUT "$l\n";
+            }
+            $kept++;
+            if ($progressbar) {
+                $n += $incr_per_line;
+                $next_update = $progressbar->update($n) if $n >= $next_update;
+            }
+        }
+    }
+    if ($KNOWN) {
+        @known = sort by_first_last_line (@known);
+        $incr_per_batch = @lines_to_process / @known;
+        foreach my $k (@known) {
+            my $incr_per_line = $incr_per_batch / @$k;
+            foreach my $l (@$k) {
+                if ( ref $l eq 'ARRAY' ) {
+                    print $OUT join( "\t", @$l ) . "\n";
+                }
+                else {
+                    print $OUT "$l\n";
+                }
+                $found++;
+                if ($progressbar) {
+                    $n += $incr_per_line;
+                    $next_update = $progressbar->update($n)
+                      if $n >= $next_update;
+                }
+            }
+        }
+    }
+    else {
+        foreach my $batch (@known) {
+            $found += @$batch;
+        }
+    }
+    foreach my $batch (@lines_to_filter) {
+        $filtered += @$batch;
+    }
+}
+################################################
+sub by_first_last_line {
+    my $a_first_chrom = VcfReader::getVariantField( $a->[0],  "CHROM", );
+    my $a_first_pos   = VcfReader::getVariantField( $a->[0],  "POS", );
+    my $a_last_chrom  = VcfReader::getVariantField( $a->[-1], "CHROM", );
+    my $a_last_pos    = VcfReader::getVariantField( $a->[-1], "POS", );
+    my $b_first_chrom = VcfReader::getVariantField( $b->[0],  "CHROM", );
+    my $b_first_pos   = VcfReader::getVariantField( $b->[0],  "POS", );
+    my $b_last_chrom  = VcfReader::getVariantField( $b->[-1], "CHROM", );
+    my $b_last_pos    = VcfReader::getVariantField( $b->[-1], "POS", );
+
+    if ( $contigs{$a_first_chrom} > $contigs{$b_last_chrom} ) {
+        return 1;
+    }
+    elsif ( $contigs{$a_last_chrom} < $contigs{$b_first_chrom} ) {
+        return -1;
+    }
+    elsif ( $contigs{$a_last_chrom} > $contigs{$b_last_chrom} ) {
+        return 1;
+    }
+    elsif ( $contigs{$a_first_chrom} > $contigs{$b_first_chrom} ) {
+        return 1;
+    }
+    elsif ( $contigs{$a_last_chrom} < $contigs{$b_last_chrom} ) {
+        return -1;
+    }
+    elsif ( $contigs{$a_last_chrom} > $contigs{$b_last_chrom} ) {
+        return 1;
+    }
+    elsif ( $a_last_pos <= $b_first_pos ) {
+        return -1;
+    }
+    elsif ( $a_first_pos >= $b_last_pos ) {
+        return 1;
+    }
+    return 0;
+}
+
+################################################
+sub process_batch {
+
+    #filter a set of lines
+    my ($batch) = @_;
+    my %results = ( batch_size => scalar(@$batch) );
+    my %sargs;
+    foreach my $d (@dbsnp) {
+
+        #WE'VE FORKED AND COULD HAVE A RACE CONDITION HERE -
+        # WHICH IS WHY WE DO A FIRST PASS WITH OUR initializeDbsnpVcfs
+        # METHOD TOWARDS THE START OF THE PROGRAM
+        my %s = VcfReader::getSearchArguments( $d, $dbsnp_to_index{$d} );
+        $sargs{$d} = \%s;
+    }
+    foreach my $line ( @{$batch} ) {
+        my %res = filterSnps( $line, \%sargs );
+        push @{ $results{keep} },   $res{keep}   if $res{keep};
+        push @{ $results{filter} }, $res{filter} if $res{filter};
+        push @{ $results{known} },  $res{known}  if $res{known};
     }
 
-    #process each allele separately in case we have MNVs/deletions that need to be simplified
-    #
-    my %min_vars = $vcf_obj->minimizeAlleles();
+    #might as well do a sort in our forks to get the most out of them
+    @{ $results{keep} } =
+      VcfReader::sortVariants( \@{ $results{keep} }, \%contigs );
+    if ($KNOWN) {
+        @{ $results{known} } =
+          VcfReader::sortVariants( \@{ $results{known} }, \%contigs );
+    }
+    return %results;
+}
+
+################################################
+sub filterSnps {
+    my ( $vcf_line, $search_args ) = @_;
+    my ( $keep, $filter, $known );
+    my $line_should_not_be_filtered = 0
+      ; #flag in case pathogenic flag is set or something and we don't want to filter this snp no matter what
+    my $is_known_snp     = 0;
+    my $replaced_already = 0
+      ; #use this flag to allow appending of multiple IDs found in our reference file even if --replace option is in place.
+
+#process each allele separately in case we have MNVs/deletions that need to be simplified
+#
+    my %min_vars       = VcfReader::minimizeAlleles($vcf_line);
     my %sample_alleles = ();
-    if (@samples){
-        %sample_alleles = map{$_ => undef}  $vcf_obj->getSampleCall(multiple => \@samples, return_alleles_only => 1);
+    if (@samples) {
+        %sample_alleles = map { $_ => undef } VcfReader::getSampleCall(
+            multiple            => \@samples,
+            sample_to_columns   => \%sample_to_col,
+            return_alleles_only => 1,
+            line                => $vcf_line
+        );
     }
     my @info;
-    foreach my $allele (sort {$a <=> $b} keys %min_vars){
+    foreach my $allele ( sort { $a <=> $b } keys %min_vars ) {
         $min_vars{$allele}->{filter_snp} = 0;
-        if (@samples){
+        if (@samples) {
+
             #doesn't exist in any sample...
             next if not exists $sample_alleles{$allele};
         }
-        foreach my $snp_obj (@snp_objs){
-            if ($snp_obj->searchForPosition(chrom => $min_vars{$allele}->{CHROM}, pos => $min_vars{$allele}->{POS})){
-                while (my $snp_line = $snp_obj->readPosition()){
+        foreach my $k ( keys %{$search_args} ) {
+
+            #foreach my $s (@dbsnp) {
+            if (
+                my @snp_hits = VcfReader::searchForPosition(
+                    %{ $search_args->{$k} },
+
+                    #vcf => $k,
+                    chrom => $min_vars{$allele}->{CHROM},
+                    pos   => $min_vars{$allele}->{POS}
+                )
+              )
+            {
+                foreach my $snp_line (@snp_hits) {
+
                     #check whether the snp line(s) match our variant
-                    if (checkVarMatches($min_vars{$allele}, $snp_obj)){
+                    my @snp_split = split( "\t", $snp_line );
+                    if ( checkVarMatches( $min_vars{$allele}, \@snp_split ) ) {
                         $is_known_snp++;
+
                         #replace or append to ID field
-                        if ($vcf_obj->getVariantField('ID') eq '.' || ($opts{replace} && not $replaced_already)){
+                        if (
+                            VcfReader::getVariantField( $vcf_line, 'ID' ) eq '.'
+                            || ( $opts{replace} && not $replaced_already ) )
+                        {
                             $replaced_already++;
-                            $line = $vcf_obj->replaceVariantField('ID', $snp_obj->getVariantField('ID'));
-                        }else{
-                            my $id = $vcf_obj->getVariantField('ID');
-                            my @split_id = split(";", $id);
-                        #check it's not already correctly annotated
-                            foreach my $sid ($snp_obj->getVariantField('ID')){
-                                if (not grep {/^$sid$/i} @split_id){
-                                    $id .= ";". $sid; 
+                            $vcf_line = VcfReader::replaceVariantField(
+                                $vcf_line,
+                                'ID',
+                                VcfReader::getVariantField( \@snp_split, 'ID' )
+                            );
+                        }
+                        else {
+                            my $id =
+                              VcfReader::getVariantField( $vcf_line, 'ID' );
+                            my @split_id = split( ";", $id );
+
+                            #check it's not already correctly annotated
+                            my $new_id = $id;
+                            foreach my $sid (
+                                split(
+                                    ";",
+                                    VcfReader::getVariantField(
+                                        \@snp_split, 'ID'
+                                    )
+                                )
+                              )
+                            {
+                                if ( not grep { /^$sid$/i } @split_id ) {
+                                    $new_id .= ";" . $sid;
                                 }
                             }
-                            $line = $vcf_obj->replaceVariantField('ID', $id);
+                            if ( $new_id ne $id ) {
+                                $vcf_line =
+                                  VcfReader::replaceVariantField( $vcf_line,
+                                    'ID', $new_id );
+                            }
                         }
+
                         #perform filtering if fiters are set
-                        if ($opts{build} || $opts{pathogenic} || $freq){
-                            my ($filter_snp, $dont_filter, %add_info)  = evaluate_snp($min_vars{$allele}, $opts{build}, $opts{pathogenic}, $freq, $snp_obj);
+                        if ( $opts{build} || $opts{pathogenic} || $freq ) {
+                            my ( $filter_snp, $dont_filter, %add_info ) =
+                              evaluate_snp( $min_vars{$allele}, $opts{build},
+                                $opts{pathogenic}, $freq, \@snp_split );
                             $min_vars{$allele}->{filter_snp} += $filter_snp;
                             $line_should_not_be_filtered += $dont_filter;
-                            foreach my $k (keys (%add_info)){
-                                push @{$min_vars{$allele}->{snp_info}->{$k}}, $add_info{$k};
+                            foreach my $k ( keys(%add_info) ) {
+                                push @{ $min_vars{$allele}->{snp_info}->{$k} },
+                                  $add_info{$k};
                             }
                         }
                     }
@@ -234,183 +612,216 @@ VAR: while (my $line = $vcf_obj->readLine){
         }
     }
     my $filter_count = 0;
-    my $inf = $vcf_obj->getVariantField('INFO');
-    my $new_inf = "$inf;SnpAnnotation=[" ;
-    my @ni = ();
-    foreach my $allele (sort {$a <=> $b} keys %min_vars){
+    my $inf          = VcfReader::getVariantField( $vcf_line, 'INFO' );
+    my $new_inf      = "$inf;SnpAnnotation=[";
+    my @ni           = ();
+    foreach my $allele ( sort { $a <=> $b } keys %min_vars ) {
         my @al_inf = ();
-        if (keys %{$min_vars{$allele}->{snp_info}}){
-            foreach my $k (keys %{$min_vars{$allele}->{snp_info}}){
+        if ( keys %{ $min_vars{$allele}->{snp_info} } ) {
+            foreach my $k ( keys %{ $min_vars{$allele}->{snp_info} } ) {
                 my %seen = ();
+
                 #remove duplicate values for allele
-                @{$min_vars{$allele}->{snp_info}->{$k}} = grep {! $seen{$_}++ } 
-                  @{$min_vars{$allele}->{snp_info}->{$k}};
-                push @al_inf, "$k=" . join ("/", @{$k=$min_vars{$allele}->{snp_info}->{$k}});
+                @{ $min_vars{$allele}->{snp_info}->{$k} } =
+                  grep { !$seen{$_}++ }
+                  @{ $min_vars{$allele}->{snp_info}->{$k} };
+                push @al_inf, "$k="
+                  . join( "/", @{ $k = $min_vars{$allele}->{snp_info}->{$k} } );
             }
-        }else{
+        }
+        else {
             push @al_inf, '.';
         }
-        push @ni, join("|", @al_inf);
+        push @ni, join( "|", @al_inf );
     }
-    $new_inf .= join(",", @ni) . "]";
-    $line = $vcf_obj->replaceVariantField('INFO', $new_inf);
-    foreach my $allele (keys %min_vars){
-        $filter_count++ if ($min_vars{$allele}->{filter_snp});
+    $new_inf .= join( ",", @ni ) . "]";
+    $vcf_line = VcfReader::replaceVariantField( $vcf_line, 'INFO', $new_inf );
+    foreach my $allele ( keys %min_vars ) {
+        $filter_count++ if ( $min_vars{$allele}->{filter_snp} );
     }
-    if ($opts{build} || $opts{pathogenic} || $freq){#if using filtering only put filtered in $KNOWN
-        if ( $line_should_not_be_filtered ){ #at the moment this means it's pathogenic flagged and $opts{pathogenic} is set 
-                                            #so if --build or --freq are set print to $OUT (keep), if not print to $KNOWN and $OUT
-             $kept++;
-             print $OUT "$line\n";
-             if ( not $opts{build} && not  $freq){
-                print $KNOWN "$line\n" if $KNOWN;
+    if ( $opts{build} || $opts{pathogenic} || $freq )
+    {    #if using filtering only put filtered in $KNOWN
+        if ($line_should_not_be_filtered)
+        { #at the moment this means it's pathogenic flagged and $opts{pathogenic} is set
+             #so if --build or --freq are set keep, if not sent to both @$keep and @$known
+            $keep = $vcf_line;
+            if ( not $opts{build} && not $freq ) {
+                $known = $vcf_line;
                 $pathogenic_snps++;
             }
-        }elsif( $filter_count == keys(%min_vars) ){ #filter if all alleles meet criteria
-            $filtered++;
-            print $KNOWN "$line\n" if $KNOWN;
-        }else{ # don't filter
-            $kept++;
-            print $OUT "$line\n";
         }
-    }else{#otherwise put all identified dbSNP variants in $KNOWN and all lines in $OUT
-        $kept++;
-        print $OUT "$line\n";
-        if ($is_known_snp){
-            print $KNOWN "$line\n" if $KNOWN;
+        elsif ( $filter_count == keys(%min_vars) )
+        {    #filter if all alleles meet criteria
+            $filter = $vcf_line;
+            $known  = $vcf_line;
         }
-            
+        else {    # don't filter
+            $keep = $vcf_line;
+        }
     }
-    $found++ if $is_known_snp;
-    if ($progressbar){
-        $next_update = $progressbar->update($lines) if $lines >= $next_update;
+    else
+    { #otherwise put all identified dbSNP variants in $@$known and all lines in @$keep
+        $keep = $vcf_line;
+        if ($is_known_snp) {
+            $known = $vcf_line;
+        }
     }
-}
-if (defined $opts{Progress}){
-        $progressbar->update($total_vcf) if $total_vcf >= $next_update;
-}
-$time = strftime("%H:%M:%S", localtime);
-print STDERR "Time finished: $time\n";
-print STDERR "$found known SNPs identified.\n";
-print STDERR "$filtered SNPs filtered, $kept variants retained.\n";
-print STDERR "$pathogenic_snps pathogenic or probable pathogenic variants identified.\n" if $pathogenic_snps;
 
+    #print STDERR "DEBUG: RETURNING FROM THREAD $thread\n" if $opts{VERBOSE};
+    return ( keep => $keep, known => $known, filter => $filter );
+}
 
 ################################################
-#####################SUBS#######################
-sub evaluate_snp{
-    #returns two values - first is 1 if snp should be filtered and 0 if not, 
-    #the second is 1 if shouldn't be filtered under any circumstance (at the moment only if
-    #pathogenic flag is set and snp has a SCS or CLNSIG value of 4 or 5
-    my ($min_allele, $build, $path, $freq, $snp_obj) = @_;
-    my %info_fields = $snp_obj->getInfoFields();
+sub initializeDbsnpVcfs {
+
+#$snpfiles is a ref to an array of vcf files
+#$i is the index of @$snpfiles we are working on here
+#$search_args is a hash ref - add our VcfReader searchForPosition arguments to this shared hash
+#$heads is an array ref - add our vcf headers to this shared array
+    my ($snpfile) = @_;
+
+    #we getSearchArguments here simply to prevent a race condition later
+    my @head = VcfReader::getHeader($snpfile);
+    VcfReader::checkHeader( header => \@head );
+
+    #my %sargs = VcfReader::getSearchArguments($snpfile);
+    my %index = VcfReader::readIndex($snpfile);
+    return ( \@head, \%index );
+}
+
+#################################################
+sub evaluate_snp {
+
+#returns two values - first is 1 if snp should be filtered and 0 if not,
+#the second is 1 if shouldn't be filtered under any circumstance (at the moment only if
+#pathogenic flag is set and snp has a SCS or CLNSIG value of 4 or 5
+    my ( $min_allele, $build, $path, $freq, $snp_line, $snp_file ) = @_;
+
+    #my %info_fields = VcfReader::getInfoFields(vcf => $snp_file);
     my %info_values = ();
-    foreach my $f (qw (SCS CLNSIG dbSNPBuildID G5 G5A GMAF CAF AF) ){
-        my $value = $snp_obj->getVariantInfoField($f);
-        if ($value){
-            if (exists $info_fields{$f} && $info_fields{$f}->{Type} eq 'Flag'){
-                $info_values{$f} = 1;
-            }else{
-                $info_values{$f} = $value;
-            }
+    foreach my $f (qw (SCS CLNSIG dbSNPBuildID G5 G5A GMAF CAF AF)) {
+        my $value = VcfReader::getVariantInfoField( $snp_line, $f );
+        if ( defined $value ) {
+
+         #  if ( exists $info_fields{$f} && $info_fields{$f}->{Type} eq 'Flag' )
+         #  {
+         #      $info_values{$f} = 1;
+         #  }
+         #  else {
+            $info_values{$f} = $value;
+
+            #  }
         }
     }
-    if ($path){
-        if (exists $info_values{SCS}){
-            my @scs = split(/[\,\|]/, $info_values{SCS});
-            foreach my $s (@scs){
-            #SCS=4 indicates probable-pathogenic, SCS=5 indicates pathogenic, print regardless of freq or build if --pathogenic option in use
-                if ($s eq '4' or $s eq  '5'){
-                    return (0, 1, %info_values );
-                }
-            }
-        }else{
-            #die "No SCS field in snp line $snp_line" if $strict; #the SCS field appears to be dropped from the GATK bundle now
-            #print STDERR "Warning, no SCS field in snp line $snp_line\n" unless $quiet;
-        }
-        if (exists $info_values{CLNSIG}){
-            my @scs = split(/[\,\|]/, $info_values{CLNSIG});
-            foreach my $s (@scs){
-            #SCS=4 indicates probable-pathogenic, SCS=5 indicates pathogenic, print regardless of freq or build if --pathogenic option in use
-                if ($s eq '4' or $s eq  '5'){
-                    return (0, 1, %info_values );
+    if ($path) {
+        if ( exists $info_values{SCS} ) {
+            my @scs = split( /[\,\|]/, $info_values{SCS} );
+            foreach my $s (@scs) {
+
+#SCS=4 indicates probable-pathogenic, SCS=5 indicates pathogenic, print regardless of freq or build if --pathogenic option in use
+                if ( $s eq '4' or $s eq '5' ) {
+                    return ( 0, 1, %info_values );
                 }
             }
         }
-    }
-    if ($build){
-        if (exists $info_values{dbSNPBuildID}){
-            if ($build >= $info_values{dbSNPBuildID}){
-                return (1, 0, %info_values );
+        else {
+#die "No SCS field in snp line $snp_line" if $strict; #the SCS field appears to be dropped from the GATK bundle now
+#print STDERR "Warning, no SCS field in snp line $snp_line\n" unless $quiet;
+        }
+        if ( exists $info_values{CLNSIG} ) {
+            my @scs = split( /[\,\|]/, $info_values{CLNSIG} );
+            foreach my $s (@scs) {
+
+#SCS=4 indicates probable-pathogenic, SCS=5 indicates pathogenic, print regardless of freq or build if --pathogenic option in use
+                if ( $s eq '4' or $s eq '5' ) {
+                    return ( 0, 1, %info_values );
+                }
             }
-        }else{
-            die "No dbSNPBuildID field in snp line " .$snp_obj->get_currentLine ."\n"  if $strict;
-            print STDERR "Warning, no dbSNPBuildID field in snp line " . $snp_obj->get_currentLine  . "\n" unless $quiet;
         }
     }
-    if ($freq){
-        if ($freq <= 0.05){
+    if ($build) {
+        if ( exists $info_values{dbSNPBuildID} ) {
+            if ( $build >= $info_values{dbSNPBuildID} ) {
+                return ( 1, 0, %info_values );
+            }
+        }
+        else {
+            die "No dbSNPBuildID field in snp line "
+              . join( "\t", @$snp_line ) . "\n"
+              if $strict;
+            print STDERR "Warning, no dbSNPBuildID field in snp line "
+              . join( "\t", @$snp_line ) . "\n"
+              unless $quiet;
+        }
+    }
+    if ($freq) {
+        if ( $freq <= 0.05 ) {
+
             #G5 = minor allele freq > 5 % in at least 1 pop
             #G5A = minor allele freq > 5 % in all pops
-            if (exists $info_values{G5}){
-                return (1, 0, %info_values ) if $info_values{G5};
+            if ( exists $info_values{G5} ) {
+                return ( 1, 0, %info_values ) if $info_values{G5};
             }
-            if (exists $info_values{G5A}){
-                return (1, 0, %info_values ) if $info_values{G5A};
-            }
-        }
-        if (exists $info_values{GMAF}){
-            if ($freq <= $info_values{GMAF}){
-                return (1, 0, %info_values );
+            if ( exists $info_values{G5A} ) {
+                return ( 1, 0, %info_values ) if $info_values{G5A};
             }
         }
-        if (exists $info_values{CAF}){
+        if ( exists $info_values{GMAF} ) {
+            if ( $freq <= $info_values{GMAF} ) {
+                return ( 1, 0, %info_values );
+            }
+        }
+        if ( exists $info_values{CAF} ) {
             my $c = $info_values{CAF};
             $c =~ s/^\[//;
             $c =~ s/\]$//;
-            my @caf = split(',', $c);
-            my %snp_min = $snp_obj->minimizeAlleles();
-            foreach my $al (keys %snp_min){
+            my @caf = split( ',', $c );
+            my %snp_min = VcfReader::minimizeAlleles($snp_line);
+            foreach my $al ( keys %snp_min ) {
                 next if $min_allele->{CHROM} ne $snp_min{$al}->{CHROM};
                 next if $min_allele->{POS} ne $snp_min{$al}->{POS};
                 next if $min_allele->{REF} ne $snp_min{$al}->{REF};
                 next if $min_allele->{ALT} ne $snp_min{$al}->{ALT};
-                die "CAF values don't match no. alleles for " .$snp_obj->get_file() . " SNP line:\n".
-                    $snp_obj->get_currentLine() ."\n" if (@caf <= $al);
-                next if $caf[$al] eq '.' ;
-                if ($freq <= $caf[$al]){
-                    return (1, 0, %info_values );
+                die "CAF values don't match no. alleles for "
+                  . " SNP line:\n"
+                  . join( "\t", @$snp_line ) . "\n"
+                  if ( @caf <= $al );
+                next if $caf[$al] eq '.';
+                if ( $freq <= $caf[$al] ) {
+                    return ( 1, 0, %info_values );
                 }
             }
         }
-        if (exists $info_values{AF}){
+        if ( exists $info_values{AF} ) {
             my $c = $info_values{AF};
             $c =~ s/^\[//;
             $c =~ s/\]$//;
-            my @af = split(',', $c);
-            my %snp_min = $snp_obj->minimizeAlleles();
-            foreach my $al (keys %snp_min){
+            my @af = split( ',', $c );
+            my %snp_min = VcfReader::minimizeAlleles($snp_line);
+            foreach my $al ( keys %snp_min ) {
                 next if $min_allele->{CHROM} ne $snp_min{$al}->{CHROM};
                 next if $min_allele->{POS} ne $snp_min{$al}->{POS};
                 next if $min_allele->{REF} ne $snp_min{$al}->{REF};
                 next if $min_allele->{ALT} ne $snp_min{$al}->{ALT};
-                die "AF values don't match no. alternate alleles for " .$snp_obj->get_file() . " SNP line:\n".
-                    $snp_obj->get_currentLine() ."\n" if (@af < $al);
-                next if $af[$al-1] eq '.' ;
-                if ($freq <= $af[$al-1]){
-                    return (1, 0, %info_values );
+                die "AF values don't match no. alternate alleles for "
+                  . " SNP line:\n"
+                  . join( "\t", @$snp_line ) . "\n"
+                  if ( @af < $al );
+                next if $af[ $al - 1 ] eq '.';
+                if ( $freq <= $af[ $al - 1 ] ) {
+                    return ( 1, 0, %info_values );
                 }
             }
         }
     }
-    return (0, 0, %info_values );
+    return ( 0, 0, %info_values );
 }
 #################################################
-sub checkVarMatches{
-    my ($min_allele, $snp) = @_;
+sub checkVarMatches {
+    my ( $min_allele, $snp_line ) = @_;
     my $matches = 0;
-    my %snp_min = $snp->minimizeAlleles();
-    foreach my $snp_allele (keys %snp_min){
+    my %snp_min = VcfReader::minimizeAlleles($snp_line);
+    foreach my $snp_allele ( keys %snp_min ) {
         $min_allele->{CHROM} =~ s/^chr//;
         $snp_min{$snp_allele}->{CHROM} =~ s/^chr//;
         next if $min_allele->{CHROM} ne $snp_min{$snp_allele}->{CHROM};
@@ -421,7 +832,9 @@ sub checkVarMatches{
     }
     return $matches;
 }
-        
+
+#################################################
+
 =head1 NAME
 
 annotateSnps.pl - annotate and optionally filter SNPs from a VCF file 
@@ -456,13 +869,11 @@ SNP reference VCF file(s). IDs from these files will be used to annotate the inp
 
 SNP vcf files for use can be downloaded from the NCBI FTP site (ftp://ftp.ncbi.nih.gov/snp/) or from the Broad Institutes FTP site (e.g. ftp://ftp.broadinstitute.org/bundle/1.5/b37/). Clinically annotated VCFs are available from the NCBI FTP site.
 
+Your are STRONGLY advised to use bgzip compressed and tabix indexed files as your SNP reference VCFs.
+
 =item B<-r    --replace>
 
 Use this option to replace the ID field with IDs from your SNP reference VCF file rather than appending to existing IDs.
-
-=item B<--samples>
-
-One or more samples to check variants for.  Default is to check all variants specified by the ALT field. If specified, SNPs will not be filtered unless variant is present in at least one of the samples specified by this argument.
 
 =item B<-b    --build>
 
@@ -475,6 +886,18 @@ Percent SNP minor allele frequency to filter from. SNPs with minor alleles equal
 =item B<--pathogenic>
 
 When using --build or --freq filtering use this flag to print SNPs with "pathogenic" or "probably pathogenic" annotations (as indicated by SCS or CLNSIG flags in the dbSNP VCF) to your filtered output regardless of build or frequency settings.  If used on its own the program will only print SNPs with "pathogenic" or "probably pathogenic" annotations to your --known_out file (if specified).
+
+=item B<-s    --samples>
+
+One or more samples to check variants for.  Default is to check all variants specified by the ALT field. If specified, SNPs will not be filtered unless variant is present in at least one of the samples specified by this argument.
+
+=item B<-t    --forks>
+
+Number of forks to create for parallelising your analysis. Defaults to the number of CPU cores on your system or 12 if you are on a machine with more than 12 cores. 
+
+=item B<-c    --cache>
+
+Cache size. Variants are processed in batches to allow for efficient parallelisation. The default is to process up to 10,000 variants at once or 10,000 x no. forks if more than 10 forks are used, but if you have memory issues running this program you may want to set a lower number here. When using a LOT of forks you may find improved performance by specifying a higher cache size, however the increase in memory usage is proportional to your cache size multiplied by the number of forks.
 
 =item B<--progress>
 
@@ -496,10 +919,9 @@ Show manual page.
 
 =cut
 
-
 =head1 DESCRIPTION
 
-This program will annotate a VCF file with SNP IDs from a given VCF file and can optionally filter SNPs from a vcf file on user-specified criteria. In its simplest form this program writes ID fields from files specified using the --dbsnp argument to matching variants in input files. However, it's most useful feature is probably its ability to filter variants based on their presence in different builds of dbSNP or on allele frequency. Use the --build, --freq and --pathogenic arguments to set up your filtering parameters (assuming the relevant annotations are present in the dbSNP files used). 
+This program will annotate a VCF file with SNP IDs from a given VCF file and can optionally filter SNPs from a vcf file on user-specified criteria. In its simplest form this program writes ID fields from files specified using the --dbsnp argument to matching variants in input files and adds any dbSNP build, frequency or clinical significance information to the INFO field. However, it's most useful feature is probably its ability to filter variants based on their presence in different builds of dbSNP or on allele frequency. Use the --build, --freq and --pathogenic arguments to set up your filtering parameters (assuming the relevant annotations are present in the dbSNP files used). 
 
 For example:
 
