@@ -1,6 +1,7 @@
 package TextToExcel;
 use strict;
 use warnings;
+use Data::Dumper;
 use Excel::Writer::XLSX;
 use Excel::Writer::XLSX::Utility;
 use Carp;
@@ -200,25 +201,6 @@ sub _writeLineToExcel{
         }
         my $added = @{$args{preceding}} - 1; 
         $additional_rows = $added > $additional_rows ? $added : $additional_rows;
-        my $temp_row = $row;
-        foreach my $p_row (@{$args{preceding}}){
-            my $temp_column = $column;
-            my @p_fields = ();
-            if (ref $p_row eq 'ARRAY'){
-                @p_fields = @$p_row;
-            }else{
-                @p_fields = split(/$delimiter/, $p_row);
-            }
-            foreach my $p (@p_fields){
-                if (not defined $p){
-                    $p = '';
-                }
-                $worksheet->write($temp_row, $temp_column++, $p, $format);
-            }
-            $columns_before = @p_fields > $columns_before ? @p_fields : $columns_before;
-            $temp_row++;
-            $added++;
-        }
     }
     if (exists $args{succeeding}){
         if (not ref $args{succeeding} eq 'ARRAY'){
@@ -226,23 +208,113 @@ sub _writeLineToExcel{
         }
         my $added = @{$args{succeeding}} - 1; 
         $additional_rows = $added > $additional_rows ? $added : $additional_rows;
-        my $temp_row = $row; 
-        foreach my $p_row (@{$args{succeeding}}){
-            my $temp_column = $column + @fields;
+    }
+    if (exists $args{preceding}){
+        my $added = @{$args{preceding}} - 1; 
+
+        my $rows_per_value;
+        my $row_extra;
+        if ($added < $additional_rows and @{$args{preceding}} > 0){
+            $rows_per_value = int (($additional_rows + 1)/@{$args{preceding}});
+            $row_extra = (($additional_rows + 1) % @{$args{preceding}});
+        }
+
+        my $temp_row = $row;
+        for (my $i = 0; $i < @{$args{preceding}}; $i++){
+            my $temp_column = $column;
             my @p_fields = ();
-            if (ref $p_row eq 'ARRAY'){
-                @p_fields = @$p_row;
+            if (ref $args{preceding}->[$i] eq 'ARRAY'){
+                @p_fields = @{$args{preceding}->[$i]};
             }else{
-                @p_fields = split(/$delimiter/, $p_row);
+                @p_fields = split(/$delimiter/, $args{preceding}->[$i]);
             }
             foreach my $p (@p_fields){
-                $worksheet->write($temp_row, $temp_column++, $p, $format);
+                if (not defined $p){
+                    $p = '';
+                }
+
+                if ($rows_per_value){
+                    my $type = 'string';
+                    if ($p =~ /^\d+(\.\d+)*]$/){
+                        $type = 'number';
+                    }
+                    my $top_cell = xl_rowcol_to_cell($temp_row, $temp_column);
+                    my $bottom_cell = xl_rowcol_to_cell($temp_row + $rows_per_value - 1, $temp_column );
+                    if ($i == $#{$args{preceding}}){
+                        $bottom_cell = xl_rowcol_to_cell($temp_row + $rows_per_value + $row_extra - 1, $temp_column );
+                    }
+                    $worksheet->merge_range_type($type, "$top_cell:$bottom_cell", $p, $format);
+                    $temp_column++;
+                }else{
+                    $worksheet->write($temp_row, $temp_column++, $p, $format);
+                }
+            }
+            if ($rows_per_value){
+                $temp_row += $rows_per_value;
+                if ($i == $#{$args{preceding}}){
+                    $temp_row += $row_extra;
+                }
+            }else{
+                $temp_row++;
             }
             $columns_before = @p_fields > $columns_before ? @p_fields : $columns_before;
-            $temp_row++;
         }
-        $additional_rows = ($temp_row - $row) > $additional_rows ? $temp_row - $row : $additional_rows;
     }
+    if (exists $args{succeeding}){
+        my $added = @{$args{succeeding}} - 1; 
+        my $rows_per_value;
+        my $row_extra;
+        if ($added < $additional_rows and @{$args{succeeding}} > 0){
+            $rows_per_value = int (($additional_rows + 1)/@{$args{succeeding}});
+            $row_extra = (($additional_rows + 1) % @{$args{succeeding}});
+        }
+
+        my $temp_row = $row; 
+
+        for (my $i = 0; $i < @{$args{succeeding}}; $i++){
+            my $temp_column = $column + @fields + $columns_before;
+            my @p_fields = ();
+            if (ref $args{succeeding}->[$i] eq 'ARRAY'){
+                @p_fields = @{$args{succeeding}->[$i]};
+            }else{
+                @p_fields = split(/$delimiter/, $args{succeeding}->[$i]);
+            }
+            
+            foreach my $p  (@p_fields){
+                if (not defined $p){
+                    $p = ' ';
+                }
+                if ($rows_per_value){
+                    my $type = 'string';
+                    if ($p =~ /^\d+(\.\d+)*]$/){
+                        $type = 'number';
+                    }
+                    my $top_cell = xl_rowcol_to_cell($temp_row, $temp_column);
+                    my $bottom_cell = xl_rowcol_to_cell($temp_row + $rows_per_value - 1, $temp_column );
+                    if ($i == $#{$args{succeeding}}){
+                        $bottom_cell = xl_rowcol_to_cell($temp_row + $rows_per_value + $row_extra - 1, $temp_column );
+                    }
+                    if ($bottom_cell eq $top_cell){
+                        $worksheet->write($temp_row, $temp_column++, $p, $format);
+                    }else{
+                        $worksheet->merge_range_type($type, "$top_cell:$bottom_cell", $p, $format);
+                    }
+                    $temp_column++;
+                }else{
+                    $worksheet->write($temp_row, $temp_column++, $p, $format);
+                }
+            }
+            if ($rows_per_value){
+                $temp_row += $rows_per_value;
+                if ($i == $#{$args{succeeding}}){
+                    $temp_row += $row_extra;
+                }
+            }else{
+                $temp_row++;
+            }
+        }
+    }
+
     my $temp_column = $column + $columns_before;
     foreach my $f (@fields){
         if ($additional_rows > 0){
