@@ -28,10 +28,6 @@ Output file name.
 
 Directory containing reference files.
 
-=item B<-s    --separate>
-
-For each variant, print a line per Entrez gene rather than concatanating Entrez gene annotations on the same line.
-
 =item B<-f    --functional>
 
 Use this flag to only annotate standard 'functional' variant classes (transcript_ablation, splice_donor_variant, splice_acceptor_variant, splice_region_variant, stop_gained, frameshift_variant, stop_lost, initiator_codon_variant, inframe_insertion, inframe_deletion, missense_variant, transcript_amplification, TFBS_ablation, TFBS_amplification, regulatory_region_ablation, regulatory_region_amplification). Prevents annotation of gene information for genes/transcripts that overlap a variant but are not affected in a way defined by one of these variant classes.
@@ -43,6 +39,22 @@ Use this to specify VEP variant classes to annotate. Gene information will only 
 =item B<-a    --additional_classes>
 
 Use this to specify additional VEP variant classes to annotate as well as those used by --functional.
+
+=item B<-g    --gene_annotations>
+
+List of gene annotations to include in output. By default all of the following classes are included:
+
+    ENSGENE_ID
+    ENTREZ_ID
+    SYMBOL
+    GO_ID
+    GO_DESCRIPTION
+    GENERIFS
+    SUMMARY
+    OMIM
+    MGI_PHENOTYPE
+
+Specify one or more of these to limit the annotations in your output to these calsses only.
 
 =item B<-P    --PREPARE>
 
@@ -71,7 +83,7 @@ Show manual page.
 
 =head1 DESCRIPTION
 
-This script reads VCF lines annotated with Ensembl's variant_effect_predictor.pl, identifies the corresponding Entrez Gene ID for each ensembl gene and annotates information from Gene RIFS, Gene Ontology, NCBI summaries, OMIM and MGI phenotypes at the start of each line. Be warned that the output is no longer VCF format and not compatible with most other VCF tools, although all VCF fields remain in the output.
+This script reads VCF lines annotated with Ensembl's variant_effect_predictor.pl, identifies the corresponding Entrez Gene ID for each ensembl gene and annotates information from Gene RIFS, Gene Ontology, NCBI summaries, OMIM and MGI phenotypes to each variants INFO field. In order to conform to VCF format, text in annotations has spaces replaced with underscores, semi-colons replaced with the ^ symbol and commas replaced with the ` symbol. Multiple values for annotations are separated with two colons ("::"). 
 
 =cut
 
@@ -126,20 +138,22 @@ my $separate;
 my @classes;
 my @add;
 my $functional;
+my @annotations;
 
 GetOptions(
     "input=s", \$vcf,
-    "directory=s"  => \$genedir,
-    "output=s"     => \$out,
-    "separate"     => \$separate,
-    "functional"   => \$functional,
-    "classes=s{,}" => \@classes,
-    "add=s{,}"     => \@add,
-    "PREPARE"      => \$prep,
-    "DOWNLOAD_NEW" => \$downdb,
-    "REPAIR"       => \$repair,
-    "help"         => \$help,
-    "manual"       => \$man
+    "directory=s"               => \$genedir,
+    "output=s"                  => \$out,
+    "separate"                  => \$separate,
+    "functional"                => \$functional,
+    "classes=s{,}"              => \@classes,
+    "add=s{,}"                  => \@add,
+    "gene_annotations=s{,}"     => \@annotations,
+    "PREPARE"                   => \$prep,
+    "DOWNLOAD_NEW"              => \$downdb,
+    "REPAIR"                    => \$repair,
+    "help"                      => \$help,
+    "manual"                    => \$man
 ) or pod2usage( -message => "Syntax error", -exitval => 2 );
 pod2usage( -verbose => 2 ) if $man;
 pod2usage( -verbose => 1 ) if $help;
@@ -285,6 +299,17 @@ my $pre_progressbar = Term::ProgressBar->new(
 );
 my $next_update  = 0;
 my $pre_progress = 0;
+my @all_annotations = qw(ENSGENE_ID ENTREZ_ID SYMBOL GO_ID GO_DESCRIPTION GENERIFS SUMMARY OMIM MGI_PHENOTYPE);
+if (@annotations){
+    foreach my $anno (@annotations){
+        if (not grep {/uc($_) eq uc($anno)/} @annotations){
+            die "Unrecognised --gene_annotation \"$anno\" specified\n";
+        }
+    }
+}else{
+    @annotations = @all_annotations;
+}
+    
 
 my $vcf_obj = ParseVCF->new( file => $vcf );
 my $vep_header = $vcf_obj->readVepHeader();
@@ -389,13 +414,17 @@ my $progressbar = Term::ProgressBar->new(
 my $vcf_line = 0;
 $next_update = 0;
 print $OUT join( "", @{ $vcf_obj->get_metaHeader() } );
-my $header = $vcf_obj->getHeader(1);
-my @split_header = split( "\t", $header );
 print $OUT
-"#ENTREZ_ID\tSymbol\tGO_Accession\tGO_description\tGeneRIFs\tSummary\tOMIM\tMGI_Phenotype\t"
-  . $header;
+    "##INFO=<ID=GeneAnno,Number=.,Type=String,Description=\"Collected Entrez/MGI  gene annotations from for VEP annotated human genes. ". 
+    "Multiple values per annotation are separated using two colons ('::'), spaces are replaced with underscores, commas are replaced with the ` ".
+    "symbol, and semi-colons are replaced with the ^ symbol so that regexes can be used to extract the original text programmatically. ".
+    "Format: " . join("|", @annotations) ."\">\n";
+
+my $header = $vcf_obj->getHeader(1);
+print $OUT $header;
 LINE: while ( my $line = $vcf_obj->readLine ) {
     $vcf_line++;
+    my $inf = $vcf_obj->getVariantField('INFO');
     my %annot = ();
     my @csq = $vcf_obj->getVepFields( [ "Gene", "Consequence" ] );
     die
@@ -425,7 +454,7 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
             chomp @ens_line;
             if ( $ens_line[ $database{ensemblToEntrez}->{col} ] eq $c->{gene} )
             {
-                push @{ $annot{ $ens_line[1] }->{ids} }, $c->{gene};
+                push @{ $annot{ $ens_line[1] }->{ensgene_id} }, $c->{gene};
             }
             else {
                 last;
@@ -440,7 +469,7 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
             )
         );
         chomp @ens_line;
-        push @{ $annot{ $ens_line[1] }->{ids} }, $c->{gene};
+        push @{ $annot{ $ens_line[1] }->{ensgene_id} }, $c->{gene};
         for (
             my $j = $i + 1 ;
             $j <= $database{ensemblToEntrez}->{length} ;
@@ -458,7 +487,7 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
             chomp @ens_line;
             if ( $ens_line[ $database{ensemblToEntrez}->{col} ] eq $c->{gene} )
             {
-                push @{ $annot{ $ens_line[1] }->{ids} }, $c->{gene};
+                push @{ $annot{ $ens_line[1] }->{ensgene_id} }, $c->{gene};
             }
             else {
                 last;
@@ -468,13 +497,16 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
     if ( not keys %annot ) {
 
 #IF FOR SOME REASON WE HAVEN'T FOUND ANY ENTREZ IDs THEN WE'RE FINISHED WITH THIS LINE
-        print $OUT "-\t-\t-\t-\t-\t-\t-\t-\t$line\n";
+        $inf .= ";GeneAnno=" . "|" x @annotations;
+        my $new_line = $vcf_obj->replaceVariantField('INFO', $inf);
+        #print $OUT "-\t-\t-\t-\t-\t-\t-\t-\t$line\n";
+        print $OUT "$new_line\n";
         next LINE;
     }
 
     #USE ENTREZ IDs TO SEARCH DATABSE FILES
     foreach my $entrez_id ( keys %annot ) {
-        remove_duplicates( \@{ $annot{$entrez_id}->{ids} } );
+        remove_duplicates( \@{ $annot{$entrez_id}->{ensgene_id} } );
         my $i = binSearchLineWithIndex(
             $entrez_id,
             $database{human_summary}->{fh},
@@ -496,8 +528,8 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
             $annot{$entrez_id}->{symbol}  = $humsum_line[1];
             $annot{$entrez_id}->{summary} = $humsum_line[2];
             $annot{$entrez_id}->{go_id}   = $humsum_line[4];
-            $annot{$entrez_id}->{go_desc} = $humsum_line[5];
-            $annot{$entrez_id}->{rif}     = $humsum_line[6];
+            $annot{$entrez_id}->{go_description} = $humsum_line[5];
+            $annot{$entrez_id}->{generif}     = $humsum_line[6];
 
             #$annot{$entrez_id}->{interactants} = $humsum_line[8];
             my $mim_accession = $humsum_line[7];
@@ -522,7 +554,7 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
                             )
                         );
                         if ( $mim_line[2] eq $mim_accession ) {
-                            push( @{ $annot{$entrez_id}->{mim} },
+                            push( @{ $annot{$entrez_id}->{omim} },
                                 $mim_line[0] );
                         }
                         else {
@@ -545,7 +577,7 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
                             )
                         );
                         if ( $mim_line[2] eq $mim_accession ) {
-                            push( @{ $annot{$entrez_id}->{mim} },
+                            push( @{ $annot{$entrez_id}->{omim} },
                                 $mim_line[0] );
                         }
                         else {
@@ -554,22 +586,21 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
                     }
                 }
                 else {
-                    push( @{ $annot{$entrez_id}->{mim} }, "-" );
+                    push( @{ $annot{$entrez_id}->{omim} }, "" );
                 }
             }
             else {
-                push( @{ $annot{$entrez_id}->{mim} }, "-" );
+                push( @{ $annot{$entrez_id}->{omim} }, "" );
             }
-        }
-        else {
-            $annot{$entrez_id}->{symbol}  = "-";
-            $annot{$entrez_id}->{summary} = "-";
-            $annot{$entrez_id}->{go_id}   = "-";
-            $annot{$entrez_id}->{go_desc} = "-";
-            $annot{$entrez_id}->{rif}     = "-";
+        }else {
+            $annot{$entrez_id}->{symbol}  = "";
+            $annot{$entrez_id}->{summary} = "";
+            $annot{$entrez_id}->{go_id}   = "";
+            $annot{$entrez_id}->{go_description} = "";
+            $annot{$entrez_id}->{generif}     = "";
 
             #$annot{$entrez_id}->{interactants} = "-";
-            push( @{ $annot{$entrez_id}->{mim} }, "-" );
+            push( @{ $annot{$entrez_id}->{omim} }, "" );
         }
         my $ortholog = getMouseOrtholog(
             $entrez_id,
@@ -594,96 +625,39 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
                 )
             );
             @mgi
-              ? push @{ $annot{$entrez_id}->{mgi} }, @mgi
-              : push @{ $annot{$entrez_id}->{mgi} }, "-";
+              ? push @{ $annot{$entrez_id}->{mgi_phenotype} }, @mgi
+              : push @{ $annot{$entrez_id}->{mgi_phenotype} }, "";
         }
         else {
-            push( @{ $annot{$entrez_id}->{mgi} }, "-" );
+            push( @{ $annot{$entrez_id}->{mgi_phenotype} }, "" );
         }
     }
-    if ($separate) {
-        my $info           = $vcf_obj->getVariantField("INFO");
-        my @info_field     = split( ';', $info );
-        my @non_csq_fields = grep { !/^CSQ/ } @info_field;
-        my $quote_info     = quotemeta($info);
-        my @all_csq        = $vcf_obj->getVepFields("All");
-        foreach my $entrez_id ( keys %annot ) {
-            foreach my $c (@all_csq) {
-                my @out_line = ();
-                if ( grep { /^$c->{gene}$/ } @{ $annot{$entrez_id}->{ids} } ) {
-
-     #foreach my $field ( qw (symbol go_id go_desc rif interactants summary ) ){
-                    foreach my $field (qw (symbol go_id go_desc rif summary )) {
-                        push( @out_line, $annot{$entrez_id}->{$field} );
+    my @gene_anno = ();
+    foreach my $entrez_id ( keys %annot ) {
+        my @single_anno = ();
+        foreach my $annot (@annotations){
+            if (lc$annot eq 'entrez_id'){
+                push @single_anno, $entrez_id;    
+            }elsif (exists $annot{$entrez_id}->{lc($annot)}){
+                if (ref ($annot{$entrez_id}->{lc($annot)}) eq 'ARRAY'){
+                    my @conv = ();
+                    foreach my $g (@{$annot{$entrez_id}->{lc($annot)}}){
+                        push @conv, convert_text($g);
                     }
-                    foreach my $field (qw ( mim mgi )) {
-                        push( @out_line,
-                            join( "|", @{ $annot{$entrez_id}->{$field} } ) );
-                    }
-                    my $edited_info = join( ";", @non_csq_fields ) . ";CSQ="
-                      . $vcf_obj->vepFieldToString($c);
-                    ( my $sep_line = $line ) =~ s/$quote_info/$edited_info/;
-                    print $OUT "$entrez_id\t" . join( "\t", @out_line );
-                    print $OUT "\t$sep_line\n";
+                    push @single_anno, join("::", @conv);
+                }else{
+                    my $converted = convert_text($annot{$entrez_id}->{lc($annot)});
+                    push @single_anno, $converted;
                 }
+            }else{
+                push @single_anno, '';
             }
         }
+        push @gene_anno, join("|", @single_anno);
     }
-    else {
-        my @symbols = ();
-        my @go_acc  = ();
-        my @go_desc = ();
-        my @rif     = ();
-        my @sum     = ();
-
-        #my @interactants = ();
-        my @omim = ();
-        my @mgi  = ();
-        foreach my $entrez_id ( keys %annot ) {
-            if ( exists $annot{$entrez_id}->{symbol} ) {
-                push @symbols, split( /\|/, $annot{$entrez_id}->{symbol} );
-            }
-            if ( exists $annot{$entrez_id}->{go_id} ) {
-                push @go_acc, split( /\|/, $annot{$entrez_id}->{go_id} );
-            }
-            if ( exists $annot{$entrez_id}->{go_desc} ) {
-                push @go_desc, split( /\|/, $annot{$entrez_id}->{go_desc} );
-            }
-            if ( exists $annot{$entrez_id}->{rif} ) {
-                push @rif, split( /\|/, $annot{$entrez_id}->{rif} );
-            }
-
-    # if (exists $annot{$entrez_id}->{interactants}){
-    #     push (@interactants, split("\t", $annot{$entrez_id}->{interactants}));
-    # }
-            if ( exists $annot{$entrez_id}->{summary} ) {
-                push( @sum, $annot{$entrez_id}->{summary} );
-            }
-            if ( exists $annot{$entrez_id}->{mim} ) {
-                push( @omim, @{ $annot{$entrez_id}->{mim} } );
-            }
-            if ( exists $annot{$entrez_id}->{mgi} ) {
-                push( @mgi, @{ $annot{$entrez_id}->{mgi} } );
-            }
-        }
-
-#remove_duplicates(\@symbols, \@go_acc, \@go_desc, \@rif, \@interactants, \@sum, \@omim, \@mgi);
-        remove_duplicates( \@symbols, \@go_acc, \@go_desc, \@rif, \@sum,
-            \@omim, \@mgi );
-        keys %annot
-          ? print $OUT join( "|", sort { $a <=> $b } keys %annot ) . "\t"
-          : print $OUT "-\t";
-        @symbols ? print $OUT join( "|", @symbols ) . "\t" : print $OUT "-\t";
-        @go_acc  ? print $OUT join( "|", @go_acc ) . "\t"  : print $OUT "-\t";
-        @go_desc ? print $OUT join( "|", @go_desc ) . "\t" : print $OUT "-\t";
-        @rif     ? print $OUT join( "|", @rif ) . "\t"     : print $OUT "-\t";
-
-#        @interactants ? print $OUT join("|", @interactants) ."\t" : print $OUT "-\t";
-        @sum  ? print $OUT join( "|", @sum ) . "\t"  : print $OUT "-\t";
-        @omim ? print $OUT join( "|", @omim ) . "\t" : print $OUT "-\t";
-        @mgi  ? print $OUT join( "|", @mgi ) . "\t"  : print $OUT "-\t";
-        print $OUT "$line\n";
-    }
+    $inf .= ";GeneAnno=" . join(",", @gene_anno);
+    my $new_line = $vcf_obj->replaceVariantField('INFO', $inf);
+    print $OUT "$new_line\n";
     $next_update = $progressbar->update($vcf_line) if $vcf_line >= $next_update;
 }
 $progressbar->update( $vcf_obj->get_totalLines )
@@ -692,7 +666,17 @@ for my $k ( keys %database ) {
     close $database{$k}->{fh};
     close $database{$k}->{idx};
 }
+$vcf_obj -> DESTROY();
 
+########################################
+sub convert_text{
+    #replace characters not compatible with VCF
+    #format for annotations
+    my ($string) = @_;
+    $string =~ s/\|/::/g;
+    $string =~ tr/;, /^`_/;
+    return $string;
+}
 ########################################
 sub check_consequence {
 
