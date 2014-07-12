@@ -99,7 +99,8 @@ my $time = strftime( "%H:%M:%S", localtime );
 print STDERR "[$time] Initializing input VCF... ";
 
 if ( defined $opts{Progress} ) {
-    VcfReader::checkHeader( vcf => $opts{input} );
+    die "Header not ok for input ($opts{input}) "
+        if not VcfReader::checkHeader( vcf => $opts{input} );
     $total_vcf = VcfReader::countVariants( $opts{input} );
     print STDERR "$opts{input} has $total_vcf variants\n";
 }
@@ -682,8 +683,8 @@ sub initializeDbsnpVcfs {
 
     #we getSearchArguments here simply to prevent a race condition later
     my @head = VcfReader::getHeader($snpfile);
-    VcfReader::checkHeader( header => \@head );
-
+    die "Header not ok for $snpfile " 
+        if not VcfReader::checkHeader( header => \@head );
     #my %sargs = VcfReader::getSearchArguments($snpfile);
     my %index = VcfReader::readIndex($snpfile);
     return ( \@head, \%index );
