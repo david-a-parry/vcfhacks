@@ -417,6 +417,9 @@ if (defined $config->{text_output}){
     }else{
         $OUT = \*STDOUT;
     }
+    foreach my $h (@header){
+        $h =~ s/ /_/g;
+    }
     print $OUT join("\t", @header) ."\n";
 }else{
     $xl_obj = TextToExcel->new( file=> $output);
@@ -547,7 +550,7 @@ sub get_vcf_fields{
 sub get_simplified_fields{
     my @vcf_values = ();
     #Get preceding INFO fields (these will be one per line)
-    foreach my $f (qw (CHROM POS ID QUAL FILTER REF )){ 
+    foreach my $f (qw (CHROM POS ID QUAL FILTER REF ALT)){ 
         push @vcf_values, $vcf_obj->getVariantField($f);
     }
     my @all_alleles = $vcf_obj->readAlleles();
@@ -682,7 +685,7 @@ sub get_header{
             }
         }
     }else{
-        foreach my $h ("Chrom", "Pos", "SNP_ID", "Variant Quality", "Filters", "Genomic Ref", ){
+        foreach my $h ("Chrom", "Pos", "SNP ID", "Variant Quality", "Filters", "Genomic Ref", "Alt Alleles" ){
             push @head, $h;
         }
 
