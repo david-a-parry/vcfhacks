@@ -354,23 +354,6 @@ sub indexVcf{
     close $gz;
 }
 
-sub _lineWithIndex{
-    my ($FH, $IDX, $line_number) =@_;
-    my $size;               # size of an index entry
-    my $i_offset;           # offset into the index of the entry
-    my $entry;              # index entry
-    my $d_offset;           # offset into the data file
-    my $pack = "N";
-    $pack = "Q" if -s $FH >= 4294967296;
-    $size = length(pack($pack, 0));
-    $i_offset = $size * ($line_number-1);
-    seek($IDX, $i_offset, 0) or return;
-    read($IDX, $entry, $size);
-    $d_offset = unpack($pack, $entry);
-    seek($FH, $d_offset, 0);
-    return scalar readline $FH;
-}
-
 sub _openFileHandle{
     my $vcf = shift;
     croak "_openFileHandle method requires a file as an argument" if not $vcf;
@@ -1170,85 +1153,6 @@ sub _readLinesByOffset{
 }
 
 
-sub _binSearch{
-    my (%args) = @_;
-    my $total_lines = exists $args{length} ? $args{length} : get_file_length_from_index($args{fh}, $args{index}); 
-    return 0 if not exists $args{contig_order}->{$args{chrom}};
-    my $u = $args{length};
-    my $l = 1;
-    if (ref $args{blocks} eq 'ARRAY'){
-        ($u, $l) = _getUpperLower($args{chrom}, $args{pos}, $args{blocks}, $args{contig_order});
-    }
-    my $i = 0;
-    while ($l <= $u){
-        $i = int(($l + $u)/2);
-        my $line =  _lineWithIndex($args{fh}, $args{index},$i);
-        if ($line =~ /^#/){
-            $l = $i+1;
-            next;
-        }
-        my @split = split("\t", $line);
-        if ($args{contig_order}->{$args{chrom}}  < $args{contig_order}->{$split[0]} or
-            ($args{contig_order}->{$args{chrom}} == $args{contig_order}->{$split[0]} and $args{pos} < $split[1]) ){
-                $u = $i -1;
-        }elsif($args{contig_order}->{$args{chrom}}  > $args{contig_order}->{$split[0]} or
-            ($args{contig_order}->{$args{chrom}} == $args{contig_order}->{$split[0]} and $args{pos} > $split[1]) ){
-                $l = $i + 1;
-        }else{
-            return $i;
-        }
-    }
-    #FIND OVERLAPPING VARIANTS (DELETIONS/MNVs) NOT NECESSARILY OF SAME COORDINATE
-    for (my $j = $i - 1; $j > 0; $j--){#look at previous lines
-        my $line =  _lineWithIndex($args{fh}, $args{index},$j);
-        last if ($line =~ /^#/);
-        my @split = split("\t", $line);
-        #skip if we're at the next chrom...
-        next if 
-            $args{contig_order}->{$args{chrom}}  < $args{contig_order}->{$split[0]};
-        #...or downstream
-        next if 
-            $args{contig_order}->{$args{chrom}} == $args{contig_order}->{$split[0]}
-	            and $args{pos} < $split[1];
-        #we're done if we've got to the previous chromosome...
-        last if 
-            $args{contig_order}->{$args{chrom}}  > $args{contig_order}->{$split[0]};
-        #and let's assume we're not going to have detected any del/mnv larger than 200 bp (is there a better way?)
-        last if 
-            $args{contig_order}->{$args{chrom}} == $args{contig_order}->{$split[0]} 
-                and $args{pos} < ($split[1] - 200);
-        my $ref_length = length($split[3]);
-        if ($ref_length > 1 and ($ref_length + $split[1] - 1) >= $args{pos}){
-            #we've found a deletion/mnv that overlaps our pos
-            return $j;
-        }
-    }
-    return 0;
-}
-
-
-sub _getUpperLower{
-    my ($chrom, $pos, $blocks, $contigs) = @_;
-    my ($u, $l, $i) = ($#{$blocks}, 0, 0);
-    my ($upper, $lower) = (0, 0);
-    while ($l < $u-1){
-        $i = int(($l + $u)/2);
-        if ($contigs->{$chrom}  < $contigs->{$blocks->[$i]->{chrom}} or
-            ($contigs->{$chrom} == $contigs->{$blocks->[$i]->{chrom}} and $pos < $blocks->[$i]->{pos}) ){
-                $u = $i ;
-        }elsif($contigs->{$chrom}  > $contigs->{$blocks->[$i]->{chrom}} or
-            ($contigs->{$chrom} == $contigs->{$blocks->[$i]->{chrom}} and $pos > $blocks->[$i]->{pos}) ){
-                $l = $i;
-        }else{
-            return ($blocks->[$i]->{line}, $blocks->[$i]->{line});
-        }
-    }
-    $lower = $blocks->[$l-1]->{line};
-    $upper = $blocks->[$u+1]->{line}; 
-    return ($upper, $lower);   
-}
-
-
 sub getFileLengthFromIndex{
     my $vcf = shift;
     my %idx = readIndex($vcf);
@@ -1344,8 +1248,6 @@ sub reduceRefAlt{
     }
     return ($pos, $ref, $alt);
 }
-
-
 
 
 sub byContigs{
