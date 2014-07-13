@@ -271,11 +271,13 @@ if ( defined $opts{Progress} and $total_vcf ) {
     $prog_total = $total_vcf * $x_prog;
     if ( $opts{build} || $freq ) {
         $progressbar = Term::ProgressBar->new(
-            { name => "Filtering", count => ($prog_total), ETA => "linear", } );
+            #{ name => "Filtering", count => ($prog_total), ETA => "linear", } );
+            { name => "Filtering", count => ($prog_total), } );
     }
     else {
         $progressbar = Term::ProgressBar->new(
-            { name => "Annotating", count => ($prog_total), ETA => "linear", }
+            #{ name => "Annotating", count => ($prog_total), ETA => "linear", }
+            { name => "Annotating", count => ($prog_total), }
         );
     }
 
@@ -302,9 +304,10 @@ VAR: while ( my $line = <$VCF> ) {
         @lines_to_process = ();
     }
 }
-
+close $VCF;
+close $KNOWN if $KNOWN;
 process_buffer();
-
+close $OUT;
 if ( defined $opts{Progress} ) {
     $progressbar->update($prog_total) if $prog_total >= $next_update;
 }
@@ -332,7 +335,7 @@ sub process_buffer {
     my $t               = 0;
     my $lines_per_slice = @lines_to_process;
     if ( $forks > 0 ) {
-        $lines_per_slice = int( @lines_to_process / $forks );
+        $lines_per_slice = int( @lines_to_process / $forks ) > 1 ? int( @lines_to_process / $forks ) : 1;
     }
     my @batch = ();
 
@@ -342,6 +345,9 @@ sub process_buffer {
           ( $i + $lines_per_slice - 1 ) < $#lines_to_process
           ? $i + $lines_per_slice - 1
           : $#lines_to_process;
+        if ($i + $lines_per_slice >= @lines_to_process){
+            $last = $#lines_to_process;
+        }
         my @temp = @lines_to_process[ $i .. $last ];
         push @batch, \@temp;
     }
@@ -502,6 +508,11 @@ sub process_batch {
     if ($KNOWN) {
         @{ $results{known} } =
           VcfReader::sortVariants( \@{ $results{known} }, \%contigs );
+    }
+    foreach my $d (keys %sargs){
+        if (exists $sargs{$d}->{file_handle}){
+            close $sargs{$d}->{file_handle} if $sargs{$d}->{file_handle};
+        }
     }
     return %results;
 }
