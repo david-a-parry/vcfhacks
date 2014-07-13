@@ -1,9 +1,6 @@
 #!/usr/bin/perl
 use warnings;
 use strict;
-
-#use threads;
-#use threads::shared;
 use Parallel::ForkManager;
 use Getopt::Long;
 use Sys::CPU;
@@ -359,15 +356,17 @@ sub process_buffer {
               = @_;
 
             if ( defined($data_structure_reference) )
-            {              # children are not forced to send anything
+            {
                 my %res = %{$data_structure_reference}
-                  ;        # child passed a string reference
+                  ;        
                 if ( ref $res{keep} eq 'ARRAY' ) {
                     push @lines_to_print, \@{ $res{keep} } if @{ $res{keep} };
                 }
-                if ( ref $res{filter} eq 'ARRAY' ) {
-                    push @lines_to_filter, \@{ $res{filter} }
-                      if @{ $res{filter} };
+                if ( $res{filter} ) {
+                    $filtered += $res{filter} ;
+                }
+                if ( $res{pathogenic} ) {
+                    $pathogenic_snps += $res{pathogenic} ;
                 }
                 if ( ref $res{known} eq 'ARRAY' ) {
                     push @known, \@{ $res{known} } if @{ $res{known} };
@@ -379,8 +378,8 @@ sub process_buffer {
                 }
             }
             else
-            { # problems occuring during storage or retrieval will throw a warning
-                print STDERR "No message received from child process $pid!\n";
+            { 
+                print STDERR "ERROR: no message received from child process $pid!\n";
             }
         }
     );
@@ -389,9 +388,7 @@ sub process_buffer {
         my %results = process_batch($b);
         $pm->finish( 0, \%results );
     }
-    print STDERR "Waiting for children...\n" if $opts{VERBOSE};
     $pm->wait_all_children;
-    print STDERR "Done a batch...\n" if $opts{VERBOSE};
 
     #print them
     @lines_to_print = sort by_first_last_line (@lines_to_print);
@@ -437,9 +434,6 @@ sub process_buffer {
         foreach my $batch (@known) {
             $found += @$batch;
         }
-    }
-    foreach my $batch (@lines_to_filter) {
-        $filtered += @$batch;
     }
 }
 ################################################
@@ -498,8 +492,9 @@ sub process_batch {
     foreach my $line ( @{$batch} ) {
         my %res = filterSnps( $line, \%sargs );
         push @{ $results{keep} },   $res{keep}   if $res{keep};
-        push @{ $results{filter} }, $res{filter} if $res{filter};
+        $results{filter}++  if $res{filter};
         push @{ $results{known} },  $res{known}  if $res{known};
+        $results{pathogenic}++  if $res{pathogenic};
     }
 
     #might as well do a sort in our forks to get the most out of them
@@ -520,7 +515,7 @@ sub process_batch {
 ################################################
 sub filterSnps {
     my ( $vcf_line, $search_args ) = @_;
-    my ( $keep, $filter, $known );
+    my ( $keep, $filter, $known, $pathogenic );
     my $line_should_not_be_filtered = 0
       ; #flag in case pathogenic flag is set or something and we don't want to filter this snp no matter what
     my $is_known_snp     = 0;
@@ -655,11 +650,11 @@ sub filterSnps {
     {    #if using filtering only put filtered in $KNOWN
         if ($line_should_not_be_filtered)
         { #at the moment this means it's pathogenic flagged and $opts{pathogenic} is set
-             #so if --build or --freq are set keep, if not sent to both @$keep and @$known
+             #so if --build or --freq are set keep, if not send to both @$keep and @$known
             $keep = $vcf_line;
+            $pathogenic = $vcf_line;
             if ( not $opts{build} && not $freq ) {
                 $known = $vcf_line;
-                $pathogenic_snps++;
             }
         }
         elsif ( $filter_count == keys(%min_vars) )
@@ -680,7 +675,7 @@ sub filterSnps {
     }
 
     #print STDERR "DEBUG: RETURNING FROM THREAD $thread\n" if $opts{VERBOSE};
-    return ( keep => $keep, known => $known, filter => $filter );
+    return ( keep => $keep, known => $known, filter => $filter, pathogenic => $pathogenic );
 }
 
 ################################################
