@@ -400,8 +400,9 @@ sub getVariantInfoField{
     }
     my @info = split(';', getVariantField(\@split, "INFO"));
     foreach my $inf (@info){
-        if ($inf =~ /^$info_field(=(.+))*/){
-            return $2 if defined $2;
+        if ($inf =~ /^$info_field=(.+)/){
+            return $1;
+        }elsif ($inf eq $info_field){
             return 1;
         }
     }
