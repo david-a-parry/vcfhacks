@@ -206,13 +206,14 @@ sub getLineCount{
     my $line_count = 0;
     my $FH = _openFileHandle($vcf);
     if ($vcf =~ /\.gz$/){
-        $line_count++ while (<$FH>);
+       # $line_count++ while (<$FH>);
+        $line_count += tr/\n/\n/ while sysread($FH, $_, 2 ** 20);
     }else{
         my $index = "$vcf.vridx";
         if (-e $index){
             $line_count = getFileLengthFromIndex($vcf, $index); 
         }else{
-            $line_count += tr/\n/\n/ while sysread($FH, $_, 2 ** 16);
+            $line_count += tr/\n/\n/ while sysread($FH, $_, 2 ** 20);
         }
     }
     close $FH;
