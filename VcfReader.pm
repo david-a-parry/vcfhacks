@@ -42,14 +42,18 @@ sub getHeader{
     }
     close $FH;
     croak "No header found for VCF file $vcf " if not @header;
-    return @header;
+    return @header if wantarray;
+    return join("\n", @header) if defined wantarray;
+    carp "getHeader called in void context ";
 }
 
 sub getMetaHeader{
     my $vcf = shift; 
     croak "printMetaHeader method requires a file as an argument" if not $vcf;
     my @header = grep {/^##/} getHeader($vcf);
-    return join("\n", @header) ;
+    return @header if wantarray;
+    return join("\n", @header) if defined wantarray;
+    carp "getMetaHeader called in void context ";
 }
 
 sub getColumnHeader{
@@ -176,6 +180,20 @@ sub getContigOrder{
     my ($vcf) = shift;
     croak "getContigOrder method requires a file as an argument" if not $vcf;
     my %contigs = ();
+    my @meta = getMetaHeader($vcf);
+    my @con = grep {/##contig=</} @meta;
+    if (@con){
+        my $n = 0;
+        foreach my $c (@con){
+            if ($c =~/ID=([^,>]+)[>,]/){
+                $contigs{$1} = $n++;
+            }else{
+                carp "ERROR - failed to parse header contig line: $c ";
+            }
+        }
+        return %contigs if %contigs;
+    }
+    print STDERR "Failed to retrive contigs from header - reading/creating index.\n";
     if ($vcf =~ /\.gz$/){
         eval "use Tabix; 1" 
             or croak "Tabix module is not installed and VCF file $vcf appears to be (b)gzip compressed.  ".
