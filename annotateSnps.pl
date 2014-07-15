@@ -13,7 +13,7 @@ use FindBin;
 use lib "$FindBin::Bin";
 use VcfReader;
 my @samples;
-my @dbsnp : shared;
+my @dbsnp ;
 my $freq;
 my $quiet;
 my $strict;
@@ -322,11 +322,10 @@ print STDERR
 
 sub process_buffer {
 
-    #these three arrays are arrays of refs to batches
+    #this array is an array of refs to batches
     # so that we can quickly sort our batches rather than
     # performing a big sort on all lines
     my @lines_to_print;
-    my @lines_to_filter;
     my @known;
     my $i               = 0;
     my $t               = 0;
@@ -391,7 +390,9 @@ sub process_buffer {
     $pm->wait_all_children;
 
     #print them
-    @lines_to_print = sort by_first_last_line (@lines_to_print);
+    @lines_to_print = sort {
+        VcfReader::by_first_last_line($a, $b, \%contigs) 
+        } @lines_to_print;
     my $incr_per_batch = @lines_to_process / @lines_to_print;
     foreach my $batch (@lines_to_print) {
         my $incr_per_line = $incr_per_batch / @$batch;
@@ -436,43 +437,6 @@ sub process_buffer {
         }
     }
 }
-################################################
-sub by_first_last_line {
-    my $a_first_chrom = VcfReader::getVariantField( $a->[0],  "CHROM", );
-    my $a_first_pos   = VcfReader::getVariantField( $a->[0],  "POS", );
-    my $a_last_chrom  = VcfReader::getVariantField( $a->[-1], "CHROM", );
-    my $a_last_pos    = VcfReader::getVariantField( $a->[-1], "POS", );
-    my $b_first_chrom = VcfReader::getVariantField( $b->[0],  "CHROM", );
-    my $b_first_pos   = VcfReader::getVariantField( $b->[0],  "POS", );
-    my $b_last_chrom  = VcfReader::getVariantField( $b->[-1], "CHROM", );
-    my $b_last_pos    = VcfReader::getVariantField( $b->[-1], "POS", );
-
-    if ( $contigs{$a_first_chrom} > $contigs{$b_last_chrom} ) {
-        return 1;
-    }
-    elsif ( $contigs{$a_last_chrom} < $contigs{$b_first_chrom} ) {
-        return -1;
-    }
-    elsif ( $contigs{$a_last_chrom} > $contigs{$b_last_chrom} ) {
-        return 1;
-    }
-    elsif ( $contigs{$a_first_chrom} > $contigs{$b_first_chrom} ) {
-        return 1;
-    }
-    elsif ( $contigs{$a_last_chrom} < $contigs{$b_last_chrom} ) {
-        return -1;
-    }
-    elsif ( $contigs{$a_last_chrom} > $contigs{$b_last_chrom} ) {
-        return 1;
-    }
-    elsif ( $a_last_pos <= $b_first_pos ) {
-        return -1;
-    }
-    elsif ( $a_first_pos >= $b_last_pos ) {
-        return 1;
-    }
-    return 0;
-}
 
 ################################################
 sub process_batch {
@@ -495,14 +459,6 @@ sub process_batch {
         $results{filter}++  if $res{filter};
         push @{ $results{known} },  $res{known}  if $res{known};
         $results{pathogenic}++  if $res{pathogenic};
-    }
-
-    #might as well do a sort in our forks to get the most out of them
-    @{ $results{keep} } =
-      VcfReader::sortVariants( \@{ $results{keep} }, \%contigs );
-    if ($KNOWN) {
-        @{ $results{known} } =
-          VcfReader::sortVariants( \@{ $results{known} }, \%contigs );
     }
     foreach my $d (keys %sargs){
         if (exists $sargs{$d}->{file_handle}){
@@ -680,13 +636,7 @@ sub filterSnps {
 
 ################################################
 sub initializeDbsnpVcfs {
-
-#$snpfiles is a ref to an array of vcf files
-#$i is the index of @$snpfiles we are working on here
-#$search_args is a hash ref - add our VcfReader searchForPosition arguments to this shared hash
-#$heads is an array ref - add our vcf headers to this shared array
     my ($snpfile) = @_;
-
     #we getSearchArguments here simply to prevent a race condition later
     my @head = VcfReader::getHeader($snpfile);
     die "Header not ok for $snpfile " 
@@ -904,7 +854,7 @@ Number of forks to create for parallelising your analysis. Defaults to the numbe
 
 =item B<-c    --cache>
 
-Cache size. Variants are processed in batches to allow for efficient parallelisation. The default is to process up to 10,000 variants at once or 10,000 x no. forks if more than 10 forks are used, but if you have memory issues running this program you may want to set a lower number here. When using a LOT of forks you may find improved performance by specifying a higher cache size, however the increase in memory usage is proportional to your cache size multiplied by the number of forks.
+Cache size. Variants are processed in batches to allow for efficient parallelisation. The default is to process up to 10,000 variants at once or 1,000 x no. forks if more than 10 forks are used, but if you have memory issues running this program you may want to set a lower number here. When using a LOT of forks you may find improved performance by specifying a higher cache size, however the increase in memory usage is proportional to your cache size multiplied by the number of forks.
 
 =item B<--progress>
 
