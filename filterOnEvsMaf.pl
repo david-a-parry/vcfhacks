@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 use warnings;
 use strict;
+use Parallel::ForkManager;
 use Getopt::Long;
 use Pod::Usage;
 use Term::ProgressBar;
@@ -9,13 +10,15 @@ use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use POSIX qw/strftime/;
 use FindBin;
 use lib "$FindBin::Bin";
-use ParseVCF;
+use VcfReader;
 my @samples;
 my @evs;
 my $freq;
 my $quiet;
 my $strict;
-my %opts = (samples => \@samples, esp_file => \@evs, freq => \$freq, quiet=>\$quiet, Strict => \$strict);
+my $forks = 1;
+my $buffer_size;
+my %opts = (samples => \@samples, esp_file => \@evs, freq => \$freq, quiet=>\$quiet, Strict => \$strict, cache => \$buffer_size, forks => \$forks);
 
 GetOptions(\%opts,
         "output=s",
@@ -25,7 +28,9 @@ GetOptions(\%opts,
         "dir=s",
         "help",
         "manual",
-        "freq=f",
+        "f|freq=f" => \$freq,
+        "t|forks=i" => \$forks,
+        "cache=i"      => \$buffer_size,
         "quiet",
         "Progress",
         ) or pod2usage(-exitval => 2, -message => "Syntax error") ;
@@ -40,28 +45,38 @@ if (defined $freq){
     print STDERR "WARNING - no allele frequency (--freq) specified, ANY matching alleles will be filtered.\n";
 }
 
+if ( $forks < 2 ) {
+    $forks = 0;    #no point having overhead of forks for one fork
+    $buffer_size = 1000 if not $buffer_size;
+}else{
+    if ( not $buffer_size ) {
+        $buffer_size = 10000 > $forks * 1000 ? 10000 : $forks * 1000;
+    }
+}
 my $OUT;
 if ($opts{output}){
         open ($OUT, ">$opts{output}") || die "Can't open $opts{output} for writing: $!";
 }else{
         $OUT = *STDOUT;
 }
-my $progressbar;
-my $next_update = 0;
-my $prev_percent = 0;
-my $n = 0;
-my $kept = 0; #variants not filtered
-my $filtered = 0; #variants filtered
-my $pathogenic_snps = 0;
-my $found = 0; #variants that match a known SNP
 my $time = strftime("%H:%M:%S", localtime);
-print STDERR "[$time] Initializing input VCF\n";
-my $vcf_obj = ParseVCF->new( file=> $opts{input});
-my $total_vcf = $vcf_obj->countLines("variants") if defined $opts{Progress};
-print STDERR "$opts{input} has $total_vcf variants\n" if defined $opts{Progress};
-$time = strftime("%H:%M:%S", localtime);
-my @snp_objs = ();
-my @snp_headers;
+my $total_vcf;
+print STDERR "[$time] Initializing input VCF... ";
+if ( defined $opts{Progress} ) {
+    die "Header not ok for input ($opts{input}) "
+        if not VcfReader::checkHeader( vcf => $opts{input} );
+    $total_vcf = VcfReader::countVariants( $opts{input} );
+    print STDERR "$opts{input} has $total_vcf variants\n";
+}
+my %contigs       = VcfReader::getContigOrder( $opts{input} );
+my %sample_to_col = ();
+if (@samples) {
+    %sample_to_col = VcfReader::getSamples(
+        vcf         => $opts{input},
+        get_columns => 1,
+    );
+}
+
 if ($opts{dir}){
     opendir (my $DIR, $opts{dir}) or die "Can't read directory $opts{dir}: $!\n";
     my @files = grep {/\.vcf(\.gz)*$/}readdir($DIR);
@@ -70,100 +85,303 @@ if ($opts{dir}){
         push @evs, "$opts{dir}/$file";
     }
 }
-for (my $i = 0; $i < @evs; $i++){
-    print STDERR "[$time] Initializing $evs[$i] ESP VCF " .($i + 1) ." of " .scalar(@evs) ."\n";
-    my $snp_obj;
-    if ($evs[$i] =~ /\.gz$/){
-        $snp_obj = ParseVCF->new( file => $evs[$i], noLineCount =>1);
-    }else{
-        $snp_obj = ParseVCF->new( file => $evs[$i], noLineCount =>0);
-    }
-    push @snp_objs, $snp_obj;
-    if (not -e $snp_obj->get_index){
-        $snp_obj->indexVcf();
-    }
-    #my $total_snp = $snp_obj->countLines("variants") ;
-    #print STDERR "$dbsnp[$i] has $total_snp variants\n" ;
-    push @snp_headers, $snp_obj->getHeader(0);
+
+
+#initialize EVS VCFs in parallel
+my @evs_headers = ();
+my %evs_to_index = ();
+my $dbpm = Parallel::ForkManager->new($forks);
+for ( my $i = 0 ; $i < @evs ; $i++ ) {
+    $dbpm->run_on_finish(    # called BEFORE the first call to start()
+        sub {
+            my ( $pid, $exit_code, $ident, $exit_signal, $core_dump,
+                $data_structure_reference )
+              = @_;
+
+            if ( defined($data_structure_reference) )
+            {                # children are not forced to send anything
+                if ( ref $data_structure_reference eq 'ARRAY' ) {
+                    push @evs_headers, @{ $data_structure_reference->[0] };
+                    $evs_to_index{ $data_structure_reference->[2] } =
+                      $data_structure_reference->[1];
+                }
+                else {
+                    die
+                      "Unexpected return from dbSNP reference initialization:\n"
+                      . Dumper $data_structure_reference;
+                }
+            }
+            else
+            { # problems occuring during storage or retrieval will throw a warning
+                die "No message received from child process $pid!\n";
+            }
+        }
+    );
+    $time = strftime( "%H:%M:%S", localtime );
+    print STDERR "[$time] Initializing $evs[$i] EVS reference VCF "
+      . ( $i + 1 ) . " of "
+      . scalar(@evs) . "\n";
+    $dbpm->start() and next;
+    my @head_and_index = initializeDbsnpVcfs( $evs[$i] );
+    push @head_and_index, $evs[$i];
+    $time = strftime( "%H:%M:%S", localtime );
+    print STDERR
+      "[$time] Finished initializing $evs[$i] dbSNP reference VCF.\n";
+    $dbpm->finish( 0, \@head_and_index );
 }
+print STDERR "Waiting for children...\n" if $opts{VERBOSE};
+$dbpm->wait_all_children;
+
 
 if ($freq){
-    if (not grep {/##INFO=<ID=MAF/} @snp_headers ){
+    if (not grep {/##INFO=<ID=MAF/} @evs_headers ){
         die  "Can't find MAF fields in evs file headers.\n";
     }
 }
-print $OUT  $vcf_obj->getHeader(0) ."##filterOnEvsMaf.pl=\"";
+my $meta_head = VcfReader::getMetaHeader( $opts{input} );
+print $OUT "$meta_head\n";
+print $OUT  "##filterOnEvsMaf.pl=\"";
 my @opt_string = ();
 foreach my $k (sort keys %opts){
-        if (not ref $opts{$k}){
-                push @opt_string, "$k=$opts{$k}";
-        }elsif (ref $opts{$k} eq 'SCALAR'){
-                if (defined ${$opts{$k}}){
-                        push @opt_string, "$k=${$opts{$k}}";
-                }else{
-                        push @opt_string, "$k=undef";
-                }
-        }elsif (ref $opts{$k} eq 'ARRAY'){
-                if (@{$opts{$k}}){
-                        push @opt_string, "$k=" .join(",", @{$opts{$k}});
-                }else{
-                        push @opt_string, "$k=undef";
-                }
+    if (not ref $opts{$k}){
+        push @opt_string, "$k=$opts{$k}";
+    }elsif (ref $opts{$k} eq 'SCALAR'){
+        if (defined ${$opts{$k}}){
+            push @opt_string, "$k=${$opts{$k}}";
+        }else{
+            push @opt_string, "$k=undef";
         }
+    }elsif (ref $opts{$k} eq 'ARRAY'){
+        if (@{$opts{$k}}){
+            push @opt_string, "$k=" .join(",", @{$opts{$k}});
+        }else{
+            push @opt_string, "$k=undef";
+        }
+    }
 }
-print $OUT join(" ", @opt_string) . "\"\n" .  $vcf_obj->getHeader(1);
+my $col_header = VcfReader::getColumnHeader( $opts{input} );
+print $OUT join( " ", @opt_string ) . "\"\n" . $col_header . "\n";
 
 $time = strftime("%H:%M:%S", localtime);
 print STDERR "[$time] EVS filter starting\n";
 
-if (defined $opts{Progress} and $total_vcf){
-        if ($opts{build} || $freq){
-            $progressbar = Term::ProgressBar->new({name => "Filtering", count => $total_vcf, ETA => "linear", });
-        }else{
-            $progressbar = Term::ProgressBar->new({name => "Annotating", count => $total_vcf, ETA => "linear", });
-        }
-        #$progressbar->minor(0);
+my $prog_total;
+my $progressbar;
+my $next_update = 0;
+my $prev_percent = 0;
+if ( defined $opts{Progress} and $total_vcf ) {
+    $prog_total = $total_vcf * 3;
+    $progressbar = Term::ProgressBar->new(
+        #{ name => "Filtering", count => ($prog_total), ETA => "linear", } );
+        { name => "Filtering", count => ($prog_total), } );
+}
+my $kept = 0; #variants not filtered
+my $filtered = 0; #variants filtered
+my $found = 0; #variants that match a known SNP
+
+my $n                = 0;
+my @lines_to_process = ();
+my $VCF              = VcfReader::_openFileHandle( $opts{input} )
+  ;    # or die "Can't open $opts{input} for reading: $!\n";
+VAR: while ( my $line = <$VCF> ) {
+    next if $line =~ /^#/;
+    $n++;
+    chomp $line;
+    my @split_line = split( "\t", $line );
+
+    #our VcfReader methods will be more efficient on pre-split lines
+    push @lines_to_process, \@split_line;
+    if ($progressbar) {
+        $next_update = $progressbar->update($n) if $n >= $next_update;
+    }
+    if ( @lines_to_process >= $buffer_size ) {
+        process_buffer();
+        @lines_to_process = ();
+    }
+}
+close $VCF;
+process_buffer();
+close $OUT;
+if ( defined $opts{Progress} ) {
+    $progressbar->update($prog_total) if $prog_total >= $next_update;
 }
 
-VAR: while (my $line = $vcf_obj->readLine){
-    $n++;
-    my $snp_meets_filter_criteria = 0; 
-    my $snp_should_not_be_filtered = 0; #flag in case pathogenic flag is set or somethinga and we don't want to filter this snp no matter what
-    my $is_known_snp = 0;
-    my $replaced_already = 0; #use this flag to allow appending of multiple IDs found in our reference file even if --replace option is in place.
+$time = strftime("%H:%M:%S", localtime);
+print STDERR "Time finished: $time\n";
+print STDERR "$found matching variants identified.\n";
+print STDERR "$filtered variants filtered, $kept variants retained.\n";
+
+
+################################################
+#####################SUBS#######################
+################################################
+
+sub process_buffer {
+
+    #this arrays is an array of refs to batches
+    # so that we can quickly sort our batches rather than
+    # performing a big sort on all lines
+    my @lines_to_print;
+    my $i               = 0;
+    my $t               = 0;
+    my $lines_per_slice = @lines_to_process;
+    if ( $forks > 0 ) {
+        $lines_per_slice = int( @lines_to_process / $forks ) > 1 ? int( @lines_to_process / $forks ) : 1;
+    }
+    my @batch = ();
+
+    #get a batch for each thread
+    for ( my $i = 0 ; $i < @lines_to_process ; $i += $lines_per_slice ) {
+        my $last =
+          ( $i + $lines_per_slice - 1 ) < $#lines_to_process
+          ? $i + $lines_per_slice - 1
+          : $#lines_to_process;
+        if ($i + $lines_per_slice >= @lines_to_process){
+            $last = $#lines_to_process;
+        }
+        my @temp = @lines_to_process[ $i .. $last ];
+        push @batch, \@temp;
+    }
+    my $pm = Parallel::ForkManager->new($forks);
+    $pm->run_on_finish(    # called BEFORE the first call to start()
+        sub {
+            my ( $pid, $exit_code, $ident, $exit_signal, $core_dump,
+                $data_structure_reference )
+              = @_;
+
+            if ( defined($data_structure_reference) )
+            {
+                my %res = %{$data_structure_reference}
+                  ;        
+                if ( ref $res{keep} eq 'ARRAY' ) {
+                    push @lines_to_print, \@{ $res{keep} } if @{ $res{keep} };
+                }
+                if ( $res{found} ) {
+                    $found += $res{found} ;
+                }
+                if ( $res{filter} ) {
+                    $filtered += $res{filter} ;
+                }
+                if ($progressbar) {
+                    $n += $res{batch_size};
+                    $next_update = $progressbar->update($n)
+                      if $n >= $next_update;
+                }
+            }
+            else
+            { 
+                print STDERR "ERROR: no message received from child process $pid!\n";
+            }
+        }
+    );
+    foreach my $b (@batch) {
+        $pm->start() and next;
+        my %results = process_batch($b);
+        $pm->finish( 0, \%results );
+    }
+    $pm->wait_all_children;
+
+    #print them
+    @lines_to_print = sort {
+        VcfReader::by_first_last_line($a, $b, \%contigs) 
+        } @lines_to_print;
+    my $incr_per_batch = @lines_to_process / @lines_to_print;
+    foreach my $batch (@lines_to_print) {
+        my $incr_per_line = $incr_per_batch / @$batch;
+        foreach my $l (@$batch) {
+            if ( ref $l eq 'ARRAY' ) {
+                print $OUT join( "\t", @$l ) . "\n";
+            }
+            else {
+                print $OUT "$l\n";
+            }
+            $kept++;
+            if ($progressbar) {
+                $n += $incr_per_line;
+                $next_update = $progressbar->update($n) if $n >= $next_update;
+            }
+        }
+    }
+}
+
+################################################
+sub process_batch {
+
+    #filter a set of lines
+    my ($batch) = @_;
+    my %results = ( batch_size => scalar(@$batch) );
+    my %sargs;
+    foreach my $e (@evs) {
+
+        #WE'VE FORKED AND COULD HAVE A RACE CONDITION HERE -
+        # WHICH IS WHY WE DO A FIRST PASS WITH OUR initializeDbsnpVcfs
+        # METHOD TOWARDS THE START OF THE PROGRAM
+        my %s = VcfReader::getSearchArguments( $e, $evs_to_index{$e} );
+        $sargs{$e} = \%s;
+    }
+    foreach my $line ( @{$batch} ) {
+        my %res = filterOnEvsMaf( $line, \%sargs );
+        push @{ $results{keep} },   $res{keep}   if $res{keep};
+        $results{filter}++  if $res{filter};
+        $results{found}++  if $res{found};
+    }
+    foreach my $d (keys %sargs){
+        if (exists $sargs{$d}->{file_handle}){
+            close $sargs{$d}->{file_handle} if $sargs{$d}->{file_handle};
+        }
+    }
+    return %results;
+}
+
+
+################################################
+sub filterOnEvsMaf{
+    my ( $vcf_line, $search_args ) = @_;
+    my %r = (keep => undef, found => 0, filter => 0);
     if (defined $opts{Progress}){
            $next_update = $progressbar->update($n) if $n >= $next_update;
     }
-    my %min_vars = $vcf_obj->minimizeAlleles();
+    my %min_vars       = VcfReader::minimizeAlleles($vcf_line);
     my %sample_alleles = ();
     if (@samples){
-        %sample_alleles = map{$_ => undef}  $vcf_obj->getSampleCall(multiple => \@samples, return_alleles_only => 1);
+        %sample_alleles = map { $_ => undef } VcfReader::getSampleCall(
+            multiple            => \@samples,
+            sample_to_columns   => \%sample_to_col,
+            return_alleles_only => 1,
+            line                => $vcf_line
+        );
     }
-ALLELE:    foreach my $allele (keys %min_vars){
+ALLELE: foreach my $allele ( sort { $a <=> $b } keys %min_vars ) {
         $min_vars{$allele}->{filter_snp} = 0;
         if (@samples){
             #doesn't exist in any sample...
             next if not exists $sample_alleles{$allele};
         }
-        foreach my $snp_obj (@snp_objs){
-            if ($snp_obj->searchForPosition(chrom => $min_vars{$allele}->{CHROM}, pos => $min_vars{$allele}->{POS})){
-                while (my $snp_line = $snp_obj->readPosition()){#need to edit the below so we traverse through potentially multiple SNPs and still append/filter as necessarry
+        foreach my $k ( keys %{$search_args} ) {
+            if (
+                my @snp_hits = VcfReader::searchForPosition(
+                    %{ $search_args->{$k} },
+                    chrom => $min_vars{$allele}->{CHROM},
+                    pos   => $min_vars{$allele}->{POS}
+                )
+              )
+            {
+                foreach my $snp_line (@snp_hits) {
+
                     #check whether the snp line(s) match our variant
-                    if (checkVarMatches($min_vars{$allele}, $snp_obj)){
-                        $is_known_snp++;
-                        #perform filtering if fiters are set
+                    my @snp_split = split( "\t", $snp_line );
+                    if ( checkVarMatches( $min_vars{$allele}, \@snp_split ) ) {
+                        $r{found} = 1;
+                        #perform filtering if freq is set
                         if ($freq){
-                            my $snp_info = $snp_obj->getVariantField("INFO");
-                            my @info = split(';', $snp_info);
-                            foreach my $info (@info){
-                                if ($info =~ /^MAF=(.*)/){
-                                    my @mafs = split(',', $1);
-                                    foreach my $maf (@mafs){
-                                        if ($maf >= $freq){
-                                            $min_vars{$allele}->{filter_snp}++ ;
-                                            next ALLELE;
-                                        }
-                                    }
+                            my $maf_field = VcfReader::getVariantInfoField( $snp_line, 'MAF');
+                            die "Expected MAF field to be a comma separated list of 3 numbers for $k line: $snp_line " 
+                                if $maf_field !~/(\d+\.\d+,){2,}\d+\.\d+/;
+                            my @mafs = split(',', $maf_field);
+                            foreach my $maf (@mafs){
+                                if ($maf >= $freq){
+                                    $min_vars{$allele}->{filter_snp}++ ;
+                                    next ALLELE;
                                 }
                             }
                         }else{#default behaviour is to filter everything that matches
@@ -175,36 +393,24 @@ ALLELE:    foreach my $allele (keys %min_vars){
             }
         }
     }
-    $found++ if $is_known_snp;
     foreach my $allele (keys %min_vars){
         if (not $min_vars{$allele}->{filter_snp}){
             #print if ANY of the alleles haven't met 
             #our filter criteria
-            print $OUT "$line\n";
-            $kept++;
-            next VAR;
+            $r{keep} = $vcf_line;
+            return %r;
         }
     }
-    $filtered++;
+    $r{filter} = 1;
+    return %r;
 }
-if (defined $opts{Progress}){
-        $progressbar->update($total_vcf) if $total_vcf >= $next_update;
-}
-$time = strftime("%H:%M:%S", localtime);
-print STDERR "Time finished: $time\n";
-print STDERR "$found matching variants identified.\n";
-print STDERR "$filtered variants filtered, $kept variants retained.\n";
-
 
 ################################################
-#####################SUBS#######################
-################################################
-
-sub checkVarMatches{
-    my ($min_allele, $snp) = @_;
+sub checkVarMatches {
+    my ( $min_allele, $snp_line ) = @_;
     my $matches = 0;
-    my %snp_min = $snp->minimizeAlleles();
-    foreach my $snp_allele (keys %snp_min){
+    my %snp_min = VcfReader::minimizeAlleles($snp_line);
+    foreach my $snp_allele ( keys %snp_min ) {
         $min_allele->{CHROM} =~ s/^chr//;
         $snp_min{$snp_allele}->{CHROM} =~ s/^chr//;
         next if $min_allele->{CHROM} ne $snp_min{$snp_allele}->{CHROM};
@@ -217,7 +423,17 @@ sub checkVarMatches{
 }
         
 ################################################
-
+sub initializeDbsnpVcfs {
+    my ($snpfile) = @_;
+    #we getSearchArguments here simply to prevent a race condition later
+    my @head = VcfReader::getHeader($snpfile);
+    die "Header not ok for $snpfile " 
+        if not VcfReader::checkHeader( header => \@head );
+    #my %sargs = VcfReader::getSearchArguments($snpfile);
+    my %index = VcfReader::readIndex($snpfile);
+    return ( \@head, \%index );
+}
+################################################
 =head1 NAME
 
 filterOnEvsMaf.pl - filter NHLBI ESP variants from a VCF file 
