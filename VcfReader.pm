@@ -1223,6 +1223,50 @@ sub sortVariants{
     carp "sortVariants method called in void context ";
 }
 
+sub by_first_last_line {
+    #sorts batches of variants on the coordinates of their first and last lines
+    #use for sorting batches of variants that were processed from a pre-sorted file
+    #usage - 
+    #       my @sorted = sort { VcfReader::by_first_last_line($a, $b, \%contig_order) } @batches;
+    #where \%contig_order has been generated using VcfReader::getContigOrder
+    my ($a, $b, $contigs) = @_;
+    my $a_first_chrom = getVariantField( $a->[0],  "CHROM", );
+    my $a_first_pos   = getVariantField( $a->[0],  "POS", );
+    my $a_last_chrom  = getVariantField( $a->[-1], "CHROM", );
+    my $a_last_pos    = getVariantField( $a->[-1], "POS", );
+    my $b_first_chrom = getVariantField( $b->[0],  "CHROM", );
+    my $b_first_pos   = getVariantField( $b->[0],  "POS", );
+    my $b_last_chrom  = getVariantField( $b->[-1], "CHROM", );
+    my $b_last_pos    = getVariantField( $b->[-1], "POS", );
+
+    if ( $contigs->{$a_first_chrom} > $contigs->{$b_last_chrom} ) {
+        return 1;
+    }
+    elsif ( $contigs->{$a_last_chrom} < $contigs->{$b_first_chrom} ) {
+        return -1;
+    }
+    elsif ( $contigs->{$a_last_chrom} > $contigs->{$b_last_chrom} ) {
+        return 1;
+    }
+    elsif ( $contigs->{$a_first_chrom} > $contigs->{$b_first_chrom} ) {
+        return 1;
+    }
+    elsif ( $contigs->{$a_last_chrom} < $contigs->{$b_last_chrom} ) {
+        return -1;
+    }
+    elsif ( $contigs->{$a_last_chrom} > $contigs->{$b_last_chrom} ) {
+        return 1;
+    }
+    elsif ( $a_last_pos <= $b_first_pos ) {
+        return -1;
+    }
+    elsif ( $a_first_pos >= $b_last_pos ) {
+        return 1;
+    }
+    return 0;
+}
+
+
 sub minimizeAlleles{
     #reduce alleles to their simplest representation
     #so that multiallelic variants can be represented 
