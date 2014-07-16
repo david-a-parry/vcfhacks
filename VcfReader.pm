@@ -594,7 +594,6 @@ sub getSampleCall{
 #returns './.' for samples below $args{minGQ}
 #use return_alleles_only => 1 to only return allele codes, not genotypes (always returns an array)
     my (%args) = @_;
-    croak "\"field\" argument must be passed to getSampleCall - e.g. getSampleCall(field=>\"GQ\") " if not defined $args{field};
     croak "\"line\" argument must be passed to getSampleCall " if not defined $args{line};
     carp "WARNING Both multiple and sample arguments supplied to getSampleCall method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
     if (defined $args{sample_to_columns}){
@@ -754,7 +753,7 @@ sub getSampleCall{
 
 
 sub getSampleActualGenotypes{
-    my ($self, %args) = @_;
+    my (%args) = @_;
     croak "\"line\" argument must be passed to getSampleActualGenotypes " if not defined $args{line};
     carp "WARNING Both multiple and sample arguments supplied to getSampleActualGenotypes method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
     my @split = ();
@@ -770,7 +769,12 @@ sub getSampleActualGenotypes{
     #}elsif(defined $args{sample} or $args{multiple}){
     #    croak "\"multiple\" and \"sample\" arguments can only be used in conjunction with \"sample_to_columns\" option for getSampleCall method ";
     }
-    my @alleles = $self -> readAlleles(line => \@split);
+
+    
+
+
+
+    my @alleles = readAlleles(line => \@split);
     my %multiple = ();
     my $genotype;
     my @sample_alleles = ();
@@ -780,11 +784,11 @@ sub getSampleActualGenotypes{
             foreach my $sample (keys %{$args{sample_to_columns}}){
                 $var = getSampleVariant(\@split, $args{sample_to_columns}->{$sample});
                 my $call = (split ":", $var)[0];
-                if ($call =~ /(\d+)[\/\|](\d+)/){
+                if ($call =~ /(\d+)([\/\|])(\d+)/){
                     if ($args{return_alleles_only}){
-                        push (@sample_alleles, ($alleles[$1], $alleles[$2]));
+                        push (@sample_alleles, ($alleles[$1], $alleles[$3]));
                     }else{
-                        $multiple{$sample} = "$alleles[$1]/$alleles[$2]";
+                        $multiple{$sample} = "$alleles[$1]$2$alleles[$3]";
                     }
                 }else{
                     if (not $args{return_alleles_only}){
@@ -796,11 +800,11 @@ sub getSampleActualGenotypes{
             foreach my $col (9..$#split){
                 $var = getSampleVariant(\@split, $col);
                 my $call = (split ":", $var)[0];
-                if ($call =~ /(\d+)[\/\|](\d+)/){
+                if ($call =~ /(\d+)([\/\|])(\d+)/){
                     if ($args{return_alleles_only}){
-                        push (@sample_alleles, ($alleles[$1], $alleles[$2]));
+                        push (@sample_alleles, ($alleles[$1], $alleles[$3]));
                     }else{
-                        $multiple{$col} = "$alleles[$1]/$alleles[$2]";
+                        $multiple{$col} = "$alleles[$1]$2$alleles[$3]";
                     }
                 }else{
                     if (not $args{return_alleles_only}){
@@ -822,11 +826,11 @@ sub getSampleActualGenotypes{
             foreach my $sample (@{$args{multiple}}){
                 $var = getSampleVariant(\@split, $args{sample_to_columns}->{$sample});
                 my $call = (split ":", $var)[0];
-                if ($call =~ /(\d+)[\/\|](\d+)/){
+                if ($call =~ /(\d+)([\/\|])(\d+)/){
                     if ($args{return_alleles_only}){
-                        push (@sample_alleles, ($alleles[$1], $alleles[$2]));
+                        push (@sample_alleles, ($alleles[$1], $alleles[$3]));
                     }else{
-                        $multiple{$sample} = "$alleles[$1]/$alleles[$2]";
+                        $multiple{$sample} = "$alleles[$1]$2$alleles[$3]";
                     }
                 }else{
                     if (not $args{return_alleles_only}){
@@ -838,11 +842,11 @@ sub getSampleActualGenotypes{
             foreach my $col (@{$args{multiple}}){
                 $var = getSampleVariant(\@split, $col);
                 my $call = (split ":", $var)[0];
-                if ($call =~ /(\d+)[\/\|](\d+)/){
+                if ($call =~ /(\d+)([\/\|])(\d+)/){
                     if ($args{return_alleles_only}){
-                        push (@sample_alleles, ($alleles[$1], $alleles[$2]));
+                        push (@sample_alleles, ($alleles[$1], $alleles[$3]));
                     }else{
-                        $multiple{$col} = "$alleles[$1]/$alleles[$2]";
+                        $multiple{$col} = "$alleles[$1]$2$alleles[$3]";
                     }
                 }else{
                     if (not $args{return_alleles_only}){
@@ -869,15 +873,15 @@ sub getSampleActualGenotypes{
         }
         $var = getSampleVariant(\@split, $col);
         my $call = (split ":", $var)[0];
-        if ($call =~ /(\d+)[\/\|](\d+)/){
+        if ($call =~ /(\d+)([\/\|])(\d+)/){
             if ($args{return_alleles_only}){
-                push (@sample_alleles, ($alleles[$1], $alleles[$2]));
+                push (@sample_alleles, ($alleles[$1], $alleles[$3]));
                 my %seen = ();
                 @sample_alleles = grep {!$seen{$_}++} @sample_alleles;#remove duplicates
                 return @sample_alleles;
                 
             }else{
-                $genotype = "$alleles[$1]/$alleles[$2]";
+                $genotype = "$alleles[$1]$2$alleles[$3]";
             }
         }else{
             $genotype = "-/-";
@@ -886,6 +890,76 @@ sub getSampleActualGenotypes{
         return $genotype 
     }
 }
+
+sub countGenotypes{
+    my (%args) = @_;
+    croak "\"line\" argument must be passed to countGenotypes " if not defined $args{line};
+    carp "WARNING Both multiple and sample arguments supplied to countGenotypes method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
+    my @split = ();
+    if (ref $args{line} eq 'ARRAY'){
+        @split = @{$args{line}};
+    }else{
+        @split = split("\t", $args{line});
+    }
+    if (defined $args{sample_to_columns}){
+        if (ref $args{sample_to_columns} ne 'HASH'){
+            croak "\"sample_to_columns\" argument passed to countGenotypes must be a hash reference ";
+        }
+    #}elsif(defined $args{sample} or $args{multiple}){
+    #    croak "\"multiple\" and \"sample\" arguments can only be used in conjunction with \"sample_to_columns\" option for getSampleCall method ";
+    }
+    my %genotypes = ();
+    if(defined $args{samples}){
+        croak "samples argument must be an array reference " if ref $args{samples} ne 'ARRAY';
+        foreach my $sample (@{$args{samples}}){
+            my $col = $sample;
+            if (defined $args{sample_to_columns}){
+                croak "Sample \"$sample\" does not exist in samples_to_columns hash passed to countGenotypes " 
+                    if not exists $args{sample_to_columns}->{$sample};
+                $col = $args{sample_to_columns}->{$sample};
+            }
+            if (defined $args{minGQ}){
+                my $call = getSampleCall(line => \@split, column => $col, minGQ => $args{minGQ});
+                $genotypes{$call}++;
+            }else{
+                my $call = getSampleCall(line => \@split, column => $col,);
+                $genotypes{$call}++;
+            }
+        }
+    }else{
+        foreach my $col (9..$#split){
+            if (defined $args{minGQ}){
+                my $call = getSampleCall(line => \@split, column => $col, minGQ => $args{minGQ});
+                $genotypes{$call}++;
+            }else{
+                my $call = getSampleCall(line => \@split, column => $col);
+                $genotypes{$call}++;
+            }
+        }
+    }
+    if (defined $args{genotypes}){
+        my %user_gts = ();
+        if (ref $args{genotypes} eq 'ARRAY'){
+            foreach my $gt (@{$args{genotypes}}){
+                if (exists $genotypes{$gt}){
+                    $user_gts{$gt} =  $genotypes{$gt};
+                }else{
+                    $user_gts{$gt} = 0;
+                }
+            }
+            return %user_gts;
+        }else{
+            if (exists $genotypes{$args{genotypes}}){
+                return $genotypes{$args{genotypes}};
+            }else{
+                return 0;
+            }
+        }
+    }
+        
+    return %genotypes;
+}
+
 
 sub _getGenotype{
     my ($line, $col, $min_gq) = @_;
@@ -1201,7 +1275,9 @@ sub sortVariants{
 #sort a list of vcf lines
     my ($list, $contig_order) = @_;
     croak "sortVariants required an array reference as an argument " if (ref $list ne 'ARRAY');
-    croak "second argument passed to sortVariants must be a hash reference of contigs and their orders " if (ref $contig_order ne 'HASH');
+    if ($contig_order){
+        croak "second argument passed to sortVariants must be a hash reference of contigs and their orders " if (ref $contig_order ne 'HASH');
+    }
     my %contigs = ();
     my $add_ids = 0;
     my $i = 0;
