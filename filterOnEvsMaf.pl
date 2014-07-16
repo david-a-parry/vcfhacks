@@ -3,6 +3,7 @@ use warnings;
 use strict;
 use Parallel::ForkManager;
 use Getopt::Long;
+use Sys::CPU;
 use Pod::Usage;
 use Term::ProgressBar;
 use Data::Dumper;
@@ -15,10 +16,10 @@ my @samples;
 my @evs;
 my $freq;
 my $quiet;
-my $strict;
 my $forks = 1;
 my $buffer_size;
-my %opts = (samples => \@samples, esp_file => \@evs, freq => \$freq, quiet=>\$quiet, Strict => \$strict, cache => \$buffer_size, forks => \$forks);
+my $cpus = Sys::CPU::cpu_count();
+my %opts = (samples => \@samples, esp_file => \@evs, freq => \$freq, quiet=>\$quiet, cache => \$buffer_size, forks => \$forks);
 
 GetOptions(\%opts,
         "output=s",
@@ -49,10 +50,17 @@ if ( $forks < 2 ) {
     $forks = 0;    #no point having overhead of forks for one fork
     $buffer_size = 1000 if not $buffer_size;
 }else{
+    if ($forks > $cpus){
+        print STDERR "[Warning]: Number of forks ($forks) exceeds number of CPUs on this machine ($cpus)\n";
+    }
     if ( not $buffer_size ) {
         $buffer_size = 10000 > $forks * 1000 ? 10000 : $forks * 1000;
     }
 }
+
+print STDERR
+"[INFO] Processing in batches of $buffer_size variants split among $forks forks.\n";
+
 my $OUT;
 if ($opts{output}){
         open ($OUT, ">$opts{output}") || die "Can't open $opts{output} for writing: $!";
@@ -77,6 +85,9 @@ if (@samples) {
     );
 }
 
+$time = strftime( "%H:%M:%S", localtime );
+print STDERR "\n[$time] Finished initializing input VCF\n";
+
 if ($opts{dir}){
     opendir (my $DIR, $opts{dir}) or die "Can't read directory $opts{dir}: $!\n";
     my @files = grep {/\.vcf(\.gz)*$/}readdir($DIR);
@@ -98,21 +109,17 @@ for ( my $i = 0 ; $i < @evs ; $i++ ) {
                 $data_structure_reference )
               = @_;
 
-            if ( defined($data_structure_reference) )
-            {                # children are not forced to send anything
+            if ( defined($data_structure_reference) ){                
                 if ( ref $data_structure_reference eq 'ARRAY' ) {
                     push @evs_headers, @{ $data_structure_reference->[0] };
                     $evs_to_index{ $data_structure_reference->[2] } =
                       $data_structure_reference->[1];
-                }
-                else {
+                }else {
                     die
                       "Unexpected return from dbSNP reference initialization:\n"
                       . Dumper $data_structure_reference;
                 }
-            }
-            else
-            { # problems occuring during storage or retrieval will throw a warning
+            }else{ # problems occuring during storage or retrieval 
                 die "No message received from child process $pid!\n";
             }
         }
@@ -270,7 +277,7 @@ sub process_buffer {
             }
             else
             { 
-                print STDERR "ERROR: no message received from child process $pid!\n";
+                die "ERROR: no message received from child process $pid!\n";
             }
         }
     );
@@ -285,22 +292,32 @@ sub process_buffer {
     @lines_to_print = sort {
         VcfReader::by_first_last_line($a, $b, \%contigs) 
         } @lines_to_print;
-    my $incr_per_batch = @lines_to_process / @lines_to_print;
-    foreach my $batch (@lines_to_print) {
-        my $incr_per_line = $incr_per_batch / @$batch;
-        foreach my $l (@$batch) {
-            if ( ref $l eq 'ARRAY' ) {
-                print $OUT join( "\t", @$l ) . "\n";
-            }
-            else {
-                print $OUT "$l\n";
-            }
-            $kept++;
-            if ($progressbar) {
-                $n += $incr_per_line;
-                $next_update = $progressbar->update($n) if $n >= $next_update;
+
+
+    if (@lines_to_print){
+        my $incr_per_batch = @lines_to_process / @lines_to_print;
+        foreach my $batch (@lines_to_print) {
+            my $incr_per_line = $incr_per_batch / @$batch;
+            foreach my $l (@$batch) {
+                if ( ref $l eq 'ARRAY' ) {
+                    print $OUT join( "\t", @$l ) . "\n";
+                }
+                else {
+                    print $OUT "$l\n";
+                }
+                $kept++;
+                if ($progressbar) {
+                    $n += $incr_per_line;
+                    $next_update = $progressbar->update($n) if $n >= $next_update;
+                }
             }
         }
+    }else{
+        if ($progressbar) {
+            $n += @lines_to_process;
+            $next_update = $progressbar->update($n) if $n >= $next_update;
+        }
+
     }
 }
 
@@ -320,7 +337,7 @@ sub process_batch {
         $sargs{$e} = \%s;
     }
     foreach my $line ( @{$batch} ) {
-        my %res = filterOnEvsMaf( $line, \%sargs );
+        my %res = filter_on_evs_maf( $line, \%sargs );
         push @{ $results{keep} },   $res{keep}   if $res{keep};
         $results{filter}++  if $res{filter};
         $results{found}++  if $res{found};
@@ -335,7 +352,7 @@ sub process_batch {
 
 
 ################################################
-sub filterOnEvsMaf{
+sub filter_on_evs_maf{
     my ( $vcf_line, $search_args ) = @_;
     my %r = (keep => undef, found => 0, filter => 0);
     if (defined $opts{Progress}){
@@ -401,6 +418,7 @@ ALLELE: foreach my $allele ( sort { $a <=> $b } keys %min_vars ) {
             return %r;
         }
     }
+    #if we're here all alleles must have met filter criteria
     $r{filter} = 1;
     return %r;
 }
@@ -467,7 +485,7 @@ Directory containing ESP VCF files. These can be downloaded from http://evs.gs.w
 
 One or more ESP VCF files to use.
 
-=item B<--samples>
+=item B<-s    --samples>
 
 One or more samples to check variants for.  Default is to check all variants specified by the ALT field. If specified, variants will not be filtered unless variant is present in at least one of the samples specified by this argument.
 
@@ -475,17 +493,21 @@ One or more samples to check variants for.  Default is to check all variants spe
 
 Percent minor allele frequency to filter from. Only variants with minor alleles equal to or over this frequency will be removed. Default is to remove any matching variant.
 
+=item B<-t    --forks>
+
+Number of forks to create for parallelising your analysis. By default no forking is done. To speed up your analysis you may specify the number of parallel processes to use here. (N.B. forking only occurs if a value of 2 or more is given here as creating 1 fork only results in increased overhead with no performance benefit).
+
+=item B<-c    --cache>
+
+Cache size. Variants are processed in batches to allow for efficient parallelisation. When forks are used the default is to process up to 10,000 variants at once or 1,000 x no. forks if more than 10 forks are used. If you find this program comsumes to much memory when forking you may want to set a lower number here. When using forks you may get improved performance by specifying a higher cache size, however the increase in memory usage is proportional to your cache size multiplied by the number of forks.
+
 =item B<-p    --progress>
 
-Use this flag to print % progress to STDERR.
+Use this flag to show a progress bar while this program is running.
 
 =item B<-q    --quiet>
 
 Use this flag to supress warnings if any variants in the SNP reference file do not have IDs.
-
-=item B<--strict>
-
-Use this flag to complain and exit if any variants in the SNP reference file do not have IDs.
 
 =item B<-h    --help>
 
@@ -514,7 +536,7 @@ University of Leeds
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2013  David A. Parry
+Copyright 2013,2014  David A. Parry
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with this program. If not, see <http://www.gnu.org/licenses/>.
 
