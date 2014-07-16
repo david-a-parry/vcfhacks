@@ -17,11 +17,8 @@ my @dbsnp ;
 my $freq;
 my $quiet;
 my $strict;
-my $cores = Sys::CPU::cpu_count();
-
-#use 12 forks by default if we have that many cores
-# otherwise use one fork per core
-my $forks = $cores < 12 ? $cores : 12;
+my $cpus = Sys::CPU::cpu_count();
+my $forks = 0;
 my $buffer_size;
 my %opts = (
     cache      => \$buffer_size,
@@ -30,7 +27,7 @@ my %opts = (
     dbsnp_file => \@dbsnp,
     freq       => \$freq,
     quiet      => \$quiet,
-    Strict     => \$strict
+    strict     => \$strict
 );
 
 GetOptions(
@@ -53,6 +50,9 @@ if ( $forks < 2 ) {
     $buffer_size = 1000 if not $buffer_size;
 }
 else {
+    if ($forks > $cpus){
+        print STDERR "[Warning]: Number of forks ($forks) exceeds number of CPUs on this machine ($cpus)\n";
+    }
     if ( not $buffer_size ) {
         $buffer_size = 10000 > $forks * 1000 ? 10000 : $forks * 1000;
     }
@@ -95,11 +95,11 @@ my $total_vcf       = 0;
 my $time = strftime( "%H:%M:%S", localtime );
 print STDERR "[$time] Initializing input VCF... ";
 
+die "Header not ok for input ($opts{input}) "
+    if not VcfReader::checkHeader( vcf => $opts{input} );
 if ( defined $opts{Progress} ) {
-    die "Header not ok for input ($opts{input}) "
-        if not VcfReader::checkHeader( vcf => $opts{input} );
     $total_vcf = VcfReader::countVariants( $opts{input} );
-    print STDERR "$opts{input} has $total_vcf variants\n";
+    print STDERR "$opts{input} has $total_vcf variants";
 }
 my %contigs       = VcfReader::getContigOrder( $opts{input} );
 my %sample_to_col = ();
@@ -111,7 +111,7 @@ if (@samples) {
 }
 
 $time = strftime( "%H:%M:%S", localtime );
-print STDERR "[$time] Finished initializing input VCF\n";
+print STDERR "\n[$time] Finished initializing input VCF\n";
 my @snp_headers;
 my %dbsnp_to_index = ();
 my $dbpm           = Parallel::ForkManager->new($forks);
@@ -122,8 +122,7 @@ for ( my $i = 0 ; $i < @dbsnp ; $i++ ) {
                 $data_structure_reference )
               = @_;
 
-            if ( defined($data_structure_reference) )
-            {                # children are not forced to send anything
+            if ( defined($data_structure_reference) ){
                 if ( ref $data_structure_reference eq 'ARRAY' ) {
                     push @snp_headers, @{ $data_structure_reference->[0] };
                     $dbsnp_to_index{ $data_structure_reference->[2] } =
@@ -135,8 +134,7 @@ for ( my $i = 0 ; $i < @dbsnp ; $i++ ) {
                       . Dumper $data_structure_reference;
                 }
             }
-            else
-            { # problems occuring during storage or retrieval will throw a warning
+            else{ # problems occuring during storage or retrieval 
                 die "No message received from child process $pid!\n";
             }
         }
@@ -283,8 +281,7 @@ if ( defined $opts{Progress} and $total_vcf ) {
 
 my $n                = 0;
 my @lines_to_process = ();
-my $VCF              = VcfReader::_openFileHandle( $opts{input} )
-  ;    # or die "Can't open $opts{input} for reading: $!\n";
+my $VCF              = VcfReader::_openFileHandle( $opts{input} );
 VAR: while ( my $line = <$VCF> ) {
     next if $line =~ /^#/;
     $n++;
@@ -354,8 +351,7 @@ sub process_buffer {
                 $data_structure_reference )
               = @_;
 
-            if ( defined($data_structure_reference) )
-            {
+            if ( defined($data_structure_reference) ){
                 my %res = %{$data_structure_reference}
                   ;        
                 if ( ref $res{keep} eq 'ARRAY' ) {
@@ -375,10 +371,8 @@ sub process_buffer {
                     $next_update = $progressbar->update($n)
                       if $n >= $next_update;
                 }
-            }
-            else
-            { 
-                print STDERR "ERROR: no message received from child process $pid!\n";
+            }else{
+                die "ERROR: no message received from child process $pid!\n";
             }
         }
     );
@@ -393,41 +387,55 @@ sub process_buffer {
     @lines_to_print = sort {
         VcfReader::by_first_last_line($a, $b, \%contigs) 
         } @lines_to_print;
-    my $incr_per_batch = @lines_to_process / @lines_to_print;
-    foreach my $batch (@lines_to_print) {
-        my $incr_per_line = $incr_per_batch / @$batch;
-        foreach my $l (@$batch) {
-            if ( ref $l eq 'ARRAY' ) {
-                print $OUT join( "\t", @$l ) . "\n";
-            }
-            else {
-                print $OUT "$l\n";
-            }
-            $kept++;
-            if ($progressbar) {
-                $n += $incr_per_line;
-                $next_update = $progressbar->update($n) if $n >= $next_update;
-            }
-        }
-    }
-    if ($KNOWN) {
-        @known = sort by_first_last_line (@known);
-        $incr_per_batch = @lines_to_process / @known;
-        foreach my $k (@known) {
-            my $incr_per_line = $incr_per_batch / @$k;
-            foreach my $l (@$k) {
+    if (@lines_to_print){
+        my $incr_per_batch = @lines_to_process / @lines_to_print;
+        foreach my $batch (@lines_to_print) {
+            my $incr_per_line = $incr_per_batch / @$batch;
+            foreach my $l (@$batch) {
                 if ( ref $l eq 'ARRAY' ) {
                     print $OUT join( "\t", @$l ) . "\n";
                 }
                 else {
                     print $OUT "$l\n";
                 }
-                $found++;
+                $kept++;
                 if ($progressbar) {
                     $n += $incr_per_line;
-                    $next_update = $progressbar->update($n)
-                      if $n >= $next_update;
+                    $next_update = $progressbar->update($n) if $n >= $next_update;
                 }
+            }
+        }
+    }else{
+        if ($progressbar) {
+            $n += @lines_to_process;
+            $next_update = $progressbar->update($n) if $n >= $next_update;
+        }
+    }
+    if ($KNOWN) {
+        @known = sort by_first_last_line (@known);
+        if (@known){
+            my $incr_per_batch = @lines_to_process / @known;
+            foreach my $k (@known) {
+                my $incr_per_line = $incr_per_batch / @$k;
+                foreach my $l (@$k) {
+                    if ( ref $l eq 'ARRAY' ) {
+                        print $OUT join( "\t", @$l ) . "\n";
+                    }
+                    else {
+                        print $OUT "$l\n";
+                    }
+                    $found++;
+                    if ($progressbar) {
+                        $n += $incr_per_line;
+                        $next_update = $progressbar->update($n)
+                        if $n >= $next_update;
+                    }
+                }
+            }
+        }else{
+            if ($progressbar) {
+                $n += @lines_to_process;
+                $next_update = $progressbar->update($n) if $n >= $next_update;
             }
         }
     }
@@ -797,7 +805,6 @@ sub checkVarMatches {
 annotateSnps.pl - annotate and optionally filter SNPs from a VCF file 
 
 =head1 SYNOPSIS
-
         annotateSnps.pl -i [vcf file] -d [reference SNP vcf file] [options]
         annotateSnps.pl -h (display help message)
         annotateSnps.pl -m (display manual page)
@@ -850,15 +857,15 @@ One or more samples to check variants for.  Default is to check all variants spe
 
 =item B<-t    --forks>
 
-Number of forks to create for parallelising your analysis. Defaults to the number of CPU cores on your system or 12 if you are on a machine with more than 12 cores. 
+Number of forks to create for parallelising your analysis. By default no forking is done. To speed up your analysis you may specify the number of parallel processes to use here. (N.B. forking only occurs if a value of 2 or more is given here as creating 1 fork only results in increased overhead with no performance benefit).
 
 =item B<-c    --cache>
 
-Cache size. Variants are processed in batches to allow for efficient parallelisation. The default is to process up to 10,000 variants at once or 1,000 x no. forks if more than 10 forks are used, but if you have memory issues running this program you may want to set a lower number here. When using a LOT of forks you may find improved performance by specifying a higher cache size, however the increase in memory usage is proportional to your cache size multiplied by the number of forks.
+Cache size. Variants are processed in batches to allow for efficient parallelisation. When forks are used the default is to process up to 10,000 variants at once or 1,000 x no. forks if more than 10 forks are used. If you find this program comsumes to much memory when forking you may want to set a lower number here. When using forks you may get improved performance by specifying a higher cache size, however the increase in memory usage is proportional to your cache size multiplied by the number of forks.
 
 =item B<--progress>
 
-Use this flag to print % progress to STDERR.
+Use this flag to show a progress bar while this program is running.
 
 =item B<-q    --quiet>
 
