@@ -1,15 +1,18 @@
 #!/usr/bin/perl
+#TO DO - ALLOW FILTERING FOR VCFs WITHOUT SAMPLES
 use warnings;
 use strict;
 use Getopt::Long;
+use Parallel::ForkManager;
+use Sys::CPU;
 use Pod::Usage;
 use Term::ProgressBar;
 use Data::Dumper;
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
+use POSIX qw(strftime);
 use FindBin;
 use lib "$FindBin::Bin";
-use ParseVCF;
-
+use VcfReader;
 
 =head1 NAME
 
@@ -66,7 +69,7 @@ Samples from filter VCF files to ignore.  If specified variant alleles from all 
 
 Reject variants if the allele frequency in all --filter VCFs is equal to or greater than this value. All samples will be used to calculate allele frequency regardless of --reject or --not_samples settings, although variants will only be counted if the genotype quality is greater than the value given for --un_quality. The value must be a float between 0 and 1. 
 
-=item B<-t    --threshold>
+=item B<-l    --threshold>
 
 Filter lines if the number of samples containing at least one matching variant allele is equal to or greater than this value.
 
@@ -93,6 +96,14 @@ Minimum genotype qualities to consider for samples specified by --reject argumen
 =item B<-p    --print_matching>
 
 Use this flag to reverse the script so that only matching lines are printed.
+
+=item B<-t    --forks>
+
+Number of forks to create for parallelising your analysis. By default no forking is done. To speed up your analysis you may specify the number of parallel processes to use here. (N.B. forking only occurs if a value of 2 or more is given here as creating 1 fork only results in increased overhead with no performance benefit).
+
+=item B<-c    --cache>
+
+Cache size. Variants are processed in batches to allow for efficient parallelisation. When forks are used the default is to process up to 10,000 variants at once or 1,000 x no. forks if more than 10 forks are used. If you find this program comsumes too much memory when forking you may want to set a lower number here. When using forks you may get improved performance by specifying a higher cache size, however the increase in memory usage is proportional to your cache size multiplied by the number of forks.
 
 =item B<-b    --progress>
 
@@ -128,379 +139,743 @@ This program is free software: you can redistribute it and/or modify it under th
 
 =cut
 
-
-
 my $vcf;
 my @filter_vcfs;
 my @dirs;
-my @samples;#samples in vcf input to check calls for - filter only if they contain same allele as in filter_vcf. Default is to simply check alleles in ALT field and ignore samples.
-my @reject;#if specified will only check alleles for these samples in filter_vcfs
-my @ignore_samples; #these samples will be ignored in either VCF 
-my $threshold = 0;#only filter if we see the allele this many times in filter_vcfs
-my $filter_homozygotes; #flag to filter if any of the reject samples are homozygous
-my $maf = 0;
-my $print_matching = 0;#flag telling the script to invert so we print matching lines and filter non-matching lines
+my @samples
+  ; #samples in vcf input to check calls for - filter only if they contain same allele as in filter_vcf. Default is to simply check alleles in ALT field and ignore samples.
+my @reject
+  ;    #if specified will only check alleles for these samples in filter_vcfs
+my @ignore_samples;    #these samples will be ignored in either VCF
+my $threshold =
+  0;    #only filter if we see the allele this many times in filter_vcfs
+my $filter_homozygotes
+  ;     #flag to filter if any of the reject samples are homozygous
+my $maf            = 0;
+my $print_matching = 0
+  ; #flag telling the script to invert so we print matching lines and filter non-matching lines
 my $out;
 my $min_qual = 0;
-my $minGQ = 0;
-my $aff_quality ;#will convert to $minGQ value if not specified
-my $unaff_quality ;#will convert to $minGQ value if not specified
+my $minGQ    = 0;
+my $aff_quality;      #will convert to $minGQ value if not specified
+my $unaff_quality;    #will convert to $minGQ value if not specified
 my $help;
 my $man;
 my $progress;
-my $regex; #match this regex if looking in dir
+my $regex;            #match this regex if looking in dir
+my $forks = 0;
+my $buffer_size;
 my %opts = (
-        'not_samples' => \@ignore_samples,
-        'expression' => \$regex,
-        'input' => \$vcf,
-        'output' => \$out,
-        'filter' => \@filter_vcfs,
-        'directories' => \@dirs,
-        'samples' => \@samples,
-        'reject' => \@reject,
-        'allele_frequency_filter' => \$maf,
-        'threshold' => \$threshold,
-        'filter_homozygotes' => \$filter_homozygotes,
-        'quality' => \$min_qual,
-        'genotype_quality' => \$minGQ,
-        'aff_quality' => \$aff_quality,
-        'un_quality' => \$unaff_quality,
-        'progress' => \$progress,
-        'help' => \$help,
-        'manual' => \$man,
-        'print_matching' => \$print_matching
-); 
-
-GetOptions(
-        \%opts,
-        'x|not_samples=s{,}' => \@ignore_samples,
-        'expression=s' => \$regex,
-        'input=s' => \$vcf,
-        'output=s' => \$out,
-        'f|filter=s{,}' => \@filter_vcfs,
-        'directories=s{,}' => \@dirs,
-        'samples=s{,}' => \@samples,
-        'reject=s{,}' => \@reject,
-        'y|allele_frequency_filter=f' => \$maf,
-        'threshold=i' => \$threshold,
-        'z|filter_homozygotes' => \$filter_homozygotes,
-        'quality=f' => \$min_qual,
-        'genotype_quality=f' => \$minGQ,
-        'a|aff_quality=i' => \$aff_quality,
-        'un_quality=i' => \$unaff_quality,
-        'bar|progress' => \$progress,
-        'help' => \$help,
-        'manual' => \$man,
-        'p|print_matching' => \$print_matching) 
-or pod2usage(
-        -message => "Syntax error.",
-        -exitval => 2
+    'not_samples'             => \@ignore_samples,
+    'expression'              => \$regex,
+    'input'                   => \$vcf,
+    'output'                  => \$out,
+    'filter'                  => \@filter_vcfs,
+    'directories'             => \@dirs,
+    'samples'                 => \@samples,
+    'reject'                  => \@reject,
+    'allele_frequency_filter' => \$maf,
+    'threshold'               => \$threshold,
+    'filter_homozygotes'      => \$filter_homozygotes,
+    'quality'                 => \$min_qual,
+    'genotype_quality'        => \$minGQ,
+    'aff_quality'             => \$aff_quality,
+    'un_quality'              => \$unaff_quality,
+    'progress'                => \$progress,
+    cache                     => \$buffer_size,
+    forks                     => \$forks,
+    'help'                    => \$help,
+    'manual'                  => \$man,
+    'print_matching'          => \$print_matching
 );
 
-pod2usage(-verbose => 2) if $man;
-pod2usage(-verbose => 1) if $help;
-pod2usage(-message => "Syntax error", exitval => 2) if (not $vcf or (not @filter_vcfs and not @dirs));
-pod2usage(-message => "Syntax error - cannot use --reject and --not_samples argument together", exitval => 2) if (@reject and @ignore_samples);
-pod2usage(-message => "Variant quality scores must be 0 or greater.\n", -exitval => 2) if ($min_qual < 0 );
-pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) if ($minGQ < 0 );
-pod2usage(-message => "--allele_frequency_filter (-y) value must be between 0 and 1.\n", -exitval => 2) if ($maf < 0 or $maf > 1);
-if (defined $aff_quality){
-    pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) 
-        if $aff_quality < 0;
-}else{
+GetOptions(
+    \%opts,
+    'x|not_samples=s{,}'          => \@ignore_samples,
+    'expression=s'                => \$regex,
+    'input=s'                     => \$vcf,
+    'output=s'                    => \$out,
+    'f|filter=s{,}'               => \@filter_vcfs,
+    'directories=s{,}'            => \@dirs,
+    'samples=s{,}'                => \@samples,
+    'reject=s{,}'                 => \@reject,
+    'y|allele_frequency_filter=f' => \$maf,
+    'l|threshold=i'               => \$threshold,
+    'z|filter_homozygotes'        => \$filter_homozygotes,
+    'quality=f'                   => \$min_qual,
+    'genotype_quality=f'          => \$minGQ,
+    'a|aff_quality=i'             => \$aff_quality,
+    'un_quality=i'                => \$unaff_quality,
+    'bar|progress'                => \$progress,
+    "t|forks=i"                   => \$forks,
+    "cache=i",
+    'help'             => \$help,
+    'manual'           => \$man,
+    'p|print_matching' => \$print_matching
+  )
+  or pod2usage(
+    -message => "Syntax error.",
+    -exitval => 2
+  );
+
+pod2usage( -verbose => 2 ) if $man;
+pod2usage( -verbose => 1 ) if $help;
+pod2usage( -message => "Syntax error", exitval => 2 )
+  if ( not $vcf or ( not @filter_vcfs and not @dirs ) );
+pod2usage(
+    -message =>
+      "Syntax error - cannot use --reject and --not_samples argument together",
+    exitval => 2
+) if ( @reject and @ignore_samples );
+pod2usage(
+    -message => "Variant quality scores must be 0 or greater.\n",
+    -exitval => 2
+) if ( $min_qual < 0 );
+pod2usage(
+    -message => "Genotype quality scores must be 0 or greater.\n",
+    -exitval => 2
+) if ( $minGQ < 0 );
+pod2usage(
+    -message =>
+      "--allele_frequency_filter (-y) value must be between 0 and 1.\n",
+    -exitval => 2
+) if ( $maf < 0 or $maf > 1 );
+
+if ( defined $aff_quality ) {
+    pod2usage(
+        -message => "Genotype quality scores must be 0 or greater.\n",
+        -exitval => 2
+    ) if $aff_quality < 0;
+}
+else {
     $aff_quality = $minGQ;
 }
-if (defined $unaff_quality){
-    pod2usage(-message => "Genotype quality scores must be 0 or greater.\n", -exitval => 2) 
-        if $unaff_quality < 0;
-}else{
+if ( defined $unaff_quality ) {
+    pod2usage(
+        -message => "Genotype quality scores must be 0 or greater.\n",
+        -exitval => 2
+    ) if $unaff_quality < 0;
+}
+else {
     $unaff_quality = $minGQ;
 }
-my %ignores = ();
-if (@ignore_samples){
-    %ignores = map {$_ => 1 } @ignore_samples;
+
+my $cpus = Sys::CPU::cpu_count();
+if ( $forks < 2 ) {
+    $forks = 0;    #no point having overhead of forks for one fork
 }
-push @filter_vcfs, get_vcfs_from_directories(\@dirs, $regex) if @dirs;
-die "No VCFs found to use as filters.\n" if not @filter_vcfs;
-print STDERR "Initializing input VCF\n";
-my $vcf_obj = ParseVCF->new(file=> $vcf);
-my @filter_objs = ();
-my $current_f = 0;
-foreach my $filter(@filter_vcfs){
-    $current_f++;
-    my $filter_obj;
-    print STDERR "Initializing filter VCF $current_f of " . scalar@filter_vcfs . " ($filter)\n";
-    if ($filter =~ /\.gz$/){
-        $filter_obj = ParseVCF->new(file=> $filter, noLineCount => 1);
-    }else{
-        $filter_obj = ParseVCF->new(file=> $filter);
+else {
+    if ( $forks > $cpus ) {
+        print STDERR
+"[Warning]: Number of forks ($forks) exceeds number of CPUs on this machine ($cpus)\n";
     }
-    push @filter_objs, $filter_obj;
+    if ( not $buffer_size ) {
+        $buffer_size = 10000 > $forks * 1000 ? 10000 : $forks * 1000;
+    }
+    print STDERR
+"[INFO] Processing in batches of $buffer_size variants split among $forks forks.\n";
 }
-print STDERR "Done intializing filter VCFs.\n";
-my $OUT;
-if ($out){
-    open ($OUT, ">$out") or die "Can't open $out for writing: $!\n";
-}else{
-    $OUT = \*STDOUT;
-}
-my $prev_chrom = 0;
-my $progressbar;
-if ($progress){
-    if (not $vcf_obj->get_inputIsStdin){
-        $progressbar = Term::ProgressBar->new({name => "Filtering", count => $vcf_obj->countLines("variants"), ETA => "linear", });
-    }else{
-        print STDERR "Can't print a progress bar when input is from STDIN\n";
+push @filter_vcfs, get_vcfs_from_directories( \@dirs, $regex ) if @dirs;
+die "No VCFs found to use as filters.\n" if not @filter_vcfs;
+
+my $time = strftime( "%H:%M:%S", localtime );
+my $total_variants;
+print STDERR "[$time] Initializing input VCF... ";
+die "Header not ok for input ($vcf) "
+  if not VcfReader::checkHeader( vcf => $vcf );
+if ( defined $progress ) {
+    if ( $vcf eq "-" ) {
+        print STDERR "Can't use --progress option when input is from STDIN\n";
         $progress = 0;
     }
+    else {
+        $total_variants = VcfReader::countVariants($vcf);
+        print STDERR "$vcf has $total_variants variants. ";
+    }
 }
+my %contigs       = VcfReader::getContigOrder($vcf);
+my %sample_to_col = ();
+if (@samples) {
+    %sample_to_col = VcfReader::getSamples(
+        vcf         => $vcf,
+        get_columns => 1,
+    );
+}
+
+$time = strftime( "%H:%M:%S", localtime );
+print STDERR "\n[$time] Finished initializing input VCF\n";
+
+my %filter_vcf_to_index = ();
+my %filter_vcf_samples   = ();
+my $dbpm                 = Parallel::ForkManager->new($forks);
+for ( my $i = 0 ; $i < @filter_vcfs ; $i++ ) {
+    $dbpm->run_on_finish(    # called BEFORE the first call to start()
+        sub {
+            my ( $pid, $exit_code, $ident, $exit_signal, $core_dump,
+                $data_structure_reference )
+              = @_;
+
+            if ( defined($data_structure_reference) ) {
+                if ( ref $data_structure_reference eq 'ARRAY' ) {
+                    $filter_vcf_to_index{ $data_structure_reference->[2] } =
+                      $data_structure_reference->[0];
+                    $filter_vcf_samples{ $data_structure_reference->[2] } =
+                      $data_structure_reference->[1];
+                }
+                else {
+                    die
+                      "Unexpected return from dbSNP reference initialization:\n"
+                      . Dumper $data_structure_reference;
+                }
+            }
+            else {    # problems occuring during storage or retrieval
+                die "No message received from child process $pid!\n";
+            }
+        }
+    );
+    $time = strftime( "%H:%M:%S", localtime );
+    print STDERR "[$time] Initializing $filter_vcfs[$i] filter reference VCF "
+      . ( $i + 1 ) . " of "
+      . scalar(@filter_vcfs) . "\n";
+    $dbpm->start() and next;
+    my @index_and_samp = initializeFilterVcfs( $filter_vcfs[$i] );
+    push @index_and_samp, $filter_vcfs[$i];
+    $time = strftime( "%H:%M:%S", localtime );
+    print STDERR "[$time] Finished initializing $filter_vcfs[$i] filter VCF.\n";
+    $dbpm->finish( 0, \@index_and_samp );
+}
+$dbpm->wait_all_children;
+
+#only retain samples from filter vcfs if not specified by --not_samples argument
+#if --reject argument is used only keep samples specified by --reject
+#if neither argument is used keep all
+foreach my $f ( keys %filter_vcf_samples ) {
+    foreach my $ignore (@ignore_samples) {
+        if ( exists $filter_vcf_samples{$f}->{$ignore} ) {
+            delete $filter_vcf_samples{$f}->{$ignore};
+        }
+    }
+    if (@reject) {
+        foreach my $samp ( keys %{ $filter_vcf_samples{$f} } ) {
+            if ( not grep { $_ eq $samp } @reject ) {
+                delete $filter_vcf_samples{$f}->{$samp};
+            }
+        }
+    }
+}
+my $OUT;
+if ($out) {
+    open( $OUT, ">$out" ) or die "Can't open $out for writing: $!\n";
+}
+else {
+    $OUT = \*STDOUT;
+}
+
+my $prev_chrom = 0;
+my $progressbar;
 my $next_update = 0;
-my $n = 0;
-print $OUT  $vcf_obj->getHeader(0);
+if ($progress) {
+    $progressbar = Term::ProgressBar->new(
+        {
+            name  => "Filtering",
+            count => $total_variants * 3,
+
+            #ETA   => "linear",
+        }
+    );
+}
+
+my $meta_head = VcfReader::getMetaHeader( $vcf );
+
+print $OUT "$meta_head\n";
 print $OUT "##filterVcfOnVcf.pl=\"";
 my @opt_string = ();
-foreach my $k (sort keys %opts){
-    if (not ref $opts{$k}){
+foreach my $k ( sort keys %opts ) {
+    if ( not ref $opts{$k} ) {
         push @opt_string, "$k=$opts{$k}";
-    }elsif (ref $opts{$k} eq 'SCALAR'){
-        if (defined ${$opts{$k}}){
+    }
+    elsif ( ref $opts{$k} eq 'SCALAR' ) {
+        if ( defined ${ $opts{$k} } ) {
             push @opt_string, "$k=${$opts{$k}}";
-        }else{
+        }
+        else {
             push @opt_string, "$k=undef";
         }
-    }elsif (ref $opts{$k} eq 'ARRAY'){
-        if (@{$opts{$k}}){
-            push @opt_string, "$k=" .join(",", @{$opts{$k}});
-        }else{
+    }
+    elsif ( ref $opts{$k} eq 'ARRAY' ) {
+        if ( @{ $opts{$k} } ) {
+            push @opt_string, "$k=" . join( ",", @{ $opts{$k} } );
+        }
+        else {
             push @opt_string, "$k=undef";
         }
     }
 }
-print $OUT join(" ", @opt_string) . "\"\n" .  $vcf_obj->getHeader(1);
-my $lines_filtered = 0;
-my $lines_passed = 0;
-LINE: while (my $line = $vcf_obj->readLine){
+my $col_header = VcfReader::getColumnHeader($vcf);
+print $OUT join( " ", @opt_string ) . "\"\n" . $col_header . "\n";
+my $kept             = 0;
+my $filtered         = 0;
+my $n                = 0;
+my $variants_done    = 0;
+my @lines_to_process = ();
+my $VCF              = VcfReader::_openFileHandle($vcf);
+my %no_fork_args = ();
+if ($forks < 2){
+    foreach my $f (@filter_vcfs) {
+        my %s = VcfReader::getSearchArguments( $f, $filter_vcf_to_index{$f} );
+        $no_fork_args{$f} = \%s;
+    }
+}
+LINE: while ( my $line = <$VCF> ) {
+    next if $line =~ /^#/;
+    $variants_done++;
     $n++;
-    if ($progress){
+    if ($progress) {
         $next_update = $progressbar->update($n) if $n >= $next_update;
     }
-    my $qual = $vcf_obj->getVariantField('QUAL');
-    my $chrom = $vcf_obj->getVariantField('CHROM');
-    next LINE if $qual < $min_qual;
+    if ( $forks > 1 ) {
+        push @lines_to_process, $line;
+        if ($progressbar) {
+            $next_update = $progressbar->update($n) if $n >= $next_update;
+        }
+        if ( @lines_to_process >= $buffer_size ) {
+            process_buffer();
+            @lines_to_process = ();
+        }
+    }
+    else {
+        my @split = split( "\t", $line );
+        my $l = filter_on_vcf( \@split, \%no_fork_args );
+        if ($l) {
+            print $OUT $line;
+            $kept++;
+        }
+        else {
+            $filtered++;
+        }
+        $n += 2;
+        if ($progressbar) {
+            $next_update = $progressbar->update($n) if $n >= $next_update;
+        }
+    }
+}
+process_buffer() if $forks > 1;
+if ($progressbar) {
+    $progressbar->update( $total_variants * 3 )
+      if $total_variants * 3 >= $next_update;
+}
+$time = strftime( "%H:%M:%S", localtime );
+print STDERR
+  "[$time] $filtered matching variants filtered, $kept printed ";
+print STDERR "($total_variants total)" if $total_variants;
+print STDERR "\n";
 
-    #process each allele separately in case we have MNVs/deletions that need to be simplified
-    
-    my %min_vars = $vcf_obj->minimizeAlleles();
+################################################
+#####################SUBS#######################
+################################################
+sub process_buffer {
+    return if not @lines_to_process;
+    my @lines_to_print;
+    my $lines_per_slice = @lines_to_process;
+    if ( $forks > 0 ) {
+        $lines_per_slice =
+            int( @lines_to_process / $forks ) > 1
+          ? int( @lines_to_process / $forks )
+          : 1;
+    }
+    my @batch = ();
+
+    #get a batch for each thread
+    for ( my $i = 0 ; $i < @lines_to_process ; $i += $lines_per_slice ) {
+        my $last =
+          ( $i + $lines_per_slice - 1 ) < $#lines_to_process
+          ? $i + $lines_per_slice - 1
+          : $#lines_to_process;
+        if ( $i + $lines_per_slice >= @lines_to_process ) {
+            $last = $#lines_to_process;
+        }
+        my @temp = @lines_to_process[ $i .. $last ];
+        push @batch, \@temp;
+    }
+    my $pm = Parallel::ForkManager->new($forks);
+    $pm->run_on_finish(    # called BEFORE the first call to start()
+        sub {
+            my ( $pid, $exit_code, $ident, $exit_signal, $core_dump,
+                $data_structure_reference )
+              = @_;
+
+            if ( defined($data_structure_reference) ) {
+                my %res = %{$data_structure_reference};
+                if ( ref $res{keep} eq 'ARRAY' ) {
+                    push @lines_to_print, \@{ $res{keep} } if @{ $res{keep} };
+                }
+                if ( $res{filter} ) {
+                    $filtered += $res{filter};
+                }
+                if ($progressbar) {
+                    $n += $res{batch_size};
+                    $next_update = $progressbar->update($n)
+                      if $n >= $next_update;
+                }
+            }
+            else {
+                die "ERROR: no message received from child process $pid!\n";
+            }
+        }
+    );
+    foreach my $b (@batch) {
+        $pm->start() and next;
+        my %results = process_batch($b);
+        $pm->finish( 0, \%results );
+    }
+    $pm->wait_all_children;
+
+    #print them
+    @lines_to_print =
+      sort { VcfReader::by_first_last_line( $a, $b, \%contigs ) }
+      @lines_to_print;
+    if (@lines_to_print) {
+        my $incr_per_batch = @lines_to_process / @lines_to_print;
+        foreach my $batch (@lines_to_print) {
+            my $incr_per_line = $incr_per_batch / @$batch;
+            foreach my $l (@$batch) {
+                if ( ref $l eq 'ARRAY' ) {
+                    print $OUT join( "\t", @$l ) . "\n";
+                }
+                else {
+                    print $OUT "$l\n";
+                }
+                $kept++;
+                if ($progressbar) {
+                    $n += $incr_per_line;
+                    $next_update = $progressbar->update($n)
+                      if $n >= $next_update;
+                }
+            }
+        }
+    }
+    else {
+        if ($progressbar) {
+            $n += @lines_to_process;
+            $next_update = $progressbar->update($n) if $n >= $next_update;
+        }
+    }
+}
+
+################################################
+sub process_batch {
+
+    #filter a set of lines
+    my ($batch) = @_;
+    my %sargs;
+    foreach my $f (@filter_vcfs) {
+
+        #WE'VE FORKED AND COULD HAVE A RACE CONDITION HERE -
+        # WHICH IS WHY WE DO A FIRST PASS WITH OUR initializeDbsnpVcfs
+        # METHOD TOWARDS THE START OF THE PROGRAM
+        my %s = VcfReader::getSearchArguments( $f, $filter_vcf_to_index{$f} );
+        $sargs{$f} = \%s;
+    }
+    my %results = ( batch_size => scalar(@$batch) );
+    foreach my $line ( @{$batch} ) {
+        chomp $line;
+        my @split = split( "\t", $line );
+        my $l = filter_on_vcf( \@split, \%sargs );
+        if ($l) {
+            push @{ $results{keep} }, $l;
+        }
+        else {
+            $results{filter}++;
+        }
+    }
+    return %results;
+}
+
+################################################
+sub filter_on_vcf {
+    my ( $vcf_line, $search_args ) = @_;
+    my $qual  = VcfReader::getVariantField( $vcf_line, 'QUAL' );
+    my $chrom = VcfReader::getVariantField( $vcf_line, 'CHROM' );
+    if ($qual < $min_qual){
+        return;
+    }
+
+#process each allele separately in case we have MNVs/deletions that need to be simplified
+
+    my %min_vars       = VcfReader::minimizeAlleles( $vcf_line, );
     my %sample_alleles = ();
-    if (@samples){
-        %sample_alleles = map{$_ => undef}  $vcf_obj->getSampleCall(multiple => \@samples, return_alleles_only => 1, minGQ => $aff_quality);
+    if (@samples) {
+        %sample_alleles = map { $_ => undef } VcfReader::getSampleCall(
+            line                => $vcf_line,
+            multiple            => \@samples,
+            return_alleles_only => 1,
+            minGQ               => $aff_quality,
+            sample_to_columns   => \%sample_to_col
+        );
         delete $sample_alleles{0};
         delete $sample_alleles{'.'};
-        next LINE if not keys %sample_alleles;#filter if we don't have any variants in our samples 
-    }else{
-    #if no samples specified use all alleles for %sample_alleles
-        %sample_alleles = map {$_ => undef} keys %min_vars;
+        return
+          if not keys
+          %sample_alleles;  #filter if we don't have any variants in our samples
     }
-    my %sample_matches = ();#check each allele matches in all filter_vcfs but don't reset after each file
-    my %thresh_counts = ();#count samples in all filter_vcfs i.e. don't reset after each file
-    my %af_counts  ;#count allele occurences and total alleles to calculate allele frequency
-    my %f_genos = ();#store genotypes as keys if we're using $filter_homozygotes
-    
-FILTER: foreach my $filter_obj(@filter_objs){
-        my @temp_reject = ();
-        if (@ignore_samples){
-            @temp_reject = $filter_obj->getSampleNames() ;
-            @temp_reject = grep {! $ignores{$_} } @temp_reject;
-        }else{
-            push @temp_reject, @reject;
-        }
-ALLELE:   foreach my $allele (keys %sample_alleles){
-            if ($filter_obj->searchForPosition(chrom => $min_vars{$allele}->{CHROM}, pos => $min_vars{$allele}->{POS})){
+    else {
+        #if no samples specified use all alleles for %sample_alleles
+        %sample_alleles = map { $_ => undef } keys %min_vars;
+    }
+    my %sample_matches = ()
+      ; #check each allele matches in all filter_vcfs but don't reset after each file
+    my %thresh_counts =
+      ();    #count samples in all filter_vcfs i.e. don't reset after each file
+    my %af_counts
+      ; #count allele occurences and total alleles to calculate allele frequency
+    my %f_genos =
+      ();    #store genotypes as keys if we're using $filter_homozygotes
+
+  FILTER: foreach my $f (@filter_vcfs) {
+        my @temp_reject = keys %{ $filter_vcf_samples{$f} };
+      ALLELE: foreach my $allele ( keys %sample_alleles ) {
+            if (
+                my @snp_hits = VcfReader::searchForPosition(
+                    %{ $search_args->{$f} },
+                    chrom => $min_vars{$allele}->{CHROM},
+                    pos   => $min_vars{$allele}->{POS}
+                )
+              )
+            {
                 my %f_alts = ();
+
                 #get genotype call codes (0, 1, 2 etc.) for filter samples
-FILTER_LINE:    while (my $filter_line = $filter_obj->readPosition()){
-                    if ($min_qual){
-                        my $filter_qual = $filter_obj->getVariantField('QUAL');
+              FILTER_LINE: foreach my $snp_line (@snp_hits) {
+                    my @snp_split = split( "\t", $snp_line );
+                    if ($min_qual) {
+                        my $filter_qual =
+                          VcfReader::getVariantField( \@snp_split, 'QUAL' );
                         next FILTER_LINE if $filter_qual < $min_qual;
                     }
-                    my %filter_min = $filter_obj->minimizeAlleles();
-                    if (@temp_reject){
-                        #%f_alts = map {$_ => undef} $filter_obj->getSampleActualGenotypes(multiple => \@temp_reject, return_alleles_only => 1, minGQ => $unaff_quality);
-                        %f_alts = map{$_ => undef}  $filter_obj->getSampleCall(multiple => \@temp_reject, return_alleles_only => 1, minGQ => $unaff_quality);
-                        if ($filter_homozygotes){
-                            my %genos = $filter_obj->getSampleCall(multiple => \@temp_reject, minGQ => $unaff_quality);
-                            %genos = reverse %genos;
-                            foreach my $k (keys %genos){
-                                $f_genos{$k}++;
-                            }
-                        }
-                    }elsif(not @reject and not @ignore_samples){
-                        #%f_alts = map {$_ => undef} $filter_obj->readAlleles(alt_alleles=>1, minGQ => $unaff_quality);
-                        %f_alts = map{$_ => undef}  $filter_obj->getSampleCall(all => 1, return_alleles_only => 1, minGQ => $unaff_quality);
-                        if ($filter_homozygotes){
-                            my %genos = $filter_obj->getSampleCall(all => 1, minGQ => $unaff_quality);
-                            %genos = reverse %genos;
-                            foreach my $k (keys %genos){
-                                $f_genos{$k}++;
-                            }
+                    my %filter_min = VcfReader::minimizeAlleles( \@snp_split, );
+
+#%f_alts = map {$_ => undef} $filter_obj->getSampleActualGenotypes(multiple => \@temp_reject, return_alleles_only => 1, minGQ => $unaff_quality);
+                    %f_alts = map { $_ => undef } VcfReader::getSampleCall(
+                        line                => \@snp_split,
+                        multiple            => \@temp_reject,
+                        sample_to_columns   => $filter_vcf_samples{$f},
+                        return_alleles_only => 1,
+                        minGQ               => $unaff_quality
+                    );
+                    if ($filter_homozygotes) {
+                        my %genos = VcfReader::getSampleCall(
+                            \@snp_split,
+                            multiple         => \@temp_reject,
+                            minGQ            => $unaff_quality,
+                            sample_to_columns=> $filter_vcf_samples{$f},
+                        );
+                        %genos = reverse %genos;
+                        foreach my $k ( keys %genos ) {
+                            $f_genos{$k}++;
                         }
                     }
-                    my $filter_match = '';#if one of the filter's ALTs matches store the ALT allele code here
-ALT:                foreach my $alt (keys %f_alts){
-                        next if $alt eq '.';
-                        next if $alt == 0;
-                        next if $min_vars{$allele}->{POS} ne $filter_min{$alt}->{POS};
-                        next if $min_vars{$allele}->{REF} ne $filter_min{$alt}->{REF};
-                        next if $min_vars{$allele}->{ALT} ne $filter_min{$alt}->{ALT};
+                    my $filter_match = ''
+                      ; #if one of the filter's ALTs matches store the ALT allele code here
+                  ALT: foreach my $alt ( keys %f_alts ) {
+                        next ALT if $alt eq '.';
+                        next ALT if $alt == 0;
+                        next ALT
+                          if $min_vars{$allele}->{POS} ne
+                          $filter_min{$alt}->{POS};
+                        next ALT
+                          if $min_vars{$allele}->{REF} ne
+                          $filter_min{$alt}->{REF};
+                        next ALT
+                          if $min_vars{$allele}->{ALT} ne
+                          $filter_min{$alt}->{ALT};
                         $min_vars{$allele}->{CHROM} =~ s/^chr//;
                         $filter_min{$alt}->{CHROM} =~ s/^chr//;
-                        next if $min_vars{$allele}->{CHROM} ne $filter_min{$alt}->{CHROM};
-                        if ($filter_homozygotes and not $threshold and not $maf){
-                        #is using $filter_homozygotes on its own we only consider something a
-                        #'match' if it's homozygous
-                            if (exists $f_genos{"$alt/$alt"} or exists $f_genos{"$alt|$alt"}){
+                        next ALT
+                          if $min_vars{$allele}->{CHROM} ne
+                          $filter_min{$alt}->{CHROM};
+
+                        if (    $filter_homozygotes
+                            and not $threshold
+                            and not $maf )
+                        {
+           #is using $filter_homozygotes on its own we only consider something a
+           #'match' if it's homozygous
+                            if (   exists $f_genos{"$alt/$alt"}
+                                or exists $f_genos{"$alt|$alt"} )
+                            {
                                 $filter_match = $alt;
                                 $sample_matches{$allele}++;
                                 last ALT;
                             }
-                        }else{
+                        }
+                        else {
                             $filter_match = $alt;
                             $sample_matches{$allele}++;
                             last ALT;
                         }
                     }
-                    if (not $filter_match){
+                    if ( not $filter_match ) {
                         next FILTER_LINE;
                     }
-                        
-                    if ($threshold){
-                        my @t_samples = ();
-                        if (@temp_reject){
-                            @t_samples = @temp_reject;
-                        }elsif(not @reject and not @ignore_samples){
-                            @t_samples = $filter_obj->getSampleNames();
-                        }
-                        foreach my $t_samp(@t_samples){
-                            my %t_alleles = map { $_ => undef } $filter_obj->getSampleCall(sample => $t_samp, return_alleles_only => 1, minGQ => $unaff_quality);
-                            if (exists $t_alleles{$filter_match}){
+
+                    if ($threshold) {
+                        foreach my $t_samp (@temp_reject) {
+                            my %t_alleles =
+                              map { $_ => undef } VcfReader::getSampleCall(
+                                \@snp_split,
+                                sample              => $t_samp,
+                                return_alleles_only => 1,
+                                minGQ               => $unaff_quality,
+                                sample_to_columns   => $filter_vcf_samples{$f},
+                              );
+                            if ( exists $t_alleles{$filter_match} ) {
                                 $thresh_counts{$allele}++;
                             }
                         }
-                        #foreach my $alt (@alts){
-                         #   next FILTER_LINE if not exists $thresh_counts{$alt};
-                          #  next FILTER_LINE if $thresh_counts{$alt} < $threshold;
-                        #}
+
+                       #foreach my $alt (@alts){
+                       #   next FILTER_LINE if not exists $thresh_counts{$alt};
+                       #  next FILTER_LINE if $thresh_counts{$alt} < $threshold;
+                       #}
                     }
-                    if ($maf){
-                        my %f_allele_counts = $filter_obj->countAlleles(minGQ => $unaff_quality);
-                        foreach my $f_al (keys %f_allele_counts){
-                            if ($f_al eq $filter_match){
-                                $af_counts{$allele}->{counts} += $f_allele_counts{$f_al};
+                    if ($maf) {
+                        my %f_allele_counts =
+                          VcfReader::countAlleles( \@snp_split,
+                            minGQ => $unaff_quality );
+                        foreach my $f_al ( keys %f_allele_counts ) {
+                            if ( $f_al eq $filter_match ) {
+                                $af_counts{$allele}->{counts} +=
+                                  $f_allele_counts{$f_al};
                             }
-                            $af_counts{$allele}->{total} += $f_allele_counts{$f_al};
+                            $af_counts{$allele}->{total} +=
+                              $f_allele_counts{$f_al};
                         }
                     }
-                }#read pos
-            }#search
-        }#foreach allele
-        #done each allele - see if we've got enough data to filter this line
-        #and can skip other filter vcfs for win
-        next FILTER if keys %sample_alleles != keys %sample_matches;#can't skip - not all alleles accounted for
+                }    #read pos
+            }    #search
+        }   #foreach allele
+            #done each allele - see if we've got enough data to filter this line
+            #and can skip other filter vcfs for win
+        next FILTER
+          if keys %sample_alleles !=
+          keys %sample_matches;    #can't skip - not all alleles accounted for
         my $homozygous_alleles = 0;
-        if ($filter_homozygotes){
-            foreach my $allele (keys %sample_alleles){
-                if (exists $f_genos{"$allele/$allele"} or exists $f_genos{"$allele|$allele"}){
+        if ($filter_homozygotes) {
+            foreach my $allele ( keys %sample_alleles ) {
+                if (   exists $f_genos{"$allele/$allele"}
+                    or exists $f_genos{"$allele|$allele"} )
+                {
                     $homozygous_alleles++;
                 }
             }
-            if ($homozygous_alleles == keys %sample_alleles){
-                $lines_filtered++;
-                if ($print_matching){
-                    print $OUT "$line\n";
-                    next LINE;
-                }else{
-                    next LINE;
+            if ( $homozygous_alleles == keys %sample_alleles ) {
+                if ($print_matching) {
+                    return $vcf_line;
+                }
+                else {
+                    return;
                 }
             }
         }
 
-        foreach my $allele (keys %sample_alleles){
-            if ($threshold){
-                next FILTER if $thresh_counts{$allele} < $threshold;   
+        foreach my $allele ( keys %sample_alleles ) {
+            if ($threshold) {
+                next FILTER if $thresh_counts{$allele} < $threshold;
             }
-        }#if we haven't gone to next FILTER and 
-        #are not filtering on allele frequency we can filter this line
-        #no need to look at other filter_vcfs
-        if (not $maf){
-            $lines_filtered++;
-            if ($print_matching){
-                print $OUT "$line\n";
-                next LINE;
-            }else{
-                next LINE;
+        }    #if we haven't gone to next FILTER and
+             #are not filtering on allele frequency we can filter this line
+             #no need to look at other filter_vcfs
+        if ( not $maf ) {
+            if ($print_matching) {
+                return $vcf_line;
+            }
+            else {
+                return;
             }
         }
-    }#foreach filter vcf
-    #no line meeting criteria for allele in any filter vcf
-    #now check allele frequency if given
-    if ($maf){
+    }    #foreach filter vcf
+         #no line meeting criteria for allele in any filter vcf
+         #now check allele frequency if given
+    if ($maf) {
         my $alleles_over_maf = 0;
-COUNTS: foreach my $allele (keys %sample_alleles){
+      COUNTS: foreach my $allele ( keys %sample_alleles ) {
             last COUNTS if not exists $af_counts{$allele};
-            if (($af_counts{$allele}->{counts}/$af_counts{$allele}->{total}) >= $maf){
-                $alleles_over_maf++ 
-            }else{
+            if (
+                (
+                    $af_counts{$allele}->{counts} / $af_counts{$allele}->{total}
+                ) >= $maf
+              )
+            {
+                $alleles_over_maf++;
+            }
+            else {
                 last COUNTS;
             }
         }
-        if ($alleles_over_maf == keys %sample_alleles){
-            $lines_filtered++;
-            if ($print_matching){
-                print $OUT "$line\n";
-                next LINE;
-            }else{
-                next LINE;
+        if ( $alleles_over_maf == keys %sample_alleles ) {
+            if ($print_matching) {
+                return $vcf_line;
+            }
+            else {
+                return;
             }
         }
     }
-    $lines_passed++;
-    print $OUT "$line\n" if not $print_matching; 
-}#readline
-if ($progressbar){
-        $progressbar->update($vcf_obj->countLines("variants")) if $vcf_obj->countLines("variants") >= $next_update;
+    if ($print_matching) {
+        return;
+    }
+    else {
+        return $vcf_line;
+    }
 }
-if ($print_matching){
-    print STDERR "$lines_filtered matching variants printed, $lines_passed filtered ";
-}else{
-    print STDERR "$lines_filtered matching variants filtered, $lines_passed printed ";
-}
-if (not $vcf_obj->get_inputIsStdin){
-    print STDERR "(" .$vcf_obj->countLines("variants") . " total)";
-}
-print STDERR "\n";
+#################################################
+sub initializeFilterVcfs {
+    my ($snpfile) = @_;
 
-##################
-sub get_vcfs_from_directories{
-    my ($dirs, $regex) = @_;
+    #we getSearchArguments here simply to prevent a race condition later
+    my @head = VcfReader::getHeader($snpfile);
+    die "Header not ok for $snpfile "
+      if not VcfReader::checkHeader( header => \@head );
+
+    #my %sargs = VcfReader::getSearchArguments($snpfile);
+    my %index = VcfReader::readIndex($snpfile);
+    my %samp  = VcfReader::getSamples(
+        vcf         => $snpfile,
+        get_columns => 1
+    );
+    return ( \%index, \%samp );
+}
+
+#################################################
+sub get_vcfs_from_directories {
+    my ( $dirs, $regex ) = @_;
     my @vcfs = ();
-    foreach my $d (@$dirs){
+    foreach my $d (@$dirs) {
         $d =~ s/\/$//;
-        opendir (my $DIR, $d) or die "Can't open directory $d: $!\n";
+        opendir( my $DIR, $d ) or die "Can't open directory $d: $!\n";
+
         #my @dir_vcfs = grep {/\.vcf(\.gz)*$/i} readdir $DIR;
-        my @dir_vcfs = grep {/\.vcf$/i} readdir $DIR;#can't use gzipped vcfs with ParseVCF search functions
-        if (not @dir_vcfs){
+        my @dir_vcfs =
+          grep { /\.vcf$/i }
+          readdir $DIR;   #can't use gzipped vcfs with ParseVCF search functions
+        if ( not @dir_vcfs ) {
             print STDERR "WARNING - no VCF files in directory $d\n";
-        }elsif ($regex){
-            @dir_vcfs = grep {/$regex/} @dir_vcfs;
-            if (not @dir_vcfs){
-                print STDERR "WARNING - no VCF files matching regex /$regex/ in directory $d\n" if not @dir_vcfs;
-            }else{
-                foreach my $v (@dir_vcfs){
+        }
+        elsif ($regex) {
+            @dir_vcfs = grep { /$regex/ } @dir_vcfs;
+            if ( not @dir_vcfs ) {
+                print STDERR
+"WARNING - no VCF files matching regex /$regex/ in directory $d\n"
+                  if not @dir_vcfs;
+            }
+            else {
+                foreach my $v (@dir_vcfs) {
                     push @vcfs, "$d/$v";
                 }
             }
-        }else{
-            foreach my $v (@dir_vcfs){
+        }
+        else {
+            foreach my $v (@dir_vcfs) {
                 push @vcfs, "$d/$v";
             }
         }
