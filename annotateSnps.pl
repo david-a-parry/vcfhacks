@@ -84,13 +84,14 @@ if ( $opts{known_snps} ) {
       || die "Can't open $opts{known_snps} for writing: $!";
 }
 my $progressbar;
-my $next_update     = 0;
-my $prev_percent    = 0;
-my $kept            = 0;    #variants not filtered
-my $filtered        = 0;    #variants filtered
-my $pathogenic_snps = 0;
-my $found           = 0;    #variants that match a known SNP
-my $total_vcf       = 0;
+my $next_update      = 0;
+my $prev_percent     = 0;
+my $kept             = 0;    #variants not filtered
+my $filtered         = 0;    #variants filtered
+my $pathogenic_snps  = 0;
+my $found            = 0;    #variants that match a known SNP
+my $printed_to_known = 0;
+my $total_vcf        = 0;
 my $time = strftime( "%H:%M:%S", localtime );
 print STDERR "[$time] Initializing input VCF... ";
 
@@ -265,13 +266,19 @@ if ( defined $opts{Progress} and $total_vcf ) {
     $prog_total = $total_vcf * $x_prog;
     if ( $opts{build} || $freq ) {
         $progressbar = Term::ProgressBar->new(
-            #{ name => "Filtering", count => ($prog_total), ETA => "linear", } );
-            { name => "Filtering", count => ($prog_total), } );
+            { name => "Filtering", 
+              count => ($prog_total), 
+              ETA => "linear" 
+            } 
+        );
     }
     else {
         $progressbar = Term::ProgressBar->new(
             #{ name => "Annotating", count => ($prog_total), ETA => "linear", }
-            { name => "Annotating", count => ($prog_total), }
+            { name => "Annotating", 
+              count => ($prog_total), 
+              ETA => "linear" 
+            } 
         );
     }
 
@@ -307,11 +314,15 @@ VAR: while ( my $line = <$VCF> ) {
         my %res = filterSnps( \@split_line, \%no_fork_args);
         print $OUT "$line\n" if $res{keep};
         $filtered++ if $res{filter};
+        $found++ if $res{found};
         $pathogenic_snps++ if  $res{pathogenic} ;
         $n += 2;
         if ($KNOWN){
             $n++;
-            print $KNOWN "$line\n" if $res{known};
+             if ($res{known}){
+                print $KNOWN "$line\n";
+                $printed_to_known++;
+            }
         }
         if ($progressbar) {
             $next_update = $progressbar->update($n) if $n >= $next_update;
@@ -332,6 +343,9 @@ print STDERR "$filtered SNPs filtered, $kept variants retained.\n";
 print STDERR
   "$pathogenic_snps pathogenic or probable pathogenic variants identified.\n"
   if $pathogenic_snps;
+print STDERR 
+  "$printed_to_known SNPs matching user-specified criteria printed to $opts{known_snps}.\n" 
+    if $KNOWN;
 
 ################################################
 #####################SUBS#######################
@@ -386,6 +400,9 @@ sub process_buffer {
                 }
                 if ( ref $res{known} eq 'ARRAY' ) {
                     push @known, \@{ $res{known} } if @{ $res{known} };
+                }
+                if ( $res{found}  ) {
+                    $found += $res{found} ;
                 }
                 if ($progressbar) {
                     $n += $res{batch_size};
@@ -445,7 +462,7 @@ sub process_buffer {
                     else {
                         print $KNOWN "$l\n";
                     }
-                    $found++;
+                    $printed_to_known++;
                     if ($progressbar) {
                         $n += $incr_per_line;
                         $next_update = $progressbar->update($n)
@@ -462,7 +479,7 @@ sub process_buffer {
     }
     else {
         foreach my $batch (@known) {
-            $found += @$batch;
+            $printed_to_known += @$batch;
         }
     }
 }
@@ -491,6 +508,7 @@ sub process_batch {
         $results{filter}++  if $res{filter};
         push @{ $results{known} },  $res{known}  if $res{known};
         $results{pathogenic}++  if $res{pathogenic};
+        $results{found}++  if $res{found};
     }
     foreach my $d (keys %sargs){
         if (exists $sargs{$d}->{file_handle}){
@@ -662,7 +680,7 @@ sub filterSnps {
     }
 
     #print STDERR "DEBUG: RETURNING FROM THREAD $thread\n" if $opts{VERBOSE};
-    return ( keep => $keep, known => $known, filter => $filter, pathogenic => $pathogenic );
+    return ( keep => $keep, known => $known, found => $is_known_snp, filter => $filter, pathogenic => $pathogenic );
 }
 
 ################################################
