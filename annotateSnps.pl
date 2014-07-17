@@ -312,7 +312,10 @@ VAR: while ( my $line = <$VCF> ) {
         #our VcfReader methods should be more efficient on pre-split lines
         my @split_line = split( "\t", $line );
         my %res = filterSnps( \@split_line, \%no_fork_args);
-        print $OUT "$line\n" if $res{keep};
+        if ($res{keep}){
+            print $OUT join("\t", @{$res{keep}}) ."\n"; 
+            $kept++;
+        }
         $filtered++ if $res{filter};
         $found++ if $res{found};
         $pathogenic_snps++ if  $res{pathogenic} ;
@@ -320,7 +323,7 @@ VAR: while ( my $line = <$VCF> ) {
         if ($KNOWN){
             $n++;
              if ($res{known}){
-                print $KNOWN "$line\n";
+                print $KNOWN join("\t", @{$res{known}}) ."\n"; 
                 $printed_to_known++;
             }
         }
@@ -330,21 +333,21 @@ VAR: while ( my $line = <$VCF> ) {
     }
 }
 close $VCF;
-close $KNOWN if $KNOWN;
 process_buffer() if $forks > 1;
 close $OUT;
+close $KNOWN if $KNOWN;
 if ( defined $opts{Progress} ) {
     $progressbar->update($prog_total) if $prog_total >= $next_update;
 }
 $time = strftime( "%H:%M:%S", localtime );
 print STDERR "\nTime finished: $time\n";
 print STDERR "$found known SNPs identified.\n";
-print STDERR "$filtered SNPs filtered, $kept variants retained.\n";
+print STDERR "$filtered variants filtered, $kept variants retained.\n";
 print STDERR
   "$pathogenic_snps pathogenic or probable pathogenic variants identified.\n"
   if $pathogenic_snps;
 print STDERR 
-  "$printed_to_known SNPs matching user-specified criteria printed to $opts{known_snps}.\n" 
+  "$printed_to_known variants matching user-specified criteria printed to $opts{known_snps}.\n" 
     if $KNOWN;
 
 ################################################
@@ -422,10 +425,10 @@ sub process_buffer {
     $pm->wait_all_children;
 
     #print them
-    @lines_to_print = sort {
-        VcfReader::by_first_last_line($a, $b, \%contigs) 
-        } @lines_to_print;
     if (@lines_to_print){
+        @lines_to_print = sort {
+            VcfReader::by_first_last_line($a, $b, \%contigs) 
+            } @lines_to_print;
         my $incr_per_batch = @lines_to_process / @lines_to_print;
         foreach my $batch (@lines_to_print) {
             my $incr_per_line = $incr_per_batch / @$batch;
@@ -450,8 +453,10 @@ sub process_buffer {
         }
     }
     if ($KNOWN) {
-        @known = sort by_first_last_line (@known);
         if (@known){
+            @known = sort {
+                VcfReader::by_first_last_line($a, $b, \%contigs) 
+                } @known;
             my $incr_per_batch = @lines_to_process / @known;
             foreach my $k (@known) {
                 my $incr_per_line = $incr_per_batch / @$k;
