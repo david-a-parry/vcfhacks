@@ -47,7 +47,6 @@ pod2usage( -exitval => 2, -message => "Syntax error" )
 
 if ( $forks < 2 ) {
     $forks = 0;    #no point having overhead of forks for one fork
-    $buffer_size = 1000 if not $buffer_size;
 }
 else {
     if ($forks > $cpus){
@@ -56,9 +55,9 @@ else {
     if ( not $buffer_size ) {
         $buffer_size = 10000 > $forks * 1000 ? 10000 : $forks * 1000;
     }
-}
-print STDERR
+    print STDERR
 "[INFO] Processing in batches of $buffer_size variants split among $forks forks.\n";
+}
 if ( defined $freq ) {
     pod2usage(
         -exitval => 2,
@@ -99,7 +98,7 @@ die "Header not ok for input ($opts{input}) "
     if not VcfReader::checkHeader( vcf => $opts{input} );
 if ( defined $opts{Progress} ) {
     $total_vcf = VcfReader::countVariants( $opts{input} );
-    print STDERR "$opts{input} has $total_vcf variants";
+    print STDERR "$opts{input} has $total_vcf variants. ";
 }
 my %contigs       = VcfReader::getContigOrder( $opts{input} );
 my %sample_to_col = ();
@@ -282,25 +281,46 @@ if ( defined $opts{Progress} and $total_vcf ) {
 my $n                = 0;
 my @lines_to_process = ();
 my $VCF              = VcfReader::_openFileHandle( $opts{input} );
+my %no_fork_args = ();
+if ($forks < 2){
+    foreach my $d (@dbsnp) {
+        my %s = VcfReader::getSearchArguments( $d, $dbsnp_to_index{$d} );
+        $no_fork_args{$d} = \%s;
+    }
+}
 VAR: while ( my $line = <$VCF> ) {
     next if $line =~ /^#/;
     $n++;
-    chomp $line;
-    my @split_line = split( "\t", $line );
-
-    #our VcfReader methods will be more efficient on pre-split lines
-    push @lines_to_process, \@split_line;
+    push @lines_to_process, $line;
     if ($progressbar) {
         $next_update = $progressbar->update($n) if $n >= $next_update;
     }
-    if ( @lines_to_process >= $buffer_size ) {
-        process_buffer();
-        @lines_to_process = ();
+    if ($forks > 1){
+        if ( @lines_to_process >= $buffer_size ) {
+            process_buffer();
+            @lines_to_process = ();
+        }
+    }else{
+        chomp $line;
+        #our VcfReader methods should be more efficient on pre-split lines
+        my @split_line = split( "\t", $line );
+        my %res = filterSnps( \@split_line, \%no_fork_args);
+        print $OUT "$line\n" if $res{keep};
+        $filtered++ if $res{filter};
+        $pathogenic_snps++ if  $res{pathogenic} ;
+        $n += 2;
+        if ($KNOWN){
+            $n++;
+            print $KNOWN "$line\n" if $res{known};
+        }
+        if ($progressbar) {
+            $next_update = $progressbar->update($n) if $n >= $next_update;
+        }
     }
 }
 close $VCF;
 close $KNOWN if $KNOWN;
-process_buffer();
+process_buffer() if $forks > 1;
 close $OUT;
 if ( defined $opts{Progress} ) {
     $progressbar->update($prog_total) if $prog_total >= $next_update;
@@ -322,6 +342,7 @@ sub process_buffer {
     #this array is an array of refs to batches
     # so that we can quickly sort our batches rather than
     # performing a big sort on all lines
+    return if not @lines_to_process;
     my @lines_to_print;
     my @known;
     my $i               = 0;
@@ -419,10 +440,10 @@ sub process_buffer {
                 my $incr_per_line = $incr_per_batch / @$k;
                 foreach my $l (@$k) {
                     if ( ref $l eq 'ARRAY' ) {
-                        print $OUT join( "\t", @$l ) . "\n";
+                        print $KNOWN join( "\t", @$l ) . "\n";
                     }
                     else {
-                        print $OUT "$l\n";
+                        print $KNOWN "$l\n";
                     }
                     $found++;
                     if ($progressbar) {
@@ -462,7 +483,10 @@ sub process_batch {
         $sargs{$d} = \%s;
     }
     foreach my $line ( @{$batch} ) {
-        my %res = filterSnps( $line, \%sargs );
+        chomp $line;
+        #our VcfReader methods should be more efficient on pre-split lines
+        my @split_line = split( "\t", $line );
+        my %res = filterSnps( \@split_line, \%sargs );
         push @{ $results{keep} },   $res{keep}   if $res{keep};
         $results{filter}++  if $res{filter};
         push @{ $results{known} },  $res{known}  if $res{known};
@@ -565,17 +589,16 @@ sub filterSnps {
                             }
                         }
 
-                        #perform filtering if fiters are set
-                        if ( $opts{build} || $opts{pathogenic} || $freq ) {
-                            my ( $filter_snp, $dont_filter, %add_info ) =
-                              evaluate_snp( $min_vars{$allele}, $opts{build},
-                                $opts{pathogenic}, $freq, \@snp_split );
-                            $min_vars{$allele}->{filter_snp} += $filter_snp;
-                            $line_should_not_be_filtered += $dont_filter;
-                            foreach my $k ( keys(%add_info) ) {
-                                push @{ $min_vars{$allele}->{snp_info}->{$k} },
-                                  $add_info{$k};
-                            }
+                        #get snp info and perform 
+                        #filtering if fiters are set
+                        my ( $filter_snp, $dont_filter, %add_info ) =
+                          evaluate_snp( $min_vars{$allele}, $opts{build},
+                            $opts{pathogenic}, $freq, \@snp_split );
+                        $min_vars{$allele}->{filter_snp} += $filter_snp;
+                        $line_should_not_be_filtered += $dont_filter;
+                        foreach my $k ( keys(%add_info) ) {
+                            push @{ $min_vars{$allele}->{snp_info}->{$k} },
+                              $add_info{$k};
                         }
                     }
                 }
