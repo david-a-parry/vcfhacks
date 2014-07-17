@@ -9,7 +9,7 @@ use Data::Dumper;
 require Exporter;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw();
-
+our $VERSION = 0.1;
 my %vcf_fields = (
     CHROM   => 0, 
     POS     => 1,
@@ -387,36 +387,24 @@ sub _openFileHandle{
 
 #variant utilitiea
 sub getVariantField{
-    my ($line, $field) = @_;
+    my ($split, $field) = @_;
     $field =~ s/^#+//;
     croak "Invalid field ($field) passed to getVariantField method " 
         if not exists $vcf_fields{$field};
-    my @split = ();
-    if (ref $line eq 'ARRAY'){
-        @split = @$line;
-    }else{
-        @split = split("\t", $line);
-    }
-    if ($vcf_fields{$field} > $#split){
+    if ($vcf_fields{$field} > $#{$split}){
         if ($field eq 'FORMAT'){
             #carp "No FORMAT field for line " . join("\t", @split) . " " ;
             return;
         }else{
-            croak "Line has too few fields: " . join("\t", @split) . " " ;
+            croak "Line has too few fields: " . join("\t", @$split) . " " ;
         }
     }
-    return $split[$vcf_fields{$field}];
+    return $split->[$vcf_fields{$field}];
 }
 
 sub getVariantInfoField{
     my ($line, $info_field) = @_;
-    my @split = ();
-    if (ref $line eq 'ARRAY'){
-        @split = @$line;
-    }else{
-        @split = split("\t", $line);
-    }
-    my @info = split(';', getVariantField(\@split, "INFO"));
+    my @info = split(';', getVariantField($line, "INFO"));
     foreach my $inf (@info){
         if ($inf =~ /^$info_field=(.+)/){
             return $1;
@@ -472,17 +460,11 @@ sub getSampleVariant{
     croak "Invalid column ($column) for getSampleVariant - " .
         "samples are only present in columns 10 and onwards.\n"
         if $column < 9;
-    my @split = ();
-    if (ref $line eq 'ARRAY'){
-        @split = @$line;
-    }else{
-        @split = split("\t", $line);
-    }
     if ($column){
-        return $split[$column];
+        return $line->[$column];
     }else{#otherwise just return first sample
-        croak "Line has too few fields: " . join("\t", @split) . " " if 9 > $#split;
-        return $split[9];
+        croak "Line has too few fields: " . join("\t", @$line) . " " if 9 > $#{$line};
+        return $line->[9];
     }
 }
 
@@ -509,12 +491,6 @@ sub getSampleGenotypeField{
         carp "Field $args{field} not found for getSampleGenotypeField ";
         return;
     }
-    my @split = ();
-    if (ref $args{line} eq 'ARRAY'){
-        @split = @{$args{line}};
-    }else{
-        @split = split("\t", $args{line});
-    }
     #croak "Line has too few fields: " . join("\t", @split) . " " if $self->{_samples}->{$sample} > $#split;
     my $var; 
     if ($args{all}){
@@ -529,7 +505,7 @@ sub getSampleGenotypeField{
                 $values{$sample} =  $value;
             }
         }else{
-            foreach my $col (9..$#split){
+            foreach my $col (9..$#{$args{line}}){
                 my $mvar = getSampleVariant(
                                     $args{line}, 
                                     $col,
@@ -603,12 +579,6 @@ sub getSampleCall{
 #    }elsif(defined $args{sample} or $args{multiple}){
 #        croak "\"multiple\" and \"sample\" arguments can only be used in conjunction with \"sample_to_columns\" option for getSampleCall method ";
     }
-    my @split = ();
-    if (ref $args{line} eq 'ARRAY'){
-        @split = @{$args{line}};
-    }else{
-        @split = split("\t", $args{line});
-    }
     my $var; 
     my %calls = ();
     if ($args{all}){
@@ -628,7 +598,7 @@ sub getSampleCall{
                 }
             }
         }else{
-            foreach my $col (9..$#split){
+            foreach my $col (9..$#{$args{line}}){
                 if (exists $args{minGQ} and $args{minGQ} > 0){
                     $calls{$col} = _getGenotype(
                                             $args{line},
@@ -756,12 +726,6 @@ sub getSampleActualGenotypes{
     my (%args) = @_;
     croak "\"line\" argument must be passed to getSampleActualGenotypes " if not defined $args{line};
     carp "WARNING Both multiple and sample arguments supplied to getSampleActualGenotypes method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
-    my @split = ();
-    if (ref $args{line} eq 'ARRAY'){
-        @split = @{$args{line}};
-    }else{
-        @split = split("\t", $args{line});
-    }
     if (defined $args{sample_to_columns}){
         if (ref $args{sample_to_columns} ne 'HASH'){
             croak "\"sample_to_columns\" argument passed to getSampleActualGenotypes must be a hash reference ";
@@ -769,12 +733,7 @@ sub getSampleActualGenotypes{
     #}elsif(defined $args{sample} or $args{multiple}){
     #    croak "\"multiple\" and \"sample\" arguments can only be used in conjunction with \"sample_to_columns\" option for getSampleCall method ";
     }
-
-    
-
-
-
-    my @alleles = readAlleles(line => \@split);
+    my @alleles = readAlleles(line => $args{line});
     my %multiple = ();
     my $genotype;
     my @sample_alleles = ();
@@ -782,7 +741,7 @@ sub getSampleActualGenotypes{
     if ($args{all}){
         if (defined $args{sample_to_columns}){
             foreach my $sample (keys %{$args{sample_to_columns}}){
-                $var = getSampleVariant(\@split, $args{sample_to_columns}->{$sample});
+                $var = getSampleVariant($args{line}, $args{sample_to_columns}->{$sample});
                 my $call = (split ":", $var)[0];
                 if ($call =~ /(\d+)([\/\|])(\d+)/){
                     if ($args{return_alleles_only}){
@@ -797,8 +756,8 @@ sub getSampleActualGenotypes{
                 }
             }
         }else{
-            foreach my $col (9..$#split){
-                $var = getSampleVariant(\@split, $col);
+            foreach my $col (9..$#{$args{line}}){
+                $var = getSampleVariant($args{line}, $col);
                 my $call = (split ":", $var)[0];
                 if ($call =~ /(\d+)([\/\|])(\d+)/){
                     if ($args{return_alleles_only}){
@@ -824,7 +783,7 @@ sub getSampleActualGenotypes{
         croak "multiple argument must be an array reference " if ref $args{multiple} ne 'ARRAY';
         if (defined $args{sample_to_columns}){
             foreach my $sample (@{$args{multiple}}){
-                $var = getSampleVariant(\@split, $args{sample_to_columns}->{$sample});
+                $var = getSampleVariant($args{line}, $args{sample_to_columns}->{$sample});
                 my $call = (split ":", $var)[0];
                 if ($call =~ /(\d+)([\/\|])(\d+)/){
                     if ($args{return_alleles_only}){
@@ -840,7 +799,7 @@ sub getSampleActualGenotypes{
             }
         }else{
             foreach my $col (@{$args{multiple}}){
-                $var = getSampleVariant(\@split, $col);
+                $var = getSampleVariant($args{line}, $col);
                 my $call = (split ":", $var)[0];
                 if ($call =~ /(\d+)([\/\|])(\d+)/){
                     if ($args{return_alleles_only}){
@@ -871,7 +830,7 @@ sub getSampleActualGenotypes{
         }elsif ($args{column}){
             $col = $args{column};
         }
-        $var = getSampleVariant(\@split, $col);
+        $var = getSampleVariant($args{line}, $col);
         my $call = (split ":", $var)[0];
         if ($call =~ /(\d+)([\/\|])(\d+)/){
             if ($args{return_alleles_only}){
@@ -895,12 +854,6 @@ sub countGenotypes{
     my (%args) = @_;
     croak "\"line\" argument must be passed to countGenotypes " if not defined $args{line};
     carp "WARNING Both multiple and sample arguments supplied to countGenotypes method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
-    my @split = ();
-    if (ref $args{line} eq 'ARRAY'){
-        @split = @{$args{line}};
-    }else{
-        @split = split("\t", $args{line});
-    }
     if (defined $args{sample_to_columns}){
         if (ref $args{sample_to_columns} ne 'HASH'){
             croak "\"sample_to_columns\" argument passed to countGenotypes must be a hash reference ";
@@ -919,20 +872,20 @@ sub countGenotypes{
                 $col = $args{sample_to_columns}->{$sample};
             }
             if (defined $args{minGQ}){
-                my $call = getSampleCall(line => \@split, column => $col, minGQ => $args{minGQ});
+                my $call = getSampleCall(line => $args{line}, column => $col, minGQ => $args{minGQ});
                 $genotypes{$call}++;
             }else{
-                my $call = getSampleCall(line => \@split, column => $col,);
+                my $call = getSampleCall(line => $args{line}, column => $col,);
                 $genotypes{$call}++;
             }
         }
     }else{
-        foreach my $col (9..$#split){
+        foreach my $col (9..$#{$args{line}}){
             if (defined $args{minGQ}){
-                my $call = getSampleCall(line => \@split, column => $col, minGQ => $args{minGQ});
+                my $call = getSampleCall(line => $args{line}, column => $col, minGQ => $args{minGQ});
                 $genotypes{$call}++;
             }else{
-                my $call = getSampleCall(line => \@split, column => $col);
+                my $call = getSampleCall(line => $args{line}, column => $col);
                 $genotypes{$call}++;
             }
         }
@@ -1028,14 +981,9 @@ sub replaceVariantField{
     my ($line, $field, $replacement) = @_;
     $field =~ s/^#+//;
     croak "Invalid field ($field) passed to getVariantField method " if not exists $vcf_fields{$field};
-    my @split = ();
-    if (ref $line eq 'ARRAY'){
-        @split = @$line;
-    }else{
-        @split = split("\t", $line);
-    }
-    splice(@split, $vcf_fields{$field}, 1, $replacement);
-    return join("\t", @split) if defined wantarray;
+    splice(@$line, $vcf_fields{$field}, 1, $replacement);
+    return $line if defined wantarray;
+    #return join("\t", @$line) if defined wantarray;
     carp "replaceVariantField called in void context ";
 }
 
