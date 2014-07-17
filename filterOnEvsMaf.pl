@@ -48,7 +48,6 @@ if (defined $freq){
 
 if ( $forks < 2 ) {
     $forks = 0;    #no point having overhead of forks for one fork
-    $buffer_size = 1000 if not $buffer_size;
 }else{
     if ($forks > $cpus){
         print STDERR "[Warning]: Number of forks ($forks) exceeds number of CPUs on this machine ($cpus)\n";
@@ -56,10 +55,10 @@ if ( $forks < 2 ) {
     if ( not $buffer_size ) {
         $buffer_size = 10000 > $forks * 1000 ? 10000 : $forks * 1000;
     }
+    print STDERR
+"[INFO] Processing in batches of $buffer_size variants split among $forks forks.\n";
 }
 
-print STDERR
-"[INFO] Processing in batches of $buffer_size variants split among $forks forks.\n";
 
 my $OUT;
 if ($opts{output}){
@@ -70,11 +69,17 @@ if ($opts{output}){
 my $time = strftime("%H:%M:%S", localtime);
 my $total_vcf;
 print STDERR "[$time] Initializing input VCF... ";
+die "Header not ok for input ($opts{input}) "
+    if not VcfReader::checkHeader( vcf => $opts{input} );
 if ( defined $opts{Progress} ) {
-    die "Header not ok for input ($opts{input}) "
-        if not VcfReader::checkHeader( vcf => $opts{input} );
-    $total_vcf = VcfReader::countVariants( $opts{input} );
-    print STDERR "$opts{input} has $total_vcf variants\n";
+    if ( $opts{input} eq "-" ) {
+        print STDERR "Can't use --progress option when input is from STDIN\n";
+        delete $opts{Progress};
+    }
+    else {
+        $total_vcf= VcfReader::countVariants($opts{input});
+        print STDERR "$opts{input} has $total_vcf variants. ";
+    }
 }
 my %contigs       = VcfReader::getContigOrder( $opts{input} );
 my %sample_to_col = ();
@@ -133,7 +138,7 @@ for ( my $i = 0 ; $i < @evs ; $i++ ) {
     push @head_and_index, $evs[$i];
     $time = strftime( "%H:%M:%S", localtime );
     print STDERR
-      "[$time] Finished initializing $evs[$i] dbSNP reference VCF.\n";
+      "[$time] Finished initializing $evs[$i] EVS reference VCF.\n";
     $dbpm->finish( 0, \@head_and_index );
 }
 print STDERR "Waiting for children...\n" if $opts{VERBOSE};
@@ -190,24 +195,40 @@ my $n                = 0;
 my @lines_to_process = ();
 my $VCF              = VcfReader::_openFileHandle( $opts{input} )
   ;    # or die "Can't open $opts{input} for reading: $!\n";
+my %no_fork_args = ();
+if ($forks < 2){
+    foreach my $e (@evs) {
+        my %s = VcfReader::getSearchArguments( $e, $evs_to_index{$e} );
+        $no_fork_args{$e} = \%s;
+    }
+}
 VAR: while ( my $line = <$VCF> ) {
     next if $line =~ /^#/;
     $n++;
-    chomp $line;
-    my @split_line = split( "\t", $line );
-
-    #our VcfReader methods will be more efficient on pre-split lines
-    push @lines_to_process, \@split_line;
+    push @lines_to_process, $line;
     if ($progressbar) {
         $next_update = $progressbar->update($n) if $n >= $next_update;
     }
-    if ( @lines_to_process >= $buffer_size ) {
-        process_buffer();
-        @lines_to_process = ();
+    if ($forks > 1){
+        if ( @lines_to_process >= $buffer_size ) {
+            process_buffer();
+            @lines_to_process = ();
+        }
+    }else{
+        chomp $line;
+        #our VcfReader methods should be more efficient on pre-split lines
+        my @split_line = split( "\t", $line );
+        my %res = filter_on_evs_maf( \@split_line, \%no_fork_args);
+        print "$line\n" if $res{keep};
+        $filtered++ if $res{filter};
+        $n += 2;
+        if ($progressbar) {
+            $next_update = $progressbar->update($n) if $n >= $next_update;
+        }
     }
 }
 close $VCF;
-process_buffer();
+process_buffer() if $forks > 1;
 close $OUT;
 if ( defined $opts{Progress} ) {
     $progressbar->update($prog_total) if $prog_total >= $next_update;
@@ -228,6 +249,7 @@ sub process_buffer {
     #this arrays is an array of refs to batches
     # so that we can quickly sort our batches rather than
     # performing a big sort on all lines
+    return if not @lines_to_process;
     my @lines_to_print;
     my $i               = 0;
     my $t               = 0;
@@ -337,7 +359,9 @@ sub process_batch {
         $sargs{$e} = \%s;
     }
     foreach my $line ( @{$batch} ) {
-        my %res = filter_on_evs_maf( $line, \%sargs );
+        chomp $line;
+        my @split_line = split( "\t", $line );
+        my %res = filter_on_evs_maf( \@split_line, \%sargs );
         push @{ $results{keep} },   $res{keep}   if $res{keep};
         $results{filter}++  if $res{filter};
         $results{found}++  if $res{found};
@@ -391,7 +415,7 @@ ALLELE: foreach my $allele ( sort { $a <=> $b } keys %min_vars ) {
                         $r{found} = 1;
                         #perform filtering if freq is set
                         if ($freq){
-                            my $maf_field = VcfReader::getVariantInfoField( $snp_line, 'MAF');
+                            my $maf_field = VcfReader::getVariantInfoField( \@snp_split, 'MAF');
                             die "Expected MAF field to be a comma separated list of 3 numbers for $k line: $snp_line " 
                                 if $maf_field !~/(\d+\.\d+,){2,}\d+\.\d+/;
                             my @mafs = split(',', $maf_field);
