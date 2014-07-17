@@ -57,7 +57,7 @@ my %opts = (
             'pass_filters' => \$pass_filters,
             'damaging' => \@damaging,
             'keep_any_damaging' => \$keep_any_damaging,
-            'unpredicted_missense' => \$filter_unpredicted,
+            'skip_unpredicted_missense' => \$filter_unpredicted,
             'gmaf' => \$gmaf, 
             'maf' => \$any_maf, 
             'check_all_samples' => \$check_all_samples,
@@ -79,7 +79,7 @@ GetOptions(\%opts,
             'i|input=s' => \$vcf,
             'output=s',
             'list:s',
-            'samples=s{,}',
+            's|samples=s{,}' => \@samples,
             'r|reject=s{,}' => \@reject,
             'x|reject_all_except:s{,}' => \@reject_except,
             'family=s',
@@ -88,14 +88,14 @@ GetOptions(\%opts,
             'pass_filters',
             'damaging=s{,}',
             'keep_any_damaging',
-            'unpredicted_missense',
+            'skip_unpredicted_missense',
             'gmaf=f', 
             'maf=f', 
             'check_all_samples',
             'equal_genotypes',
             'quality=i',
             'w|aff_quality=i' => \$aff_genotype_quality,
-            'z|un_quality=i' => \$unaff_genotype_quality,
+            'u|un_quality=i' => \$unaff_genotype_quality,
 #           'allow_missing_genotypes',
             'n|num_matching=i' => \$min_matching_samples,
             'y|num_matching_per_family=i' =>  \$min_matching_per_family,
@@ -1193,7 +1193,7 @@ The default behaviour is to only keep variants predicted as damaging by ALL prog
 
 If using multiple programs for filters for --damaging argument use this flag to keep variants predicted to be damaging according to ANY of these programs.
 
-=item B<-u    --unpredicted_missense>
+=item B<--skip_unpredicted_missense>
 
 Skip variants that do not have a score from one or more programs specified by the --damaging argument. The --keep_any_damaging argument will override this behaviour if any of the available predictions are considered damaging.
 
@@ -1213,7 +1213,7 @@ Minimum genotype qualities to consider. This applies to samples specified by bot
 
 Minimum genotype qualities to consider for affected samples only (i.e. samples specified by --sample argument or affected samples from a given pedigree). Anything below this threshold will be considered a no call. Default is 20.
 
-=item B<-z    --un_quality>
+=item B<-u    --un_quality>
 
 Minimum genotype qualities to consider for unaffected samples only (i.e. samples specified by --reject argument or unaffected samples from a given pedigree). Anything below this threshold will be considered a no call. Default is 20.
 
