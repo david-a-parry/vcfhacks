@@ -386,7 +386,6 @@ if ($progress) {
 }
 
 my $meta_head = VcfReader::getMetaHeader( $vcf );
-
 print $OUT "$meta_head\n";
 print $OUT "##filterVcfOnVcf.pl=\"";
 my @opt_string = ();
@@ -464,6 +463,8 @@ if ($progressbar) {
     $progressbar->update( $total_variants * 3 )
       if $total_variants * 3 >= $next_update;
 }
+close $VCF;
+close $OUT;
 $time = strftime( "%H:%M:%S", localtime );
 print STDERR
   "[$time] $filtered matching variants filtered, $kept printed ";
