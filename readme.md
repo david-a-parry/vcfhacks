@@ -4,6 +4,20 @@ This project comprises a set of perl scripts and modules that may be useful for 
 
 __UPDATE__
 
+VERSION 0.1.9:
+
+18/7/14
+
+-annotateSnps.pl, filterOnEvsMaf.pl, filterVcfOnVcf.pl and filterOnSample.pl now can all use forks for parallel execution. Execution without forks should be faster also.
+
+-added getVariantsByLocation.pl script to replace filterVcfOnLocation.pl for much faster retrieval of variants by region.
+
+-ensemblGeneAnnotator.pl writes annotations to INFO field, maintaining VCF format.
+
+-annovcfToSimple.pl allows manual selection of VEP fields and INFO fields. Default output is more user-friendly. Gene annotations for multiple genes are now put into split cells.
+
+-VcfReader.pm created to allow for parallel execution in annotateSnps.pl, filterOnEvsMaf.pl, filterVcfOnVcf.pl and filterOnSample.pl and to introduce a faster indexing method for uncompressed VCFs for quicker variant retrieval by positon/region. Version 0.2 will occur once VcfReader.pm replaces the object-oriented ParseVCF.pm in all scripts.
+
 VERSION 0.1.8a:
 
 5/6/14
