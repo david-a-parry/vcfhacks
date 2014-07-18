@@ -77,9 +77,9 @@ GetOptions(
     'r|reject=s{,}'            => \@reject,
     'x|reject_all_except:s{,}' => \@reject_except,
     'f|frequency=f'            => \$af,
-    'threshold=i'              => \$threshold,
+    't|threshold=i'            => \$threshold,
     'p|presence'               => \$check_presence_only,
-    'confirm_missing'          => \$confirm_missing,
+    'c|confirm_missing'        => \$confirm_missing,
     'quality=i'                => \$quality,
     'a|aff_quality=i',
     'un_quality=i',
@@ -89,7 +89,7 @@ GetOptions(
     'help'                    => \$help,
     "manual"                  => \$manual,
     'b|progress'              => \$progress,
-    "t|forks=i"               => \$forks,
+    "forks=i"                 => \$forks,
     "cache=i"                 => \$buffer_size,
 ) or pod2usage( -message => "syntax error.\n" );
 pod2usage( -verbose => 2 ) if $manual;
@@ -147,7 +147,7 @@ else {
 "[Warning]: Number of forks ($forks) exceeds number of CPUs on this machine ($cpus)\n";
     }
     if ( not $buffer_size ) {
-        $buffer_size = $forks * 1000; 
+        $buffer_size = 20000 > $forks * 5000 ? 20000 : $forks * 5000;
         ; #can have small buffer as we don't have much overhead (files to search etc.) for this script
     }
     print STDERR
@@ -243,8 +243,7 @@ if ($progress) {
         {
             name  => "Filtering",
             count => $total_variants * 3,
-
-            #ETA   => "linear",
+            ETA   => "linear",
         }
     );
 }
@@ -761,7 +760,7 @@ Reject variants if the allele frequency (decimal value between 0.00 and 1.00) in
 
 Reject variants present in more than this number of samples in the VCF. Counts all samples in the VCF irrespective of whether they are specified by the --samples or any other argument.
 
-=item B<--confirm_missing>
+=item B<-c    --confirm_missing>
 
 Use this flag to look only for variants that are present only in --samples and are confirmed absent from all --reject samples. This means that as well as filtering variants with alleles present in --reject samples, variants that contain no calls (or genotype qualities below the --un_quality threshold) in --reject samples will also be filtered. In this way you may identify likely de novo variants in a sample specified by --samples by specifying parental samples with the --reject option, thus avoiding variants where there is not sufficient information to confirm de novo inheritance.
 
@@ -790,14 +789,6 @@ Minimum genotype quality for all samples - sets both --aff_quality and --un_qual
 =item B<-e    --existing>
 
 Use this flag to cause the program to ignore non-existing samples rather than exiting.
-
-=item B<-t    --forks>
-
-Number of forks to create for parallelising your analysis. By default no forking is done. To speed up your analysis you may specify the number of parallel processes to use here. (N.B. forking only occurs if a value of 2 or more is given here as creating 1 fork only results in increased overhead with no performance benefit).
-
-=item B<--cache>
-
-Cache size. Variants are processed in batches to allow for efficient parallelisation. When forks are used the default for this program is to process up 250 variants multiplied by the number of forks used. If you find this program comsumes too much memory when forking you may want to set a lower number here. When using forks you may get improved performance by specifying a higher cache size, however the increase in memory usage is proportional to your cache size multiplied by the number of forks.
 
 =item B<-b    --progress>
 
@@ -860,3 +851,13 @@ This program is free software: you can redistribute it and/or modify it under th
 
 
 =cut
+
+#=item B<--forks>
+
+#Number of forks to create for parallelising your analysis. By default no forking is done. To speed up your analysis you may specify the number of parallel processes to use here. (N.B. forking only occurs if a value of 2 or more is given here as creating 1 fork only results in increased overhead with no performance benefit).
+
+#=item B<--cache>
+
+#Cache size. Variants are processed in batches to allow for efficient parallelisation. When forks are used the default for this program is to process up 250 variants multiplied by the number of forks used. If you find this program comsumes too much memory when forking you may want to set a lower number here. When using forks you may get improved performance by specifying a higher cache size, however the increase in memory usage is proportional to your cache size multiplied by the number of forks.
+
+
