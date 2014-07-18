@@ -3,222 +3,263 @@ package SortGenomicCoordinates;
 use strict;
 use warnings;
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
-
+use List::Util qw(max);
 use Carp;
 our $AUTOLOAD;
 {
-     my $_count = 0;
+    my $_count = 0;
     my %_attrs = (
-        _file => ["", "read/write"], 
-        _array => ["", "read/write"],
-        _col => [0, "read/write"], 
-        _type => ["bed", "read/write"],
-        _chrom => ["", "read/write"],
-        _position => ["", "read/write"],
-        _ordered => ["", "read/write"],
-        _merged => ["", "read"],
-        _location => ["", "read"],
-        _return_type => ["match", "read/write"],
-        _start_col => ["", "read/write"], 
-        _stop_col => ["", "read/write"], 
+        _file         => [ "",      "read/write" ],
+        _array        => [ "",      "read/write" ],
+        _col          => [ 0,       "read/write" ],
+        _position     => [ "",      "read/write" ],
+        _ordered      => [ "",      "read/write" ],
+        _merged       => [ "",      "read" ],
+        _location     => [ "",      "read" ],
+        _return_type  => [ "match", "read/write" ],
+        _type         => [ "bed",   "read/write" ],
+        _chrom        => [ "",      "read/write" ],
+        _start_col    => [ "",      "read/write" ],
+        _stop_col     => [ "",      "read/write" ],
+        _delimiter    => [ "\t",    "read/write" ],
+        _contig_order => [ "",      "read/write" ],
     );
-    sub _all_attrs{
+
+    sub _all_attrs {
         keys %_attrs;
     }
-    sub _accessible{
-        my ($self, $attr, $mode) = @_;
-        $_attrs{$attr}[1] =~ /$mode/
+
+    sub _accessible {
+        my ( $self, $attr, $mode ) = @_;
+        $_attrs{$attr}[1] =~ /$mode/;
     }
-    sub _attr_default{
-        my ($self, $attr) = @_;
+
+    sub _attr_default {
+        my ( $self, $attr ) = @_;
         $_attrs{$attr}[0];
     }
-    sub get_count{
+
+    sub get_count {
         $_count;
     }
-    sub _incr_count{
+
+    sub _incr_count {
         $_count++;
     }
-    sub _decr_count{
+
+    sub _decr_count {
         $_count--;
     }
-        
+
 }
-sub DESTROY{
+
+sub DESTROY {
     my ($self) = @_;
-    $self -> _decr_count( );
+    $self->_decr_count();
 }
 
 sub new {
-    my ($class, %args) = @_;
-    my $self = bless { }, $class;
-    foreach my $attr ($self -> _all_attrs( ) ){
-        my ($arg) = ($attr =~ /^_(.*)/);
-        if (exists $args{$arg}){
+    my ( $class, %args ) = @_;
+    my $self = bless {}, $class;
+    foreach my $attr ( $self->_all_attrs() ) {
+        my ($arg) = ( $attr =~ /^_(.*)/ );
+        if ( exists $args{$arg} ) {
             $self->{$attr} = $args{$arg};
-        }elsif($self->_accessible($attr, "required")){
+        }
+        elsif ( $self->_accessible( $attr, "required" ) ) {
             croak "$attr argument required";
-        }else{
+        }
+        else {
             $self->{$attr} = $self->_attr_default($attr);
         }
     }
-    $class -> _incr_count();
-    $self -> set_type($self -> {_type});
-    $self -> _check_col($self -> {_col});
-#    $self -> _strip_chr() if $self -> {_chrom};
+    $class->_incr_count();
+    $self->set_type( type => $self->{_type} );
+    #    $self -> _strip_chr() if $self -> {_chrom};
     return $self;
 }
 
-
 sub clone {
-    my ($caller, %arg) = @_;
+    my ( $caller, %arg ) = @_;
     my $class = ref($caller);
-    my $self = bless { }, $class;
-    foreach my $attr ($self ->_all_attrs ( ) ){
-        my ($arg) = ($attr =~ /^_(.*)/);
-        if (exists $arg{$arg}){
-            $self -> {$attr} = $arg{$arg};
-        }else{
-            $self -> {$attr} = $caller->{$attr};
+    my $self = bless {}, $class;
+    foreach my $attr ( $self->_all_attrs() ) {
+        my ($arg) = ( $attr =~ /^_(.*)/ );
+        if ( exists $arg{$arg} ) {
+            $self->{$attr} = $arg{$arg};
+        }
+        else {
+            $self->{$attr} = $caller->{$attr};
         }
     }
-    $self -> _incr_count();
-    $self -> _check_type($self -> {_type});
-    $self -> _check_col($self -> {_col});
+    $self->_incr_count();
     #$self -> _strip_chr() if $self -> {_chrom};
     return $self;
 }
 
-sub set_type{
-    my ($self, $type) = @_;
-    $self->_check_type($type);
-    $self->{_type} = $type;
-    $self->{_col} = 1 if $type ne 'custom' and $self->{_col} == 0;#if not
+sub set_order{
+    my ($self, $contig_order) = @_;
+    if (ref $contig_order ne 'HASH'){
+        croak "Argument passed to set_order function must be a HASH reference ";
+    }
+    $self->{_contig_order} = $contig_order;
 }
 
-sub _check_type{
-    my @valid_types = qw/bed gene regions custom/;
-    my ($self, $type) = @_;
-    croak "invalid type" if not grep {/$type/} @valid_types;
+sub set_type {
+    my ( $self, %args ) = @_;
+    croak "'type' argument is required for set_type method " if not defined $args{type};
+    $self->{_type} = $args{type};
+    $self->{_col} = 0;
+    if ($args{type} eq 'bed'){
+        $self->{_start_col} = 1;
+        $self->{_end_col} = 2;
+    }elsif($args{type} eq 'gene'){
+        $self->{_start_col} = 2;
+        $self->{_end_col} = 3;
+    }elsif($args{type} eq 'regions'){
+        $self->{_start_col} = 1;
+        $self->{_end_col} = 2;
+        $self->{_delimiter} = '[:-]';
+    }elsif($args{type} eq 'custom'){
+        foreach my $r (qw(col start_col end_col)){
+            croak "'$r' argument is required when using set_type on a custom format "
+                if not exists ($args{$r});
+            $self->_check_col($args{$r});
+        }
+        $self->{_col} = $args{col};
+        $self->{_start_col} = $args{start_col};
+        $self->{_end_col} = $args{end_col};
+        $self->{_delimiter} = $args{delimiter} if defined $args{delimiter};
+    }else{
+        croak "invalid type passed to set_type method ";
+    }
 }
-sub _check_col{
-    my ($self, $col) = @_;
-    croak "col argument must be an integer" if $col !~ /^-*\d+$/;
+
+sub _check_col {
+    my ( $self, $col ) = @_;
+    croak "column arguments must be integers" if $col !~ /^-*\d+$/;
 }
-sub _strip_chr{
+
+sub _strip_chr {
     my ($self) = @_;
     $self->{_chrom} =~ s/^chr//;
 }
+
 #use autoload for standard ->get and ->set methods
-sub AUTOLOAD{
-    my ($self, $val) = @_;
+sub AUTOLOAD {
+    my ( $self, $val ) = @_;
     no strict 'refs';
-    if ($AUTOLOAD =~ /.*::get(_\w+)/ and $self -> _accessible($1, "read")){
+    if ( $AUTOLOAD =~ /.*::get(_\w+)/ and $self->_accessible( $1, "read" ) ) {
         my $attr = $1;
         croak "No such attribute \"$attr\"" unless exists $self->{$attr};
-        *{$AUTOLOAD} = sub { return $_[0] -> {$attr} };
+        *{$AUTOLOAD} = sub { return $_[0]->{$attr} };
         return $self->{$attr};
-    }elsif ($AUTOLOAD =~ /.*::set(_\w+)/ and $self -> _accessible($1, "write")){
+    }
+    elsif ( $AUTOLOAD =~ /.*::set(_\w+)/ and $self->_accessible( $1, "write" ) )
+    {
         my $attr = $1;
         croak "No such attribute \"$attr\"" unless exists $self->{$attr};
-        $self -> _check_col($val) if $attr eq "col";
-        $self -> _check_type($val) if $attr eq "type";
         #$self -> _strip_chr() if $attr eq "chrom";
-        *{$AUTOLOAD} = sub { $_[0] -> {$attr} = $_[1]; return ; };
-        $self -> {$attr} = $val;
-        return
-    }else{
+        *{$AUTOLOAD} = sub { $_[0]->{$attr} = $_[1]; return; };
+        $self->{$attr} = $val;
+        return;
+    }
+    else {
         croak "Method name \"$AUTOLOAD\" not available";
     }
 }
-sub check_custom{
-    my ($self) = @_;
-    foreach ($self->{_col}, $self->{_start_col}, $self->{_stop_col}){
-        croak "col, custom_start and custom_stop arguments must be defined when using \"custom\" type mode" if not defined $_;
-    }
-    croak "col argument $self->{_col} must be an integer" if $self->{_col} !~ /^-*\d+$/;
-    croak "custom_start argument ($self->{_start_col}) must be an integer" if $self->{_start_col} !~ /^-*\d+$/;
-    croak "custom_stop argument ($self->{_stop_col}) must be an integer" if $self->{_stop_col} !~ /^-*\d+$/;
-}
+
 #if a search produces a hit with -> locate method return the array of info for the relevant merged interval
 #otherwise return undef if not hit
-sub return_info{
-    my ($self, %args) = @_;
-    croak "A region must be located before info can be returned" if not defined $_[0]->{_location};
-    if ($_[0]->{_location} < 0){
+sub return_info {
+    my ( $self, %args ) = @_;
+    croak "A region must be located before info can be returned"
+      if not defined $_[0]->{_location};
+    if ( $_[0]->{_location} < 0 ) {
         return if defined(wantarray);
         carp "return_info method called in void context";
-    }elsif ($self->{_return_type} eq "all"){
-        return @{$_[0]->{_merged}->[$_[0]->{_location}]->{info}} if defined(wantarray);
-        carp "return_info method called in void context"; #complain if not sent to either scalar or array
-    }elsif ($self->{_return_type} =~ /^(match|matches)$/i){
+    }
+    elsif ( $self->{_return_type} eq "all" ) {
+        return @{ $_[0]->{_merged}->[ $_[0]->{_location} ]->{info} }
+          if defined(wantarray);
+        carp "return_info method called in void context"
+          ;    #complain if not sent to either scalar or array
+    }
+    elsif ( $self->{_return_type} =~ /^(match|matches)$/i ) {
         my @ret = ();
-        my $spl = "\t";
-        $spl = '[:-]' if $self->{_type} eq "regions";
-        my ($start, $stop) = (1, 2); #fine for regions and bed files
-        ($start, $stop) = (2, 3) if $self -> {_type} eq "gene"; #gene tables have strand field between chr and start
-        if ($self -> {_type} eq "custom"){
-            check_custom($self);
-            ($start, $stop) = ($self->{_start_col}, $self->{_stop_col});
-        }
-        foreach my $region (@{$_[0]->{_merged}->[$_[0]->{_location}]->{info}}){
-            if ($self->{_col} == 0){ #with no valid column value we'll try and find the region field ourself
-                my $off = 0;
-                my @split = (split /$spl/, $region);
-                no warnings 'uninitialized';
-                $off++ until $split[$off] =~ /chr[\dXYMUG][TLn\d_]*/i or $off > $#split;
-                croak ("no valid region found in line $region ") if $off > $#split;
-                $split[$off] =~ s/^chr//i;
-                $self->{_chrom}  =~ s/^chr//i;
-                if (uc$split[$off] eq uc$self->{_chrom} and $self->{_position} > $split[$off + $start] and $self->{_position} <= uc$split[$off + $stop]){
-                    push (@ret, $region);
-                }
-            }else{
-                my @split = (split /$spl/, $region);
-                $split[$self->{_col}-1] =~ s/^chr//i;
-                $self->{_chrom}  =~ s/^chr//i;
-                if (uc$split[$self->{_col} -1] eq uc$self->{_chrom} and $self->{_position} > $split[$self->{_col}+$start -1] and $self->{_position} <= uc$split[$self->{_col}+$stop -1]){
-                    push (@ret, $region);
-                }
+        my $spl = $self->{_delimiter};
+        foreach
+          my $region ( @{ $_[0]->{_merged}->[ $_[0]->{_location} ]->{info} } )
+        {
+            my @split = ( split /$spl/, $region );
+            if ( $split[ $self->{_col} ] eq $self->{_chrom}
+                and $self->{_position} >
+                $split[ $self->{_start_col} ]
+                and $self->{_position} <=
+                uc $split[ $self->{_end_col} ] )
+            {
+                push( @ret, $region );
             }
         }
-        croak "Error, region was located but no matching regions for current chromosome and position values exist " if (not @ret);
-        return @ret if defined(wantarray); #allow scalar or array for return value
-        carp "return_info method called in void context"; #complain if not sent to either scalar or array
-    }else{
+        croak
+"Error, region was located but no matching regions for current chromosome and position values exist "
+          if ( not @ret );
+        return @ret
+          if defined(wantarray);   
+        carp "return_info method called in void context"
+          ;    
+    }
+    else {
         croak "unrecognised return type given to $self -> return_info method ";
     }
 }
 
 # a simple binary search checking if position lies within an interval
 # returns the location in our merged array of a hit or -1 if no hit
-# the returned value is also stored in $self->{_location} for access 
+# the returned value is also stored in $self->{_location} for access
 # by ->return_info method, so it is fine (and probably recommended)
 # to call ->locate in void context
-sub locate{
-    my ($self, %args) = @_;
-    croak "You must order and merge your reference coordinates before performing a search" if not  $self -> {_merged};
-    set_chrom($self, $args{chrom}) if $args{chrom};
-    croak "You must set a chromosome to search for" if not  $self -> {_chrom};
-    $self -> {_chrom} =~ s/^chr//i;
-    set_position($self, $args{position}) if $args{position};
-    croak "You must set a position to search for" if not  defined $self -> {_position};
-    $self->{_position} =~ s/\,//g; 
-    croak "Position argument must be an integer" if $self->{_position} !~ /^\d+$/;
+sub locate {
+    my ( $self, %args ) = @_;
+    croak
+"You must order and merge your reference coordinates before performing a search"
+      if not $self->{_merged};
+    set_chrom( $self, $args{chrom} ) if $args{chrom};
+    croak "You must set a chromosome to search for" if not $self->{_chrom};
+    $self->{_chrom} =~ s/^chr//i;
+    set_position( $self, $args{position} ) if $args{position};
+    croak "You must set a position to search for"
+      if not defined $self->{_position};
+    $self->{_position} =~ s/\,//g;
+    croak "Position argument must be an integer"
+      if $self->{_position} !~ /^\d+$/;
     my $l = 0;
-    my $u = @{$self->{_merged}} -1;
-    while ($l <= $u){
-        my $i = int(($u+$l)/2);
-        if((uc$self->{_chrom} lt uc$self->{_merged}->[$i]->{chrom}) or 
-        ( uc$self->{_chrom} eq uc$self->{_merged}->[$i]->{chrom} and $self->{_position} <= $self->{_merged}->[$i]->{start} 
-        and $self->{_position} < $self->{_merged}->[$i]->{end})){
+    my $u = @{ $self->{_merged} } - 1;
+
+    while ( $l <= $u ) {
+        my $i = int( ( $u + $l ) / 2 );
+        if (
+            ( $self->_chromIsLessThanChrom($self->{_chrom}, $self->{_merged}->[$i]->{chrom}) )
+            or (    $self->{_chrom} eq $self->{_merged}->[$i]->{chrom}
+                and $self->{_position} <= $self->{_merged}->[$i]->{start}
+                and $self->{_position} < $self->{_merged}->[$i]->{end} )
+          )
+        {
             $u = $i - 1;
-        }elsif ((uc$self->{_chrom} gt uc$self->{_merged}->[$i]->{chrom}) or 
-        ( uc$self->{_chrom} eq uc$self->{_merged}->[$i]->{chrom} and $self->{_position} > $self->{_merged}->[$i]->{start} 
-        and $self->{_position} > $self->{_merged}->[$i]->{end})){
+        }
+        elsif (
+            ( $self->_chromIsLessThanChrom($self->{_chrom}, $self->{_merged}->[$i]->{chrom}) )
+            or (  $self->{_chrom} eq $self->{_merged}->[$i]->{chrom}
+                and $self->{_position} > $self->{_merged}->[$i]->{start}
+                and $self->{_position} > $self->{_merged}->[$i]->{end} )
+          )
+        {
             $l = $i + 1;
-        }elsif  (uc$self->{_chrom} eq uc$self->{_merged}->[$i]->{chrom} and 
-        $self->{_position} >= $self->{_merged}->[$i]->{start} and $self->{_position} <= $self->{_merged}->[$i]->{end}){
+        }
+        elsif ( $self->{_chrom} eq $self->{_merged}->[$i]->{chrom}
+            and $self->{_position} >= $self->{_merged}->[$i]->{start}
+            and $self->{_position} <= $self->{_merged}->[$i]->{end} )
+        {
             $self->{_location} = $i;
             return $i;
         }
@@ -227,172 +268,196 @@ sub locate{
     return -1;
 }
 
+sub _chromIsLessThanChrom{
+    my ($self, $a_chrom, $b_chrom) = @_;
+    if ($self->{_contig_order}){
+        if (not exists $self->{_contig_order}->{$a_chrom}){
+            croak "$a_chrom does not exist in contig_order passed to SortGenomicCoordinates ";
+        }
+        if (not exists $self->{_contig_order}->{$b_chrom}){
+            croak "$b_chrom does not exist in contig_order passed to SortGenomicCoordinates ";
+        }
+        return 1 if $self->{_contig_order}->{$a_chrom} < $self->{_contig_order}->{$b_chrom} ;
+    }else{
+        return 1 if $a_chrom  lt $b_chrom ;
+    }
+    return 0;
+}
+
 #usually intervals will need sorting and merging so ->prep invokes both methods
-sub prep{
-    my ($self, %args) = @_;
-    set_file($self, $args{file}) if $args{file};
-    set_array($self, $args{array}) if $args{array};
-    croak "an input file or array is required before running \"order\" method" if not  $self -> {_file} and not $self -> {_array};
-    set_type($self, $args{type}) if $args{type};
-    set_col($self, $args{col}) if $args{col};
-    $self -> order();
-    $self -> merge();
+sub prep {
+    my ( $self, %args ) = @_;
+    set_file( $self, $args{file} ) if $args{file};
+    set_array( $self, $args{array} ) if $args{array};
+    croak "an input file or array is required before running \"order\" method"
+      if not $self->{_file} and not $self->{_array};
+    set_type( $self, $args{type} ) if $args{type};
+    set_col( $self, $args{col} ) if $args{col};
+    $self->order();
+    my $merged = $self->merge();
+    return $merged if defined wantarray;
 }
 
 #for effective merging and searching intervals must be sorted
-sub order { #returns reference to a sorted array of lines in chromosome order
-    my ($self, %args) = @_;
+sub order {    #returns reference to a sorted array of lines in chromosome order
+    my ( $self, %args ) = @_;
+    $self->set_file( $args{file} ) if $args{file};
+    $self->set_array($args{array} ) if $args{array};
+    $self->set_type( $args{type} ) if $args{type};
+    $self->set_col( $args{col} ) if $args{col};
+    $self->set_contig_order( $args{contig_order} ) if $args{contig_order};
+    croak "an input file or array is required before running \"order\" method"
+      if not $self->{_file} and not $self->{_array};
+    my $spl = $self->{_delimiter}; 
+    my ($start, $stop ) = ( $self->{_start_col}, $self->{_stop_col} );
     my $FILE;
-    set_file($self, $args{file}) if $args{file};
-    set_array($self, $args{array}) if $args{array};
-    set_type($self, $args{type}) if $args{type};
-    set_col($self, $args{col}) if $args{col};
-    croak "an input file or array is required before running \"order\" method" if not  $self -> {_file} and not $self -> {_array};
-    my $spl = "\t";
-    $spl = '[:-]' if $self -> {_type} eq "regions";
-    my ($start, $stop) = (1, 2); #fine for regions and bed files
-    ($start, $stop) = (2, 3) if $self -> {_type} eq "gene"; #gene tables have strand field between chr and start
-    if ($self -> {_type} eq "custom"){
-        check_custom($self);
-        ($start, $stop) = ($self->{_start_col}, $self->{_stop_col});
-    }
-    if ($self->{_file}){
-        if ($self->{_file} =~ /\.gz$/){
-            $FILE = new IO::Uncompress::Gunzip $self->{_file} || croak("IO::Uncompress::Gunzip failed while opening $self->{_file} for sorting:\n$GunzipError\n");
-        }else{
-            open ($FILE, $self -> {_file} ) || croak "Can't open file " , $self->{_file} ," for sorting";
+    if ( $self->{_file} ) {
+        if ( $self->{_file} =~ /\.gz$/ ) {
+            $FILE = new IO::Uncompress::Gunzip $self->{_file}
+              || croak(
+"IO::Uncompress::Gunzip failed while opening $self->{_file} for sorting:\n$GunzipError\n"
+              );
         }
-        #set split parameters depending on file type
-        my @sorted = ();
-        if ($self -> {_col} == 0){ #with no valid column value we'll try and find the region field ourself
-            chomp(@sorted = map { $_ -> [0] } 
-                sort{ uc$a -> [1] cmp uc$b -> [1]  || 
-                    $a -> [2] <=> $b -> [2]  || 
-                    $a -> [3] <=> $b -> [3]  }
-                map {     my $off = 0;
-                    #WE SHOULD ADD A REGEX TO CHECK THAT THE REGION IS CORRECT FORMAT REALLY
-                    chomp (my @split = (split /$spl/));
-                    no warnings 'uninitialized';
-                    $off++ until $split[$off] =~ /^chr[\dXYMUG][TLn\d_]*/i or $off > $#split;
-                    $split[$off] =~ s/^chr//i unless $off > $#split;
-                    $off <= $#split ? [$_, $split[$off], $split[$off+$start], $split[$off+$stop]] : carp ("no valid region found in line $_") #only keep lines with a valid chr field
-                } grep {!/^#/}  (<$FILE>));
-        }else{
-            chomp(@sorted = map { $_ -> [0] } #otherwise use user supplied column (using subtraction of 1 to convert to 0-based)
-                sort{ uc$a -> [1] cmp uc$b -> [1]  || 
-                    $a -> [2] <=> $b -> [2]  || 
-                    $a -> [3] <=> $b -> [3]  }
-                map { 
-                    chomp (my @split = (split /$spl/));
-                    $split[$self -> {_col} -1] =~ s/^chr//i;
-                    [$_, $split[$self -> {_col} -1], $split[$self -> {_col}+$start -1], $split[$self -> {_col}+$stop -1]]
-                } grep {!/^#/}  (<$FILE>));
+        else {
+            open( $FILE, $self->{_file} ) || croak "Can't open file ",
+              $self->{_file}, " for sorting";
         }
+        @{ $self->{_array} } = grep { !/^#/ } <$FILE>;
         close $FILE;
-        $self -> {_ordered}  = \@sorted;
-        return \@sorted if defined(wantarray);
-    }else{
-        if ($self -> {_col} == 0){ #with no valid column value we'll try and find the region field ourself
-            chomp(@{$self->{_array}} = map { $_ -> [0] } 
-                sort{ uc$a -> [1] cmp uc$b -> [1]  || 
-                    $a -> [2] <=> $b -> [2]  || 
-                    $a -> [3] <=> $b -> [3]  }
-                map {     my $off = 0;
-                    #WE SHOULD ADD A REGEX TO CHECK THAT THE REGION IS CORRECT FORMAT REALLY
-                    chomp (my @split = (split /$spl/));
-                    no warnings 'uninitialized';
-                    $off++ until $split[$off] =~ /^chr[\dXYMUG][TLn\d_]*/i or $off > $#split;
-                    $split[$off] =~ s/^chr//i unless $off > $#split;
-                    $off <= $#split ? [$_, $split[$off], $split[$off+$start], $split[$off+$stop]] : carp ("no valid region found in line $_") #only keep lines with a valid chr field
-                } grep {!/^#/} @{$self->{_array}} );
-        }else{
-            chomp(@{$self->{_array}} = map { $_ -> [0] } #otherwise use user supplied column (using subtraction of 1 to convert to 0-based)
-                sort{ uc$a -> [1] cmp uc$b -> [1]  || 
-                    $a -> [2] <=> $b -> [2]  || 
-                    $a -> [3] <=> $b -> [3]  }
-                map { 
-                    chomp (my @split = (split /$spl/));
-                    $split[$self -> {_col} -1] =~ s/^chr//i;
-                    [$_, $split[$self -> {_col} -1], $split[$self -> {_col}+$start -1], $split[$self -> {_col}+$stop -1]]
-                } grep {!/^#/} @{$self->{_array}} );
+    }
+    @{ $self->{_array} } = sort {_by_coordinate($self, $a, $b)} @{ $self->{_array} };
+    $self->{_ordered} = $self->{_array};
+    return $self->{_ordered} if defined(wantarray);
+}
+
+sub _by_coordinate{
+    my ($self, $a, $b) = @_;
+    my @a_split = split(/$self->{_delimiter}/, $a);
+    my @b_split = split(/$self->{_delimiter}/, $b);
+    my $max = max($self->{_col}, $self->{_start_col}, $self->{_end_col});
+    if ($max >= @a_split){
+        return 0 if $max >= @b_split;
+        return -1;
+    }elsif ($max >= @b_split){
+        return 1;
+    }
+    my $a_chrom = $a_split[$self->{_col}];
+    my $a_start = $a_split[$self->{_start_col}];
+    my $a_end = $a_split[$self->{_end_col}];
+    my $b_chrom = $b_split[$self->{_col}];
+    my $b_start = $b_split[$self->{_start_col}];
+    my $b_end = $b_split[$self->{_end_col}];
+    if ($self->{_contig_order}){
+        if (not exists $self->{_contig_order}->{$a_chrom}){
+            croak "$a_chrom does not exist in contig_order passed to SortGenomicCoordinates ";
         }
-        $self->{_ordered}  = $self->{_array};
-        return $self->{_ordered} if defined(wantarray);
+        if (not exists $self->{_contig_order}->{$b_chrom}){
+            croak "$b_chrom does not exist in contig_order passed to SortGenomicCoordinates ";
+        }
+        return (
+            $self->{_contig_order}->{$a_chrom} <=> $self->{_contig_order}->{$b_chrom} ||
+                                      $a_start <=> $b_start                           ||
+                                        $a_end <=> $b_end 
+            );
+    }else{
+        return (
+            $a_chrom  cmp $b_chrom || 
+            $a_start  <=> $b_start ||
+            $a_end    <=> $b_end 
+            );
     }
 }
+
 #for quick binary searching we need to merge all overlapping intervals from our sorted array
 #we return an array of anonymous hashes each with keys 'chrom', 'start', 'stop' and 'info'
-#original info for merged intervals is stored as an anonymous array accessed by key 'info' 
+#original info for merged intervals is stored as an anonymous array accessed by key 'info'
 sub merge {
-    my ($self, $merging) = @_; #input must be a ref to sorted array of bed regions
-    if ($merging){
-        carp "Warning, merged array provided independent of regions file \"$self -> {_file}\" " if $self -> {_file};
-        carp "Warning, merged array overwriting existing sorted array \"$self -> {_ordered}\" " if $self -> {_ordered};
-    }else{
-        croak "An ordered array must be specified either by using \"->order\" method or by providing a reference to an array when calling \"->merge\" method " unless $self -> {_ordered};
-        $merging = $self -> {_ordered};
+    my ( $self, $merging ) =
+      @_;    #input must be a ref to sorted array of bed regions
+    if ($merging) {
+        carp
+"Warning, merged array provided independent of regions file \"$self -> {_file}\" "
+          if $self->{_file};
+        carp
+"Warning, merged array overwriting existing sorted array \"$self -> {_ordered}\" "
+          if $self->{_ordered};
     }
-    ref $merging eq "ARRAY" || croak "Scalar passed to \"merge\" method must be reference to an array";
-        my @merged = ();
-        my ($cur_chrom,  $cur_start,  $cur_end);
-        my  ($prev_chrom, $prev_start, $prev_end, $count) = (0, 0, 0, 0);
-    #set split parameters depending on file type
-    my $spl = "\t";
-    $spl = '[:-]' if $self -> {_type} eq "regions";
-    my ($start, $stop) = (1, 2); #fine for regions and bed files
-    ($start, $stop) = (2, 3) if $self -> {_type} eq "gene"; #gene tables have strand field between chr and start
-    if ($self -> {_type} eq "custom"){
-        check_custom($self);
-        ($start, $stop) = ($self->{_start_col}, $self->{_stop_col});
+    else {
+        croak
+"An ordered array must be specified either by using \"->order\" method or by providing a reference to an array when calling \"->merge\" method "
+          unless $self->{_ordered};
+        $merging = $self->{_ordered};
     }
-    my @info;
-        foreach my $table(@$merging){
-        my $off = 0;
-                my @regions = split(/$spl/, $table);
-        if ($self -> {_col} == 0){ #with no valid column value we'll try and find the region field ourself
-            no warnings 'uninitialized';
-            $off++ until $regions[$off] =~ /chr*[\dXYMUG][TnL\d_]*/i or $off > $#regions;
-            croak ("no valid region found in line $_") if $off > $#regions;
-        }else{
-            $off = $self -> {_col} -1;
-        }
-                ($cur_chrom = $regions[$off]) =~ s/^chr//i;
-                $cur_start = $regions[$off + $start];
-                $cur_end = $regions[$off + $stop];
-                croak "Array passed to merge subroutine is not sorted properly "
-            ."- try sorting with \"SortGenomicCoordinates -> order\" subroutine or ensure chromosomes are in" 
-                ." ascibetical order and coordinates are in numerical order" 
-                    if (uc$cur_chrom lt uc$prev_chrom) or (uc$cur_chrom eq uc$prev_chrom and $cur_start < $prev_start) and $count >0;
-        if ($cur_start > $cur_end){
-            carp "Start value is after end value for region $cur_chrom:$cur_start-$cur_end. Swapping start and end values. ";
-                    $cur_end = $regions[$off + $start];
-                    $cur_start = $regions[$off + $stop];
-            
-        }
-        
-        if ((uc$cur_chrom eq uc$prev_chrom and $cur_start > $prev_end) or (uc$cur_chrom ne uc$prev_chrom)){
-                        my $hash = {chrom=>$prev_chrom, start=>$prev_start, end=>$prev_end, info=>[@info]} unless ($count < 1);
-                        push (@merged, $hash) unless ($count < 1);
-                        $prev_chrom = $cur_chrom;
-                        $prev_start = $cur_start;
-                        $prev_end = $cur_end;
-            @info = ();
-            push (@info, $table); 
-                        $count++;
-                }
-                elsif (uc$cur_chrom eq uc$prev_chrom and $cur_start <= $prev_end and $cur_end > $prev_end){ #if overlaps at 3' end
-                        $prev_end = $cur_end;
-            push (@info, $table);
-                }
-                elsif (uc$cur_chrom eq uc$prev_chrom and $cur_start <= $prev_end and $cur_end <= $prev_end){ #if contained within larger region
-                    push (@info, $table);
-                }
+    ref $merging eq "ARRAY"
+      || croak
+      "Scalar passed to \"merge\" method must be reference to an array";
+    my @merged = ();
+    my %current_region_hash = ();
+    my $prev_chrom;
+    my $prev_start;
+    foreach my $line (@$merging) {
+        my @regions = split( /$self->{_delimiter}/, $line);
+        my $cur_start = $regions[ $self->{_start_col} ];
+        my $cur_end   = $regions[ $self->{_end_col} ];
+        my $cur_chrom = $regions[ $self->{_col} ];
+        if (%current_region_hash){
+            croak "Array passed to merge subroutine is not sorted properly "
+            . "- try sorting with \"SortGenomicCoordinates -> order\" subroutine or ensure chromosomes are in"
+            . " contig/ascibetical order and coordinates are in numerical order"
+                if (not $self->_check_chrom_order($prev_chrom, $cur_chrom)) or ( $prev_chrom eq $cur_chrom and $cur_start < $prev_start);
+
+            if (   ( $cur_chrom eq $current_region_hash{chrom} and $cur_start > $current_region_hash{end} )
+                or ( $cur_chrom ne $current_region_hash{chrom} ) )
+            {
+                push( @merged, {%current_region_hash} ) ;
+                %current_region_hash = (
+                    chrom => $cur_chrom,
+                    start => $cur_start,
+                    end   => $cur_end,
+                    info  => [$line],
+                );
             }
-        my $hash = {chrom=>$prev_chrom, start=>$prev_start, end=>$prev_end, info=>[@info]};
-        push (@merged, $hash);
-        $self -> {_merged} = \@merged;
+
+            elsif ( uc $cur_chrom eq uc $current_region_hash{chrom}
+                and $cur_start <= $current_region_hash{end}
+                and $cur_end > $current_region_hash{end} )
+            {    #if overlaps at 3' end
+                $current_region_hash{end} = $cur_end;
+                push( @{$current_region_hash{info}}, $line );
+            }
+            elsif ( uc $cur_chrom eq uc $current_region_hash{chrom}
+                and $cur_start <= $current_region_hash{end}
+                and $cur_end <= $current_region_hash{end} )
+            {    #if contained within larger region
+                push( @{$current_region_hash{info}}, $line );
+            }
+        }else{
+            %current_region_hash = (
+                    chrom => $cur_chrom,
+                    start => $cur_start,
+                    end   => $cur_end,
+                    info  => [$line],
+            );
+        }
+        $prev_start = $cur_start;
+        $prev_chrom = $cur_chrom;
+    }
+    push( @merged, {%current_region_hash} ) ;
+    $self->{_merged} = \@merged;
     return \@merged if defined(wantarray);
 }
+
+sub _check_chrom_order{
+    my ($self, $first_chrom, $next_chrom) = @_;
+    if ($self->{_contig_order}){
+        return 0 if $self->{_contig_order}->{$first_chrom} > $self->{_contig_order}->{$next_chrom};
+        return 1;
+    }else{
+        return 0 if $first_chrom gt $next_chrom;
+        return 1;
+    }
+}
+
 1;
 
 =head1 NAME
