@@ -193,7 +193,7 @@ sub getContigOrder{
         }
         return %contigs if %contigs;
     }
-    print STDERR "Failed to retrive contigs from header - reading/creating index.\n";
+    print STDERR "Failed to retrieve contigs from header - reading/creating index.\n";
     if ($vcf =~ /\.gz$/){
         eval "use Tabix; 1" 
             or croak "Tabix module is not installed and VCF file $vcf appears to be (b)gzip compressed.  ".
@@ -1031,6 +1031,160 @@ sub getSearchArguments{
         return (file_handle => $FH, contig_order => $contig_index);
     }
 }
+sub searchByRegion{
+    #get all variants within a genomic region
+    my (%args) = @_;
+    croak "chrom argument is required for searchForPosition method " if not exists $args{chrom};
+    croak "start argument is required for searchForPosition method " if not exists $args{start};
+    croak "end argument is required for searchForPosition method " if not exists $args{end};
+    if (exists $args{vcf}){
+        if ($args{vcf} =~ /\.gz$/){
+            return searchByRegionCompressed(%args);
+        }else{
+            return searchByRegionUncompressed(%args);
+        }
+    }elsif(exists $args{tabix_iterator}){
+        return searchByRegionCompressed(%args);
+    }elsif(exists $args{file_handle}){
+        croak "file_handle argument can only be used without vcf argument if contig_order is provided "
+            if not $args{contig_order};
+        return searchByRegionUncompressed(%args);
+    }else{
+        croak "vcf or tabix_iterator arguments are required for searchForPosition method " ;
+    }
+}
+
+sub searchByRegionCompressed{
+    my (%args) = @_;
+    croak "chrom argument is required for searchByRegionCompressed method " if not exists $args{chrom};
+    croak "start argument is required for searchByRegionCompressed method " if not exists $args{start};
+    croak "end argument is required for searchByRegionCompressed method " if not exists $args{end};
+    croak "vcf or tabix_iterator arguments are required for searchForPositionCompressed method " 
+        if not exists $args{vcf} and not exists $args{tabix_iterator};
+    eval "use Tabix; 1" 
+        or croak "Tabix module is not installed and VCF file $args{vcf} appears to be (b)gzip compressed.  ".
+        "  Please install Tabix.pm in order to search bgzip compressed VCFs.\n";
+    
+    my $tabixIterator; 
+    if ($args{tabix_iterator}){
+        $tabixIterator = $args{tabix_iterator};
+    }else{
+        my $index = defined $args{index} ? $args{index} : "$args{vcf}.tbi";
+        if (not -e $index){
+            print STDERR "Indexing $args{vcf} with tabix...";
+            indexVcf($args{vcf});
+            croak "Tabix indexing failed? $index does not exist " if (not -e $index);
+            print STDERR " Done.\n";
+        }
+        $tabixIterator = Tabix->new(-data =>  $args{vcf}, -index => $index) ;
+    }
+    my $iter = $tabixIterator->query($args{chrom}, $args{start} -1, $args{end});
+    return if not defined $iter->{_}; #$iter->{_} will be undef if our chromosome isn't in the vcf file
+    my @matches = ();
+    while (my $m =  $tabixIterator->read($iter)){
+        push @matches, $m;
+    } 
+    return @matches if defined wantarray;
+    carp "searchByRegionCompressed called in void context ";     
+}
+
+sub searchByRegionUncompressed{
+    my (%args) = @_;
+    croak "chrom argument is required for searchByRegionUncompressed method " if not exists $args{chrom};
+    croak "start argument is required for searchByRegionUncompressed method " if not exists $args{start};
+    croak "end argument is required for searchByRegionUncompressed method " if not exists $args{end};
+    croak "vcf or file_handle arguments are required for searchByRegionUncompressed method " 
+        if not exists $args{vcf} and not exists $args{file_handle};
+    my $contig_order;
+    my $blocks;
+    my $FH = exists $args{file_handle} ? $args{file_handle} : _openFileHandle($args{vcf});
+    my $index;
+    my $contig_index;
+    if ($args{vcf}){
+        $index = defined  $args{index} ?  $args{index} : "$args{vcf}.vridx" ;
+    }
+    if (exists $args{contig_order}){
+        if (ref $args{contig_order} eq 'HASH'){
+            $contig_order = $args{contig_order};
+        }else{
+            croak "contig_order argument passed to searchByRegionUncompressed method must be a hash reference ";
+        }
+    }else{
+        croak "contig_order argument is required to use searchByRegionUncompressed without vcf argument "
+            if not exists $args{vcf};
+    }
+    if (not $contig_order){
+        my %c  = readIndex($args{vcf});
+        $contig_order = \%c;
+        if (not %{$contig_order}){
+            croak "Could not find any contigs in contig index $args{vcf}.vridx. Try deleting $args{vcf}.vridx and rerunning " ;
+        }
+    }
+
+    my @matches = _getByRegion(
+                            chrom           => $args{chrom}, 
+                            end             => $args{end},
+                            start           => $args{start},
+                            contig_order    => $contig_order,
+                            fh              => $FH,
+                            );
+    return @matches if defined wantarray;
+    carp "searchByRegionUncompressed called in void context ";     
+}
+
+sub _getByRegion{
+    my (%args) = @_;
+    croak "chrom argument is required for _getByRegion method " if not exists $args{chrom};
+    croak "start argument is required for _getByRegion method " if not exists $args{start};
+    croak "end argument is required for _getByRegion method " if not exists $args{end};
+    croak "contig_order argument is required for _getByRegion method " if not exists $args{contig_order};
+    #croak "index argument is required for _getByRegion method " if not exists $args{index};
+    croak "fh argument is required for _getByRegion method " if not exists $args{fh};
+    #my $total_lines = exists $args{length} ? $args{length} : get_file_length_from_index($args{fh}, $args{index}); 
+    if ($args{start} > $args{end}){
+        my $start = $args{end};
+        $args{end} = $args{start};
+        $args{start} = $start;
+    }
+    my @searches = ();
+    my @matches = ();
+    my $total_lines = $args{contig_order}->{last_line};
+    my $start_to_int = int($args{start}/$REGION_SPANS);
+    my $end_to_int = int($args{end}/$REGION_SPANS);
+    my $start_rounddown = int($args{start}/$REGION_SPANS) * $REGION_SPANS;
+    my $end_rounddown = int($args{end}/$REGION_SPANS) * $REGION_SPANS;
+    for (my $i = $start_to_int; $i <= $end_to_int; $i++){
+        my $span_start = $i * $REGION_SPANS;
+        if (exists $args{contig_order}->{$args{chrom}}->{regions}->{$span_start}){
+            push @searches, $args{contig_order}->{$args{chrom}}->{regions}->{$span_start};
+        }
+    }
+    foreach my $s (@searches){
+        foreach my $reg (@$s){
+            next if $reg->{pos_start} > $args{end};
+            next if $reg->{pos_end} < $args{start};
+            my @lines = _readLinesByOffset($reg->{offset_start}, $reg->{offset_end}, $args{fh});
+            foreach my $l (@lines){
+                my @sp = split("\t", $l);
+                my $l_pos =  $sp[$vcf_fields{POS}]; 
+                last if $l_pos > $args{end};
+                if ($l_pos >= $args{start} and $l_pos <= $args{end}){
+                    push @matches, $l;
+                    next;
+                }
+                my $span = $l_pos + length($sp[$vcf_fields{REF}]) -1;
+                if ($l_pos <= $args{end} and $span >= $args{start}){
+                    push @matches, $l;
+                }
+            }
+        }
+    }
+    my %seen = ();
+    @matches = grep {! $seen{$_}++} @matches;
+    return @matches;
+}
+
+
 
 sub searchForPosition{
 #if vcf argument is provided will use Tabix.pm (searchForPositionCompressed) or internal method (searchForPositionUncompressed)
@@ -1060,6 +1214,9 @@ sub searchForPosition{
  
 sub searchForPositionCompressed{
     my (%args) = @_;
+    croak "chrom argument is required for searchForPositionCompressed method " if not exists $args{chrom};
+    croak "start argument is required for searchForPositionCompressed method " if not exists $args{start};
+    croak "end argument is required for searchForPositionCompressed method " if not exists $args{end};
     croak "vcf or tabix_iterator arguments are required for searchForPositionCompressed method " 
         if not exists $args{vcf} and not exists $args{tabix_iterator};
     eval "use Tabix; 1" 
@@ -1086,12 +1243,15 @@ sub searchForPositionCompressed{
         push @matches, $m;
     } 
     return @matches if defined wantarray;
-    carp "searchForPosition called in void context ";     
-}           
+    carp "searchForPositionCompressed called in void context ";     
+}          
 
 sub searchForPositionUncompressed{
     my (%args) = @_;
-    croak "vcf or file_handle arguments are required for searchForPositionCompressed method " 
+    croak "chrom argument is required for searchForPositionUncompressed method " if not exists $args{chrom};
+    croak "start argument is required for searchForPositionUncompressed method " if not exists $args{start};
+    croak "end argument is required for searchForPositionUncompressed method " if not exists $args{end};
+    croak "vcf or file_handle arguments are required for searchForPositionUncompressed method " 
         if not exists $args{vcf} and not exists $args{file_handle};
     my $contig_order;
     my $blocks;
@@ -1105,7 +1265,7 @@ sub searchForPositionUncompressed{
         if (ref $args{contig_order} eq 'HASH'){
             $contig_order = $args{contig_order};
         }else{
-            croak "contig_order argument passed to searchForPosition method must be a hash reference ";
+            croak "contig_order argument passed to searchForPositionUncompressed method must be a hash reference ";
         }
     }else{
         croak "contig_order argument is required to use searchForPositionUncompressed without vcf argument "
@@ -1126,7 +1286,7 @@ sub searchForPositionUncompressed{
                             fh              => $FH,
                             );
     return @matches if defined wantarray;
-    carp "searchForPosition called in void context ";     
+    carp "searchForPositionUncompressed called in void context ";     
 }
 
 sub readIndex{
