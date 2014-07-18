@@ -123,7 +123,6 @@ use Bio::SeqIO::entrezgene;
 #use Bio::SeqIO::entrezgene_interactants;
 use FindBin;
 use lib "$FindBin::Bin";
-use SearchGenomicRegions;
 use ParseVCF;
 
 our $genedir;
