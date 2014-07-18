@@ -117,13 +117,7 @@ sub _getValidFields{
 sub _getLineCount{
     my ($self) = shift;
     my $line_count = 0;
-    if ($self->{_file} =~ /\.gz$/){
-        while (my $line = scalar readline $self->{_filehandle}){
-            $line_count++ ;
-        }
-    }else{
-        $line_count += tr/\n/\n/ while sysread($self->{_filehandle}, $_, 2 ** 16);
-    }
+    $line_count += tr/\n/\n/ while sysread($self->{_filehandle}, $_, 2 ** 16);
     return $line_count;
 }
 
@@ -1712,11 +1706,11 @@ sub getSampleActualGenotypes{
             foreach my $sample (keys %{$self->{_samples}}){
                 $var = $self->getSampleVariant($sample);
                 my $call = (split ":", $var)[0];
-                if ($call =~ /(\d+)[\/\|](\d+)/){
+                if ($call =~ /(\d+)([\/\|])(\d+)/){
                     if ($args{return_alleles_only}){
-                        push (@sample_alleles, ($alleles[$1], $alleles[$2]));
+                        push (@sample_alleles, ($alleles[$1], $alleles[$3]));
                     }else{
-                        $multiple{$sample} = "$alleles[$1]/$alleles[$2]";
+                        $multiple{$sample} = "$alleles[$1]$2$alleles[$3]";
                     }
                 }else{
                     if (not $args{return_alleles_only}){
@@ -1736,11 +1730,11 @@ sub getSampleActualGenotypes{
             foreach my $sample (@{$args{multiple}}){
                 $var = $self->getSampleVariant($sample);
                 my $call = (split ":", $var)[0];
-                if ($call =~ /(\d+)[\/\|](\d+)/){
+                if ($call =~ /(\d+)([\/\|])(\d+)/){
                     if ($args{return_alleles_only}){
-                        push (@sample_alleles, ($alleles[$1], $alleles[$2]));
+                        push (@sample_alleles, ($alleles[$1], $alleles[$3]));
                     }else{
-                        $multiple{$sample} = "$alleles[$1]/$alleles[$2]";
+                        $multiple{$sample} = "$alleles[$1]$2$alleles[$3]";
                     }
                 }else{
                     if (not $args{return_alleles_only}){
@@ -1761,15 +1755,15 @@ sub getSampleActualGenotypes{
             $var = $self->getSampleVariant();
         }
         my $call = (split ":", $var)[0];
-        if ($call =~ /(\d+)[\/\|](\d+)/){
+        if ($call =~ /(\d+)([\/\|])(\d+)/){
             if ($args{return_alleles_only}){
-                push (@sample_alleles, ($alleles[$1], $alleles[$2]));
+                push (@sample_alleles, ($alleles[$1], $alleles[$3]));
                 my %seen = ();
                 @sample_alleles = grep {!$seen{$_}++} @sample_alleles;#remove duplicates
                 return @sample_alleles;
                 
             }else{
-                $genotype = "$alleles[$1]/$alleles[$2]";
+                $genotype = "$alleles[$1]$2$alleles[$3]";
             }
         }else{
             $genotype = "-/-";
