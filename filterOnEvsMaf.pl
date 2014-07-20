@@ -185,7 +185,11 @@ if ( defined $opts{Progress} and $total_vcf ) {
     $prog_total = $total_vcf * 3;
     $progressbar = Term::ProgressBar->new(
         #{ name => "Filtering", count => ($prog_total), ETA => "linear", } );
-        { name => "Filtering", count => ($prog_total), } );
+        { name => "Filtering", 
+          count => ($prog_total), 
+          ETA => "linear",
+        } 
+    );
 }
 my $kept = 0; #variants not filtered
 my $filtered = 0; #variants filtered
@@ -219,7 +223,7 @@ VAR: while ( my $line = <$VCF> ) {
         #our VcfReader methods should be more efficient on pre-split lines
         my @split_line = split( "\t", $line );
         my %res = filter_on_evs_maf( \@split_line, \%no_fork_args);
-        print "$line\n" if $res{keep};
+        print $OUT "$line\n" if $res{keep};
         $filtered++ if $res{filter};
         $n += 2;
         if ($progressbar) {
