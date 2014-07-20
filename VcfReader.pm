@@ -300,7 +300,7 @@ sub indexVcf{
         my @s = split ("\t", $line);
         my $chrom = $s[$vcf_fields{CHROM}];
         my $pos = $s[$vcf_fields{POS}];
-        my $span = $s[$vcf_fields{POS}] + length($s[$vcf_fields{REF}]) - 1;
+        my $span = getSpan(\@s);
         my $pos_rounddown = int($pos/$REGION_SPANS) * $REGION_SPANS;
         if (exists $contigs{$chrom}){
             if ($contigs{$chrom}->{order}  != scalar(keys%contigs) -1 or $pos < $prev_pos){
@@ -1164,7 +1164,6 @@ sub _getByRegion{
     }
     my @searches = ();
     my @matches = ();
-    my $total_lines = $args{contig_order}->{last_line};
     my $start_to_int = int($args{start}/$REGION_SPANS);
     my $end_to_int = int($args{end}/$REGION_SPANS);
     my $start_rounddown = int($args{start}/$REGION_SPANS) * $REGION_SPANS;
@@ -1188,7 +1187,7 @@ sub _getByRegion{
                     push @matches, $l;
                     next;
                 }
-                my $span = $l_pos + length($sp[$vcf_fields{REF}]) -1;
+                my $span = getSpan (\@sp);
                 if ($l_pos <= $args{end} and $span >= $args{start}){
                     push @matches, $l;
                 }
@@ -1200,7 +1199,19 @@ sub _getByRegion{
     return @matches;
 }
 
-
+sub getSpan{
+    my ($line) = @_;
+    my $end;
+    if ($line->[$vcf_fields{ALT}] =~ /^</){#try to deal with CNVs
+        if ($end = getVariantInfoField($line, 'END')){
+        }else{
+            $end = $line->[$vcf_fields{POS}];
+        }
+    }else{
+        $end = $line->[$vcf_fields{POS}] + length($line->[$vcf_fields{REF}]) -1;
+    }
+    return $end;
+}
 
 sub searchForPosition{
 #if vcf argument is provided will use Tabix.pm (searchForPositionCompressed) or internal method (searchForPositionUncompressed)
@@ -1345,7 +1356,6 @@ sub _searchVcf{
     croak "fh argument is required for _searchVcf method " if not exists $args{fh};
     #my $total_lines = exists $args{length} ? $args{length} : get_file_length_from_index($args{fh}, $args{index}); 
     my @matches = ();
-    my $total_lines = $args{contig_order}->{last_line};
     my $pos_rounddown = int($args{pos}/$REGION_SPANS) * $REGION_SPANS;
     return if not (exists $args{contig_order}->{$args{chrom}}->{regions}->{$pos_rounddown});
     foreach my $reg (@{$args{contig_order}->{$args{chrom}}->{regions}->{$pos_rounddown}}){
@@ -1360,7 +1370,7 @@ sub _searchVcf{
                 push @matches, $l;
                 next;
             }
-            my $span = $l_pos + length($sp[$vcf_fields{REF}]) -1;
+            my $span = getSpan(\@sp);
             if ($l_pos <= $args{pos} and $span >= $args{pos}){
                 push @matches, $l;
             }
