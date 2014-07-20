@@ -302,7 +302,6 @@ sub indexVcf{
         my $pos = $s[$vcf_fields{POS}];
         my $span = $s[$vcf_fields{POS}] + length($s[$vcf_fields{REF}]) - 1;
         my $pos_rounddown = int($pos/$REGION_SPANS) * $REGION_SPANS;
-        my $span_rounddown = int($span/$REGION_SPANS) * $REGION_SPANS;
         if (exists $contigs{$chrom}){
             if ($contigs{$chrom}->{order}  != scalar(keys%contigs) -1 or $pos < $prev_pos){
                 $gz->close();
@@ -331,31 +330,34 @@ sub indexVcf{
                     {offset_start=> $prev_offset,  offset_end => $offset,
                     line_start => $n, line_end => $n, pos_start => $pos, pos_end => $span};
             }
-            if (exists $contigs{$chrom}->{regions}->{$span_rounddown}){
-                my $merged = 0;
-                foreach my $offs (@{$contigs{$chrom}->{regions}->{$span_rounddown}}){
-                    if ($offs->{line_end} eq $n){
-                        #already merged
-                        $merged++;
-                        last;
-                    }elsif ($offs->{line_end} +1  eq $n){
-                        #if lines are contiguous create a single region
-                        $offs->{offset_end} = $offset;
-                        $offs->{line_end} = $n;
-                        $offs->{pos_end} = $span if ($span > $offs->{pos_end});
-                        $merged++;
-                        last;
+            foreach my $step (int($pos/$REGION_SPANS) + 1 .. int($span/$REGION_SPANS)){
+                my $span_rounddown = $step * $REGION_SPANS;
+                if (exists $contigs{$chrom}->{regions}->{$span_rounddown}){
+                    my $merged = 0;
+                    foreach my $offs (@{$contigs{$chrom}->{regions}->{$span_rounddown}}){
+                        if ($offs->{line_end} eq $n){
+                            #already merged
+                            $merged++;
+                            last;
+                        }elsif ($offs->{line_end} +1  eq $n){
+                            #if lines are contiguous create a single region
+                            $offs->{offset_end} = $offset;
+                            $offs->{line_end} = $n;
+                            $offs->{pos_end} = $span if ($span > $offs->{pos_end});
+                            $merged++;
+                            last;
+                        }
                     }
-                }
-                if (not $merged){
+                    if (not $merged){
+                        push @{$contigs{$chrom}->{regions}->{$span_rounddown}},
+                            {offset_start=> $prev_offset,  offset_end => $offset,
+                            line_start => $n, line_end => $n, pos_start => $pos, pos_end => $span};
+                    }
+                }else{
                     push @{$contigs{$chrom}->{regions}->{$span_rounddown}},
                         {offset_start=> $prev_offset,  offset_end => $offset,
                         line_start => $n, line_end => $n, pos_start => $pos, pos_end => $span};
                 }
-            }else{
-                push @{$contigs{$chrom}->{regions}->{$span_rounddown}},
-                    {offset_start=> $prev_offset,  offset_end => $offset,
-                    line_start => $n, line_end => $n, pos_start => $pos, pos_end => $span};
             }
         }else{
             $contigs{$chrom}->{order}  = scalar(keys%contigs);
