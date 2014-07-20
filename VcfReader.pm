@@ -1231,8 +1231,7 @@ sub searchForPosition{
 sub searchForPositionCompressed{
     my (%args) = @_;
     croak "chrom argument is required for searchForPositionCompressed method " if not exists $args{chrom};
-    croak "start argument is required for searchForPositionCompressed method " if not exists $args{start};
-    croak "end argument is required for searchForPositionCompressed method " if not exists $args{end};
+    croak "pos argument is required for searchForPositionCompressed method " if not exists $args{pos};
     croak "vcf or tabix_iterator arguments are required for searchForPositionCompressed method " 
         if not exists $args{vcf} and not exists $args{tabix_iterator};
     eval "use Tabix; 1" 
@@ -1265,8 +1264,7 @@ sub searchForPositionCompressed{
 sub searchForPositionUncompressed{
     my (%args) = @_;
     croak "chrom argument is required for searchForPositionUncompressed method " if not exists $args{chrom};
-    croak "start argument is required for searchForPositionUncompressed method " if not exists $args{start};
-    croak "end argument is required for searchForPositionUncompressed method " if not exists $args{end};
+    croak "pos argument is required for searchForPositionUncompressed method " if not exists $args{pos};
     croak "vcf or file_handle arguments are required for searchForPositionUncompressed method " 
         if not exists $args{vcf} and not exists $args{file_handle};
     my $contig_order;
