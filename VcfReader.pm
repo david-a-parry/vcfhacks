@@ -22,8 +22,8 @@ my %vcf_fields = (
     FORMAT  => 8,
     );
 
-#index every 0-9999 bp of a chrom
-my $REGION_SPANS = 10000;
+#index every 0-99999 bp of a chrom
+my $REGION_SPANS = 100000;
 
 #header utilities
 sub getHeader{
@@ -364,6 +364,20 @@ sub indexVcf{
                 line_start => $n, line_end => $n, pos_start => $pos, pos_end => $span};
         }
         $prev_pos = $pos;
+    }
+    foreach my $k (keys %contigs){
+	next if ref $contigs{$k} ne 'HASH';
+	next if not exists $contigs{$k}->{regions};
+        foreach my $r (keys %{$contigs{$k}->{regions}}){
+            foreach my $s (@{$contigs{$k}->{regions}->{$r}}){
+                if (exists $s->{line_start}){
+                    delete $s->{line_start};
+                }
+                if (exists $s->{line_end}){
+                    delete $s->{line_end};
+                }
+            }
+        }
     }
     $contigs{last_line} = $n;
     $contigs{last_offset} = $prev_offset;
