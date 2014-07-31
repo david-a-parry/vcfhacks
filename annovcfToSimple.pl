@@ -484,19 +484,10 @@ LINE: while (my $vcf_line = $vcf_obj->readLine){
 #    }
     #now write to text or excel as appropriate
     if (defined $config->{text_output}){
-        #@preceding will often span multiple rows
-        if (@preceding){
-            foreach my $p (@preceding){
-                print $OUT join("\t", @$p);
-                print $OUT join("\t", @line);
-            }
-        }else{
-            print $OUT join("\t", @line);
-        }
+        my @fol_text = ();
         if (@following){
         #for text format we'll keep the gene annotations the same
         #for each line, enclosing values for different genes with []
-            my @fol_text = ();
             for (my $i = 0; $i < @{$following[0]}; $i++){
                 my @temp_fol = ($following[0]->[$i]);
                 for (my $j = 1; $j < @following; $j++){
@@ -509,9 +500,24 @@ LINE: while (my $vcf_line = $vcf_obj->readLine){
                 }
                 push @fol_text, join("", @temp_fol);
             }
-            print $OUT "\t" . join("\t", @fol_text);
         }
-        print $OUT "\n";
+        #@preceding will often span multiple rows
+        if (@preceding){
+            foreach my $p (@preceding){
+                print $OUT join("\t", @$p) ."\t";
+                print $OUT join("\t", @line);
+                if (@fol_text){
+                    print $OUT "\t" . join("\t", @fol_text);
+                }
+                print $OUT "\n";
+            }
+        }else{
+            print $OUT join("\t", @line);
+            if (@fol_text){
+                print $OUT "\t" . join("\t", @fol_text);
+            }
+            print $OUT "\n";
+        }
     }else{
         $xl_obj->writeLine(
                 line => \@line, 
