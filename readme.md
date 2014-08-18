@@ -4,6 +4,24 @@ This project comprises a set of perl scripts and modules that may be useful for 
 
 __UPDATE__
 
+VERSION 0.1.10:
+
+18/8/14
+
+-in my haste to release v0.1.9 before my holidays I missed a show-stopping bug in the findBiallelic programs due to changes made to enable parallel execution of other scripts. This is now fixed
+
+-fixed a bug where filterOnEvsMaf.pl would not keep track of kept/filtered variants if run without forks
+
+-getVariantsByLocation.pl now allows use of single genomic coordinates (e.g. "X:100000") as well as genomic regions with the --regions option
+
+-support for overlapping CNVs in getVariantsByLocation.pl
+
+-fixed missing line breaks in annovcfToSimple.pl when using text output rather than excel
+
+-added documentation to VcfReader.pm so that the methods are intelligible to other people who may want to use them in their scripts
+
+-sortVcf.pl now uses VcfReader.pm instead of ParseVcf.pm
+
 VERSION 0.1.9:
 
 18/7/14
