@@ -6,9 +6,8 @@ use Pod::Usage;
 use Term::ProgressBar;
 use FindBin;
 use lib "$FindBin::Bin";
-use ParseVCF;
-my @opt_samples = ();
-my %opts = (samples => \@opt_samples);
+use VcfReader;
+my %opts = ();
 GetOptions(\%opts,
         "output=s",
         "input=s",
@@ -19,11 +18,10 @@ pod2usage (-verbose => 2) if $opts{manual};
 pod2usage (-verbose => 1) if $opts{help};
 pod2usage(-exitval => 2, -message => "Syntax error") if not $opts{input}; 
 
-my $vcf_obj = ParseVCF->new(file => $opts{input}, noLineCount => 1);
 if ($opts{output}){
-    $vcf_obj->sortVcf(output => $opts{output});
+    VcfReader::sortVcf(vcf => $opts{input}, output => $opts{output});
 }else{
-    $vcf_obj->sortVcf();
+    VcfReader::sortVcf(vcf => $opts{input});
 }
 
 
@@ -33,7 +31,7 @@ sortVcf.pl - Sort a VCF file in coordinate order.
 
 =head1 SYNOPSIS
 
-        sortVcf.pl -i [vcf file] [options]
+        sortVcf.pl -i [vcf file] -o [output]
         sortVcf.pl -h (display help message)
         sortVcf.pl -m (display manual page)
 
@@ -66,7 +64,7 @@ Show manual page.
 
 =head1 DESCRIPTION
 
-This program will identify the contig order from a VCF file header and sort all variants in contig and coordinate order. The contigs must be present in your VCF header (i.e. lines beginning '##contig=<ID='). 
+This program will attempt to identify the contig order from a VCF file header and sort all variants in contig and coordinate order. If contigs are not present in your VCF header (i.e. lines beginning '##contig=<ID=') variants will be sorted numerically, followed by 'X', 'Y', 'MT' and then ascibetically
 
 Although VCFs usually are generated already in coordinate sorted order, occasionally programs such as the VEP output the odd line out of order so this program is designed as a quick fix.
 
