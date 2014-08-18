@@ -443,6 +443,7 @@ LINE: while ( my $line = <$VCF> ) {
         }
     }
     else {
+        chomp $line;
         my @split = split( "\t", $line );
         my $l = filter_on_vcf( \@split, \%no_fork_args );
         if ($l) {
@@ -467,7 +468,7 @@ close $VCF;
 close $OUT;
 $time = strftime( "%H:%M:%S", localtime );
 print STDERR
-  "[$time] $filtered matching variants filtered, $kept printed ";
+  "\n[$time] $filtered matching variants filtered, $kept printed ";
 print STDERR "($total_variants total)" if $total_variants;
 print STDERR "\n";
 
@@ -741,7 +742,7 @@ sub filter_on_vcf {
                     }
                     if ($maf) {
                         my %f_allele_counts =
-                          VcfReader::countAlleles( \@snp_split,
+                          VcfReader::countAlleles( line => \@snp_split,
                             minGQ => $unaff_quality );
                         foreach my $f_al ( keys %f_allele_counts ) {
                             if ( $f_al eq $filter_match ) {
