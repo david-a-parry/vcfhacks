@@ -295,6 +295,7 @@ LINE: while ( my $line = <$VCF> ) {
             @lines_to_process = ();
         }
     }else{
+        chomp $line;
         my @split = split("\t", $line);
         my $l = filter_on_sample(\@split);
         if ($l){
