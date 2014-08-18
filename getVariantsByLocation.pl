@@ -126,7 +126,7 @@ my %opts = (
     output    => \$outfile,
     input     => \$vcf,
     bed       => \@bedfile,
-    quiet         => \$quiet,
+    quiet     => \$quiet,
     help      => \$help,
     manual    => \$manual
 );
@@ -137,7 +137,7 @@ GetOptions(
     'no_header'    => \$no_header,
     'input=s'      => \$vcf,
     'bed=s{,}'     => \@bedfile,
-    'quiet'         => \$quiet,
+    'quiet'        => \$quiet,
     'help'         => \$help,
     'manual'       => \$manual
 ) or pod2usage( -message => "Syntax error.", -exitval => 2 );
@@ -192,9 +192,16 @@ if (@bedfile) {
 if (@reg) {
     foreach my $reg (@reg) {
         $reg =~ s/\,//g;
-        die "invalid region specied: $reg" if $reg !~ /^\S+:[\d]+-[\d]+$/;
-        (my $r = $reg) =~ s/[\:\-]/\t/g;#keep original intact for option string
-        push( @regions, $r);
+        if ($reg =~ /^\S+:\d+-\d+$/){
+            (my $r = $reg) =~ s/[\:\-]/\t/g;#keep original intact for option string
+            push( @regions, $r);
+        }elsif($reg =~ /^\S+:(\d+)$/){
+            my $r = "$reg-$1";
+            $r =~ s/[\:\-]/\t/g;
+            push @regions, $r; 
+        }else{
+            die "invalid region specied: $reg";
+        }
     }
 }
 
