@@ -521,13 +521,13 @@ foreach my $gene (keys %allelic_genes){
 my $sort = sort_vcf_lines(\@vcf_lines, $chrom_header, $pos_header);
 print $OUT join("\n", @$sort) ."\n" if @$sort;
 
+if ($progressbar){
+        $progressbar->update($vcf_obj->countLines("variants")) if $vcf_obj->countLines("variants") >= $next_update;
+}
+
 if ($list_genes){
     my $list = sort_gene_listing(\%listing) ;
     print $LIST join("\n", @$list) ."\n";
-}
-
-if ($progressbar){
-        $progressbar->update($vcf_obj->countLines("variants")) if $vcf_obj->countLines("variants") >= $next_update;
 }
 
 ###########
