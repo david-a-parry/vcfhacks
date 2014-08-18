@@ -1,5 +1,14 @@
 These scripts are written with a view to assisting mutation discovery in Mendelian disease. They have been tested on data generated using GATK variant callers (UnifiedGenotyper and HaplotypeCaller) but should work with data generate in VCF format from other variant callers. When using tools such as findBiallelicVep.pl or filterOnSample.pl it is assumed that you are using a multisample VCF as input.  To run the scripts either add the enclosing directory to your PATH and make sure the scripts are executable or run each script using 'perl [location of script]' followed by the required arguments. Help information is available for each script by running the script with either '--help' or '--manual' options. You will probably need to install additional perl modules from CPAN (http://www.cpan.org/modules/INSTALL.html) in order to run these programs.
 
+The following scripts support parallel execution using forks:
+
+    annotateSnps.pl
+    filterOnEvsMaf.pl
+    filterVcfOnVcf.pl
+    filterOnSample.pl
+
+Use the --forks option with these programs to specify the number of forks to use if desired.
+
 Examples are given below of what are envisaged to be typical uses of these programs. They are only intended as guidelines for use of some of these programs in order to get people started with these tools. 
 
 Typically we may first want to remove common variation from a VCF. The example below is typical for processing data relating to a rare recessive condiation. It removes variants in the dbSnp VCF file (dbSnp138.b37.vcf.gz) present at build 129 (generally considered the last build before 'contamination' with data from large sequencing projects) or with a minor allele frequency (MAF) of 1 % or higher in later build versions.  However, any variant with a 'Pathogenic' or 'Probably Pathogenic' annotation in the ClinVar VCF file (clinvar_20130506.vcf) will be retained regardless of frequency or dbSNP build. We optionally use the --progress flag to show a progressbar as variants are processed.
@@ -9,12 +18,6 @@ Typically we may first want to remove common variation from a VCF. The example b
 Similarly, we may want to use data from the NHLBI Exome Sequencing Project (ESP) to filter common variants. Below we filter any variant with a MAF of 1 % or higher in the ESP VCF files present in the directory passed to the -d argument:
 
     perl filterOnEvsMaf.pl -i input_snpfiltered.vcf -o input_snpfiltered_evsfiltered.vcf -f 1 -d ~/ESP_vcfs --progress
-
-Many of these programs will happily read from STDIN if '-' is used as the input file, so you can save time by piping the output of annotateSnps.pl to filterOnEvsMaf.pl like so:
-
-    perl annotateSnps.pl -d dbSnp138.b37.vcf.gz clinvar_20130506.vcf -b 129 -f 1 --pathogenic -i input.vcf --progress | perl filterOnEvsMaf.pl -i - -o input_snpfiltered_evsfiltered.vcf -f 1 -d ~/ESP_vcfs
-
-The above is only an example. If you wanted you could pipe more scripts together, optionally using the 'tee' program to capture the output of intermediate commands if desired.
 
 Having filtered common variation from dbSNP and ESP databases we may want to filter variants present in other VCFs (e.g. control samples sequenced locally).
 
