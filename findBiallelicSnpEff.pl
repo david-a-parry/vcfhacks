@@ -956,7 +956,7 @@ sub sort_vcf_lines{
     my %seen = ();
     @$v_lines = grep { !$seen{$_}++ } @$v_lines;
     #sort in coordinate order
-    my $sort_obj = SortGenomicCoordinates->new(array => $v_lines, type => "custom", col => $chrom_col + 1, start_col => $pos_col - $chrom_col, stop_col => $pos_col -  $chrom_col);
+    my $sort_obj = SortGenomicCoordinates->new(array => $v_lines, type => "custom", col => $chrom_col , start_col => $pos_col , stop_col => $pos_col );
     $sort_obj->order();
     return $sort_obj->get_ordered;
 }
