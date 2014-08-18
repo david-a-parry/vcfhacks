@@ -224,6 +224,8 @@ VAR: while ( my $line = <$VCF> ) {
         my @split_line = split( "\t", $line );
         my %res = filter_on_evs_maf( \@split_line, \%no_fork_args);
         print $OUT "$line\n" if $res{keep};
+        $kept++ if $res{keep};
+        $found++ if $res{found};
         $filtered++ if $res{filter};
         $n += 2;
         if ($progressbar) {
