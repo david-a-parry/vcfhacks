@@ -12,17 +12,17 @@ our $AUTOLOAD;
         _file         => [ "",      "read/write" ],
         _array        => [ "",      "read/write" ],
         _col          => [ 0,       "read/write" ],
-        _position     => [ "",      "read/write" ],
-        _ordered      => [ "",      "read/write" ],
-        _merged       => [ "",      "read" ],
-        _location     => [ "",      "read" ],
-        _return_type  => [ "match", "read/write" ],
+        _start_col    => [ 1,       "read/write" ],
+        _stop_col     => [ 2,       "read/write" ],
         _type         => [ "bed",   "read/write" ],
-        _chrom        => [ "",      "read/write" ],
-        _start_col    => [ "",      "read/write" ],
-        _stop_col     => [ "",      "read/write" ],
         _delimiter    => [ "\t",    "read/write" ],
         _contig_order => [ "",      "read/write" ],
+        _ordered      => [ "",      "read/write" ],
+        _merged       => [ "",      "read" ],
+        _chrom        => [ "",      "read/write" ],
+        _position     => [ "",      "read/write" ],
+        _location     => [ "",      "read" ],
+        _return_type  => [ "match", "read/write" ],
     );
 
     sub _all_attrs {
@@ -74,7 +74,11 @@ sub new {
         }
     }
     $class->_incr_count();
-    $self->set_type( type => $self->{_type} );
+    if ($args{type}){
+        $self->set_type( %args); 
+    }else{
+        $self->set_type( type => $self->{_type} );
+    }
     #    $self -> _strip_chr() if $self -> {_chrom};
     return $self;
 }
@@ -97,10 +101,10 @@ sub clone {
     return $self;
 }
 
-sub set_order{
+sub set_contig_order{
     my ($self, $contig_order) = @_;
     if (ref $contig_order ne 'HASH'){
-        croak "Argument passed to set_order function must be a HASH reference ";
+        croak "Argument passed to set_contig_order function must be a HASH reference ";
     }
     $self->{_contig_order} = $contig_order;
 }
@@ -112,23 +116,23 @@ sub set_type {
     $self->{_col} = 0;
     if ($args{type} eq 'bed'){
         $self->{_start_col} = 1;
-        $self->{_end_col} = 2;
+        $self->{_stop_col} = 2;
     }elsif($args{type} eq 'gene'){
         $self->{_start_col} = 2;
-        $self->{_end_col} = 3;
+        $self->{_stop_col} = 3;
     }elsif($args{type} eq 'regions'){
         $self->{_start_col} = 1;
-        $self->{_end_col} = 2;
+        $self->{_stop_col} = 2;
         $self->{_delimiter} = '[:-]';
     }elsif($args{type} eq 'custom'){
-        foreach my $r (qw(col start_col end_col)){
+        foreach my $r (qw(col start_col stop_col)){
             croak "'$r' argument is required when using set_type on a custom format "
                 if not exists ($args{$r});
             $self->_check_col($args{$r});
         }
         $self->{_col} = $args{col};
         $self->{_start_col} = $args{start_col};
-        $self->{_end_col} = $args{end_col};
+        $self->{_stop_col} = $args{stop_col};
         $self->{_delimiter} = $args{delimiter} if defined $args{delimiter};
     }else{
         croak "invalid type passed to set_type method ";
@@ -196,7 +200,7 @@ sub return_info {
                 and $self->{_position} >
                 $split[ $self->{_start_col} ]
                 and $self->{_position} <=
-                uc $split[ $self->{_end_col} ] )
+                uc $split[ $self->{_stop_col} ] )
             {
                 push( @ret, $region );
             }
@@ -334,7 +338,7 @@ sub _by_coordinate{
     my ($self, $a, $b) = @_;
     my @a_split = split(/$self->{_delimiter}/, $a);
     my @b_split = split(/$self->{_delimiter}/, $b);
-    my $max = max($self->{_col}, $self->{_start_col}, $self->{_end_col});
+    my $max = max($self->{_col}, $self->{_start_col}, $self->{_stop_col});
     if ($max >= @a_split){
         return 0 if $max >= @b_split;
         return -1;
@@ -343,10 +347,10 @@ sub _by_coordinate{
     }
     my $a_chrom = $a_split[$self->{_col}];
     my $a_start = $a_split[$self->{_start_col}];
-    my $a_end = $a_split[$self->{_end_col}];
+    my $a_end = $a_split[$self->{_stop_col}];
     my $b_chrom = $b_split[$self->{_col}];
     my $b_start = $b_split[$self->{_start_col}];
-    my $b_end = $b_split[$self->{_end_col}];
+    my $b_end = $b_split[$self->{_stop_col}];
     if ($self->{_contig_order}){
         if (not exists $self->{_contig_order}->{$a_chrom}){
             croak "$a_chrom does not exist in contig_order passed to SortGenomicCoordinates ";
@@ -398,7 +402,7 @@ sub merge {
     foreach my $line (@$merging) {
         my @regions = split( /$self->{_delimiter}/, $line);
         my $cur_start = $regions[ $self->{_start_col} ];
-        my $cur_end   = $regions[ $self->{_end_col} ];
+        my $cur_end   = $regions[ $self->{_stop_col} ];
         my $cur_chrom = $regions[ $self->{_col} ];
         if (%current_region_hash){
             croak "Array passed to merge subroutine is not sorted properly "
@@ -496,24 +500,15 @@ $obj = SortGenomicCoordinates -> new;
 Usually initialisation will be performed specifying arguments for file or array and region type at least:
 
 $obj = SortGenomicCoordinates -> new(file => "regions_file", type => "gene");
-$obj = SortGenomicCoordinates -> new(array => \@array, type => "gene");
 
-The user may wish to specify which column of the input file contains the start (i.e. chromosome field) of the region field, perhaps to speed up the merging and sorting of regions or if the file contains more than one set of fields that could be interpreted as regions by the program. 
+$obj = SortGenomicCoordinates -> new(array => \@array, type => "bed");
 
-$obj = SortGenomicCoordinates -> new(file => "regions_file", type => "gene", col => 3);
+Specifying 'type' is a shortcut to specify what each column represents. Acceptable values are 'bed', 'gene', 'region' or 'custom'. See below for details on formats. The default type is 'bed'. If type is set to "custom" the user MUST specify the chromosome, start coordinate and stop coordinate columns. 
 
-If type is set to "custom" the user MUST specify the chromosome column and the relative positions of the start and stop columns for regions.
-
-$obj = SortGenomicCoordinates -> new(file => "custom_regions_file", type => "custom", col => 3, start_col => -2, stop_col => -1);
-
-Objects can also be created using the 'clone' method, although this is seldom likely to be a good idea.
-
-$another_obj = $obj -> clone(file => "another_regions_file", type => "regions", col => 0);
+$obj = SortGenomicCoordinates -> new(file => "regions.txt", type => "custom", col => 1, start_col => 3, stop_col => 4);
 
 
 =head2 Class and object methods
-
-DOCUMENTATION STILL UNDER CONSTRUCTION
 
 =head3 Accessors and mutators
 
@@ -531,11 +526,23 @@ reference to an array containing regions of interest in bed, region or ucsc gene
 
 =item B<type>
 
-the format of the regions (i.e. bed, regions, gene or custom)
+the format of the regions (i.e. bed, regions, gene or custom). Bed format expects columns separated by tabs with the chromosome as the first column, start coordinate as the second column and end cooridinate as the third column. For region formats regions are expected in the format 'chromosome:start-end'. Gene formats have chromosome as the first column, start coordinate as the third column and end cooridinate as the fourth column. For custom formats the chromosome column must be specified with the 'col' feature, and start and stop coordinates by the 'start_col' and 'stop_col' features. The column delimiter can also be specified using the 'delimiter' feature.
 
 =item B<col>
 
-column containing the chr field of region (or entire region field if type is region). This defaults to 0 in which case the column will be determined for each region by searching for the first "chr[0-9XYMU][0-9Tn]*" field.
+0-based column containing the chr field of region. This defaults to 0 (i.e. the first column).
+
+=item B<start_col>
+
+0-based column containing the start coordinate of region. This is usually determined by the region format but must be manually specified when specifying regions of type 'custom'. Defaults to 1 (i.e. the second column).
+
+=item B<stop_col>
+
+0-based column containing the stop coordinate of region. This is usually determined by the region format but must be manually specified when specifying regions of type 'custom'. This can be the same as 'start_col' (e.g. for VCF files). Defaults to 2 (i.e. the third column).
+
+=item B<delimiter>
+
+The character(s) separating each column. Defaults to tab characters unless 'type' is set to 'region' in which case ':' and '-" characters are used to separate chromosome and coordinates.
 
 =item B<ordered>
 
@@ -555,11 +562,15 @@ position to locate in conjunction with B<chrom> argument.
 
 =item B<location>
 
-location in merged array of any hit from B<locate> method. Read only.
+index in merged array of any hit from B<locate> method. If not match was found this value will be -1 so make sure any code checks this value is > -1 if using this value directly. Read only. 
 
 =item B<return_type>
 
 Setting to give to return info. Valid types are "all" or "match". Using "match" only returns regions from the merged array that match the location searched, "all" will return all regions from within the merged array. Default is "match";
+
+=item B<contig_order>
+
+A reference to a hash where keys are the chromosome names and values are the relative order of each chromosome. By default, chromosomes are sorted in ascibetical order, but by passing a hash reference to the contig_order argument chromosomes can be sorted in any order desired. Methods will croak if this argument is used and a chromosome not present in the contig_order hash reference is encountered.
 
 =back
 
@@ -573,7 +584,7 @@ Sort and merge regions to prepare for binary searching. This method simply invok
 
 $obj -> prep( );
 
-$obj -> prep(file => "regions.bed", type => "bed", col => 1);
+$obj -> prep(file => "regions.bed", type => "bed");
 
 
 =item B<order>
@@ -582,7 +593,7 @@ Sort regions from file putting chromosomes in ascibetical order and positions in
 
 $obj -> order( );
 
-$obj -> order(file => "regions.bed", type => "bed", col => 1);
+$obj -> order(file => "regions.bed", type => "bed");
 
 =item B<merge>
 
@@ -619,7 +630,7 @@ University of Leeds
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2011, 2012  David A. Parry
+Copyright 2011, 2012, 2014  David A. Parry
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with this program. If not, see <http://www.gnu.org/licenses/>.
 
