@@ -14,14 +14,19 @@ version 0.2
  #Check header is OK
  die "Header not ok for input ($vcf) "  if not VcfReader::checkHeader( vcf => $vcf );
 
+ #search header lines for contigs
+ my @head = VcfReader::getHeader($vcf);
+ my @contigs = grep {/##contig=</} @head;
+
  #print header
- print VcfReader::getHeader("$vcf");
- 
+ my $head_string = VcfReader::getHeader($vcf);
+ print $head_string;
+
  #get sample names
- my @samples = VcfReader::getSamples(vcf => "file.vcf");
+ my @samples = VcfReader::getSamples(vcf => $vcf);
  
  #get a hash of sample names to column numbers 
- my %samples_to_columns = VcfReader::getSamples(vcf => "file.vcf", get_columns => 1);
+ my %samples_to_columns = VcfReader::getSamples(vcf => $vcf, get_columns => 1);
 
  #parse lines of a VCF
  open (my $VCF, $vcf) or die "$!\n";
@@ -164,7 +169,7 @@ sub getHeader{
     close $FH;
     croak "No header found for VCF file $vcf " if not @header;
     return @header if wantarray;
-    return join("\n", @header) if defined wantarray;
+    return join("\n", @header) ."\n" if defined wantarray;
     carp "getHeader called in void context ";
 }
 
@@ -2081,7 +2086,8 @@ sub sortVcf{
                         } @sort;
         }
         print STDERR "Printing output...";
-        print $SORTOUT getHeader($args{vcf});
+        my $head = getHeader($args{vcf});
+        print $SORTOUT $head;
         print $SORTOUT join('', @sort);
     }else{
         my $vcfsort;
