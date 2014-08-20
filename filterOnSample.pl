@@ -81,8 +81,8 @@ GetOptions(
     'p|presence'               => \$check_presence_only,
     'c|confirm_missing'        => \$confirm_missing,
     'quality=i'                => \$quality,
-    'a|aff_quality=i',
-    'un_quality=i',
+    'a|aff_quality=i'         => \$aff_genotype_quality,
+    'un_quality=i'            => \$unaff_genotype_quality,
     'depth_allele_cutoff=f'   => \$allele_depth_cutoff,
     'z|allele_ratio_cutoff=f' => \$allele_ratio_cutoff,
     'num_matching=i'          => \$num_matching,
@@ -299,7 +299,7 @@ LINE: while ( my $line = <$VCF> ) {
         my @split = split("\t", $line);
         my $l = filter_on_sample(\@split);
         if ($l){
-            print $OUT $line;
+            print $OUT "$line\n";
             $kept++;
         }else{
             $filtered++;
