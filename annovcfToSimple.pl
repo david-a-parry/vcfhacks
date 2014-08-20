@@ -101,6 +101,8 @@ Specify one or more VEP fields to output. Use of --vep without this flag outputs
             amr_maf
             asn_maf
             eur_maf
+
+If you wish to use the above fields in addition to fields specified here add 'default' to your list of fields.
        
 =item B<--all>
 
@@ -316,40 +318,20 @@ if (defined $config->{gene_anno}){
 if (defined $config->{vep}){
     my $vep_header = $vcf_obj->readVepHeader();
     if (not @{$config->{fields}} and not $config->{all}){
-        push @{$config->{fields}}, 
-            qw ( 
-                symbol
-                gene
-                feature
-                allele
-                consequence
-                cds_position
-                protein_position
-                amino_acids
-                codons
-                existing_variation
-                exon
-                intron
-                gmaf 
-                aa_maf
-                ea_maf
-                afr_maf
-                amr_maf
-                asn_maf
-                eur_maf
-                sift
-                polyphen
-            );
+        unshift @{$config->{fields}}, getDefaultVepFields($vep_header);
+    }elsif(grep { /default/i } @{$config->{fields}}){
+        @{$config->{fields}} = grep {! /^default$/i } @{$config->{fields}};
+        unshift @{$config->{fields}}, getDefaultVepFields($vep_header);
     }
-    push @{$config->{fields}}, "condel" if exists $vep_header->{condel};
-    push @{$config->{fields}}, "splice_consensus" if exists $vep_header->{splice_consensus};
-    @fields = @{$config->{fields}} if defined $config->{fields};
+    @fields = map { lc($_) } @{$config->{fields}} if defined $config->{fields};
+    my %seen = ();
+    @fields = grep {! $seen{$_}++ } @fields;
     if (@fields){
         if(defined $config->{canonical_only}){
             push @fields, 'canonical' if not grep{/canonical/i} @fields;
         }
         foreach my $csq (@fields){
-            if (not exists $vep_header->{$csq}){
+            if (not exists $vep_header->{($csq)}){
                 die "Couldn't find '$csq' VEP field in header - please ensure your VCF is annotated with " .
                 "Ensembl's variant effect precictor specifying the appropriate annotations.\n";
             }
@@ -534,6 +516,38 @@ if ($OUT){
 }
 $vcf_obj->DESTROY();
 
+####################################################
+sub getDefaultVepFields{
+    my ($vep_header) = @_;
+    my @def = ();
+    push @def, 
+        qw ( 
+            symbol
+            gene
+            feature
+            allele
+            consequence
+            cds_position
+            protein_position
+            amino_acids
+            codons
+            existing_variation
+            exon
+            intron
+            gmaf 
+            aa_maf
+            ea_maf
+            afr_maf
+            amr_maf
+            asn_maf
+            eur_maf
+            sift
+            polyphen
+        );
+    push @def, "condel" if exists $vep_header->{condel};
+    push @def, "splice_consensus" if exists $vep_header->{splice_consensus};
+    return @def;
+}
 ####################################################
 sub get_vcf_fields{
     my @vcf_values = ();
