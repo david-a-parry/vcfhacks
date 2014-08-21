@@ -321,7 +321,7 @@ foreach my $r (@$region_ref) {
     foreach my $h (@hits) {
         #print join( "\t", @$h ) . "\n";
         my @split = split("\t", $h);
-        my $span = $split[1] + length($split[3]);
+        my $span = VcfReader::getSpan(\@split);
         if (not exists $potential_overlaps{$h}){
             print $OUT "$h\n";
             $printed++;
