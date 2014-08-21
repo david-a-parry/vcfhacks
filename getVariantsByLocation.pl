@@ -54,6 +54,10 @@ Use this flag to prevent outputting the VCF header.
 
 Use this flag to supress printing of information to STDERR.
 
+=item B<-s    --silent>
+
+Use this flag to supress warnings and information to STDERR.
+
 =item B<-h    --help>
 
 Show this script's help information.
@@ -119,6 +123,7 @@ my $exclude;
 my $total_lines = 0;
 my $no_header;
 my $quiet;
+my $silent;
 
 my %opts = (
     regions   => \@reg,
@@ -127,6 +132,7 @@ my %opts = (
     input     => \$vcf,
     bed       => \@bedfile,
     quiet     => \$quiet,
+    silent    => \$silent,
     help      => \$help,
     manual    => \$manual
 );
@@ -138,6 +144,7 @@ GetOptions(
     'input=s'      => \$vcf,
     'bed=s{,}'     => \@bedfile,
     'quiet'        => \$quiet,
+    'silent'       => \$silent,
     'help'         => \$help,
     'manual'       => \$manual
 ) or pod2usage( -message => "Syntax error.", -exitval => 2 );
@@ -145,7 +152,7 @@ pod2usage( -verbose => 2 ) if ($manual);
 pod2usage( -verbose => 1 ) if ($help);
 pod2usage( -message => "Syntax error.", -exitval => 2 )
   if ( not $vcf or ( not @bedfile and not @reg ) );
-
+$quiet++ if $silent;
 my $time = strftime( "%H:%M:%S", localtime );
 print STDERR "Time started: $time\n" unless $quiet;
 $offset = 0 if not $offset;
@@ -184,9 +191,17 @@ if (@bedfile) {
 
         #    my @temp = (<BED>) =~ s/[:-]/\t/g;
         close BED;
-        my $invalid = grep { !/\S+\t\d+\t\d+\s/ } @temp;
-        warn "$invalid invalid region(s) found in $bedfile" if $invalid;
-        push( @regions, @temp );
+
+        my $invalid ;
+        foreach my $t (@temp){
+            if ($t !~ /\S+\t\d+\t\d+\s/ and $t !~ /\S+\t\d+\t\d+$/){
+                $invalid++;
+            }else{
+                push( @regions, $t);
+            }
+        }
+        warn "$invalid invalid region(s) found in $bedfile\n" 
+            if $invalid and not $silent;
     }
 }
 if (@reg) {
@@ -207,13 +222,31 @@ if (@reg) {
 
 my $reg_obj;
 if (%contigs){
-     $reg_obj = SortGenomicCoordinates->new( 
+    my %invalid_contigs = ();
+    my @indices_to_remove = ();
+    for (my $i = 0; $i <  @regions; $i++){
+        my $c = (split "\t", $regions[$i])[0];
+        if (not exists $contigs{$c}){
+            $invalid_contigs{$c}++;
+            unshift @indices_to_remove, $i;
+        }
+    }
+    if (@indices_to_remove){
+        my $inv_contigs = keys %invalid_contigs;
+        warn "$inv_contigs contigs in regions not found in VCF (". scalar(@indices_to_remove)." regions).\n" unless $silent;
+        foreach my $i (@indices_to_remove){
+            splice(@regions, $i, 1);
+        }
+    }
+    die "No valid regions to parse.\n" if not @regions;
+    $reg_obj = SortGenomicCoordinates->new( 
          array => \@regions, 
          type => 'bed', 
          col => 1, 
          contig_order => \%contigs
     );
 }else{
+    die "No valid regions to parse.\n" if not @regions;
      $reg_obj = SortGenomicCoordinates->new( 
          array => \@regions, 
          type => 'bed', 
