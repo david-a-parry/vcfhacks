@@ -598,8 +598,9 @@ sub filter_on_sample {
 
 #if using allele frequency filtering delete any allele from %reject_alleles that has an
 #allele frequency less than $af
-        if ( $total_reject > 0 ) {
-            foreach my $k ( keys %reject_alleles ) {
+        foreach my $k ( keys %reject_alleles ) {
+            $r_allele_counts{$k} = $reject_alleles{$k};
+            if ( $total_reject > 0 ) {
                 if ( $reject_alleles{$k} / $total_reject < $af ) {
                     delete $reject_alleles{$k};
                 }
@@ -633,7 +634,8 @@ sub filter_on_sample {
     foreach my $samp ( keys %alleles ) {
 
 #if we're looking for alleles that match in ALL samples than we only need to check a single hash entry
-      ALLELE: foreach my $allele ( @{ $alleles{$samp} } ) {
+        my %uniq_alleles = map {$_ => undef} @{ $alleles{$samp} };
+      ALLELE: foreach my $allele ( keys %uniq_alleles) {
             next ALLELE if ( $allele == 0 );
             if ( exists $reject_alleles{$allele} ){
                 if (not $threshold and not $af){
@@ -663,7 +665,7 @@ sub filter_on_sample {
             my $allele_matches = 0;
             foreach my $sample ( keys %alleles ) {
                 $allele_matches++
-                  if ( grep ( /^$allele$/, @{ $alleles{$sample} } ) )
+                  if ( grep { $allele eq $_ }  @{ $alleles{$sample} }  )
                   ; #we're counting the no. of samples with matching allele, not no. of occcurences (zygosity) of allele
             }
             if ($check_presence_only)
