@@ -4,6 +4,23 @@ This project comprises a set of perl scripts and modules that may be useful for 
 
 __UPDATE__
 
+VERSION 0.1.11:
+
+21/8/14
+
+-fixed a bug in filterOnSample.pl where allele frequency would not be taken into consideration when using --reject or --reject_all_except arguments.
+
+-made filterOnSample.pl quicker
+
+-fixed a bug in filterOnSample.pl where --aff_quality and --un_quality options would be ignored.
+
+-fixed bug when using sortVcf.pl without Sort::External perl module.
+
+-annovcfToSimple.pl correctly handles VEP fields given using the --fields option regardless of case.
+
+-annovcfToSimple.pl now allows you to use the value 'default' with the --fields option to include all default fields plus those specified manually.
+
+
 VERSION 0.1.10:
 
 18/8/14
