@@ -276,10 +276,14 @@ sub _chromIsLessThanChrom{
     my ($self, $a_chrom, $b_chrom) = @_;
     if ($self->{_contig_order}){
         if (not exists $self->{_contig_order}->{$a_chrom}){
-            croak "$a_chrom does not exist in contig_order passed to SortGenomicCoordinates ";
+            carp "$a_chrom does not exist in contig_order passed to SortGenomicCoordinates ";
+            return -1 if exists $self->{_contig_order}->{$b_chrom};
+            return 1 if $a_chrom  lt $b_chrom ;
+            return 0;
         }
         if (not exists $self->{_contig_order}->{$b_chrom}){
-            croak "$b_chrom does not exist in contig_order passed to SortGenomicCoordinates ";
+            carp "$b_chrom does not exist in contig_order passed to SortGenomicCoordinates ";
+            return 1;
         }
         return 1 if $self->{_contig_order}->{$a_chrom} < $self->{_contig_order}->{$b_chrom} ;
     }else{
@@ -353,10 +357,20 @@ sub _by_coordinate{
     my $b_end = $b_split[$self->{_stop_col}];
     if ($self->{_contig_order}){
         if (not exists $self->{_contig_order}->{$a_chrom}){
-            croak "$a_chrom does not exist in contig_order passed to SortGenomicCoordinates ";
+            carp "$a_chrom does not exist in contig_order passed to SortGenomicCoordinates ";
+            if (exists $self->{_contig_order}->{$b_chrom}){
+                return 1;
+            }else{
+                return (
+                    $a_chrom  cmp $b_chrom || 
+                    $a_start  <=> $b_start ||
+                    $a_end    <=> $b_end 
+                    );
+            }
         }
         if (not exists $self->{_contig_order}->{$b_chrom}){
-            croak "$b_chrom does not exist in contig_order passed to SortGenomicCoordinates ";
+            carp "$b_chrom does not exist in contig_order passed to SortGenomicCoordinates ";
+            return -1;
         }
         return (
             $self->{_contig_order}->{$a_chrom} <=> $self->{_contig_order}->{$b_chrom} ||
@@ -454,6 +468,16 @@ sub merge {
 sub _check_chrom_order{
     my ($self, $first_chrom, $next_chrom) = @_;
     if ($self->{_contig_order}){
+        if (not exists $self->{_contig_order}->{$first_chrom}){
+            if (not exists $self->{_contig_order}->{$next_chrom}){
+                return 0 if $first_chrom gt $next_chrom;
+                return 1;
+            }else{
+                return 1;
+            }
+        }elsif (not exists $self->{_contig_order}->{$next_chrom}){
+            return 1;
+        }
         return 0 if $self->{_contig_order}->{$first_chrom} > $self->{_contig_order}->{$next_chrom};
         return 1;
     }else{
