@@ -175,13 +175,10 @@ if ( defined $progress ) {
     }
 }
 my %contigs       = VcfReader::getContigOrder($vcf);
-my %sample_to_col = ();
-if (@samples) {
-    %sample_to_col = VcfReader::getSamples(
+my %sample_to_col = VcfReader::getSamples(
         vcf         => $vcf,
         get_columns => 1,
-    );
-}
+);
 
 $time = strftime( "%H:%M:%S", localtime );
 print STDERR "\n[$time] Finished initializing input VCF\n";
