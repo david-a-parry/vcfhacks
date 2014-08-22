@@ -1774,7 +1774,7 @@ sub countAlleles{
             return %counts;
         }
     }
-    my @alleles = readAlleles($args{line});
+    my @alleles = readAlleles(line => $args{line});
     for (my $i = 0; $i < @alleles; $i++){
         $counts{$i} = 0;
     }
