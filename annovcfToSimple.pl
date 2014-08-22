@@ -546,6 +546,8 @@ sub getDefaultVepFields{
         );
     push @def, "condel" if exists $vep_header->{condel};
     push @def, "splice_consensus" if exists $vep_header->{splice_consensus};
+    push @def, "hgvsc" if exists $vep_header->{hgvsc};
+    push @def, "hgvsp" if exists $vep_header->{hgvsp};
     return @def;
 }
 ####################################################
