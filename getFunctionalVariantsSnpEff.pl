@@ -460,7 +460,7 @@ sub checkAndParseClasses{
     }
     push (@classes, @$additional) if (@$additional);
     foreach my $class (@$classes){
-        die "Error - variant class '$class' not recognised.\n" if not grep {/$class/i} @valid;
+        die "Error - variant class '$class' not recognised.\n" if not grep {/^$class$/i} @valid;
     }
 }
 
