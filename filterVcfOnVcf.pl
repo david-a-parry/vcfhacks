@@ -447,7 +447,7 @@ LINE: while ( my $line = <$VCF> ) {
         my @split = split( "\t", $line );
         my $l = filter_on_vcf( \@split, \%no_fork_args );
         if ($l) {
-            print $OUT $line;
+            print $OUT "$line\n";
             $kept++;
         }
         else {
