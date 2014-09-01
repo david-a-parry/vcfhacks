@@ -4,6 +4,19 @@ This project comprises a set of perl scripts and modules that may be useful for 
 
 __UPDATE__
 
+VERSION 0.1.12:
+
+1/9/14
+
+-improved getVariantsByLocation.pl handling of missing contigs and invalid regions. Warning are given instead of the program failing.
+
+-added --silent option to getVariantsByLocation.pl to suppress warnings.
+
+-added HGVS annotations to the default fields retrived by annovcfToSimple.pl (when these fields are present).
+
+-fixed a bug with filterVcfOnVcf.pl where linebreaks would not be added between variants when run without forks. 
+
+
 VERSION 0.1.11:
 
 21/8/14
