@@ -22,6 +22,7 @@ getVariantsByLocation.pl - print variants from a vcf file that lie within a list
 =head1 SYNOPSIS
  
 getVariantsByLocation.pl -i [vars.vcf] -b [regions.bed] -o [output.vcf]
+getVariantsByLocation.pl -i [vars.vcf] -r [regions] -o [output.vcf]
 
 =cut
 
@@ -40,7 +41,7 @@ Bed file containing regions to filter on (required unless using --regions argume
 
 =item B<-r    --regions>
 
-Specify one or more regions to filter on seperated with spaces in format "chr1:1-2000". Can be used in conjunction with or instead of --bed argument.
+Specify one or more regions to filter on seperated with spaces in format "X:1-2000" or (for single coordinates) "X:2000". Can be used in conjunction with or instead of --bed argument.
 
 =item B<-o    --output>
 
@@ -74,14 +75,14 @@ Show this script's manual page.
 
 getVariantsByLocation.pl -i [vars.vcf] -b [regions.bed] 
 
-getVariantsByLocation.pl -i [vars.vcf] -r chr1:2000000-50000000 -o [filtered.vcf]
+getVariantsByLocation.pl -i [vars.vcf] -r 1:2000000-50000000 -o [filtered.vcf]
 
    
 =cut
 
 =head1 DESCRIPTION
 
-Takes a bed file or a list of regions and outputs variants from a vcf file that lie in these regions.
+Takes a bed file or a list of regions/coordinates and outputs variants from a VCF file that lie within/overlap these regions. The VCF input must be sorted in coordinate order but can be either uncompressed (a .vridx index file will be created if it does not exist) or bgzip compressed (a tabix index will be created if it does not exist). Use with bgzip compressed VCFs requires Tabix.pm to be installed and tabix index creation requires the tabix executable to be installed. 
 
 
 =cut
