@@ -468,7 +468,7 @@ close $VCF;
 close $OUT;
 $time = strftime( "%H:%M:%S", localtime );
 print STDERR
-  "\n[$time] $filtered matching variants filtered, $kept printed ";
+  "\n[$time] $filtered variants filtered, $kept printed ";
 print STDERR "($total_variants total)" if $total_variants;
 print STDERR "\n";
 
