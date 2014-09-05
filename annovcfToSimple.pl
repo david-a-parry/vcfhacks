@@ -31,9 +31,13 @@ Input VCF file, optionally annotated with variant_effect_predictor.pl and ensemb
 
 Output file name. Defaults to [input name].xlsx (or [input name].txt if --text_output option is used).
 
+=item B<-u    --summarise>
+
+Use this flag to summarise the number of alleles and genotypes found in samples rather than outputting genotype columns for each individual sample. If sample IDs are specified with --samples or --pedigree options only these samples will be counted in the summarised allele and genotype counts.
+
 =item B<-s    --samples>
 
-Sample ids to include in output. By default, genotypes for all samples in VCF will be written to the output, but if one or more samples are specified here only genotypes for these samples will be included in the output. Note, that this is ignored if --do_not_simplify argument is used.
+Sample ids to include in output. By default, genotypes for all samples in VCF will be written to the output, but if one or more samples are specified here only genotypes for these samples will be included in the output. Note, that this is ignored if --do_not_simplify argument is used unless using the --summarise flag.
 
 =item B<-p    --pedigree>
 
@@ -114,7 +118,7 @@ One or more INFO field IDs from to output as columns. These are case sensitive a
 
 =item B<-d    --do_not_simplify>
 
-Use this flag to output all standard VCF fields to Excel as they appear in the original VCF, but when used in conjunction with --vep still provides information for VEP annotations in a user-friendly manner. Genotypes for all samples in the VCF will be printed when this option is used regardless of --samples or --pedigree settings.
+Use this flag to output all standard VCF fields as they appear in the original VCF, but when used in conjunction with --vep still provides information for VEP annotations in a user-friendly manner. Genotypes for all samples in the VCF will be printed when this option is used regardless of --samples or --pedigree settings. The only exception is if used with the --summarise flag, in which case summary allele/genotype counts will be output instead of indvidual genotypes, but the genotypes will use the numeric call codes as they appear in the VCF rather than the actual REF/ALT alleles.
 
 =item B<-t    --text_output>
 
@@ -180,6 +184,7 @@ my @vep_add;
 my @peds;
 my $output;
 my $config = {};
+my $summarise_counts;
 my $help;
 my $man;
 GetOptions($config,
@@ -196,7 +201,8 @@ GetOptions($config,
     'n|info_fields=s{,}', => \@{$config->{info_fields}},
     'i|input=s' =>\$vcf,
     'output=s' => \$output,
-    'samples=s{,}' => \@samples,
+    's|samples=s{,}' => \@samples,
+    'u|summarise' => \$summarise_counts,
     'pedigree=s{,}' => \@peds,
     'manual' => \$man,
     'help' => \$help) or die "Syntax error.\n";
@@ -453,7 +459,7 @@ LINE: while (my $vcf_line = $vcf_obj->readLine){
         }
     }
     #Get values for line
-    if (defined $config->{do_not_simplify}){
+    if (defined $config->{do_not_simplify} and not $summarise_counts){
         @line = get_vcf_fields();    
     }else{
         @line = get_simplified_fields();    
@@ -576,43 +582,76 @@ sub get_simplified_fields{
         push @vcf_values, $vcf_obj->getVariantField($f);
     }
     my @all_alleles = $vcf_obj->readAlleles();
-    my @sample_calls = ();
-    my @sample_allele_depths = ();
-    my @sample_genotype_quality = ();
-    foreach my $sample (@samples){
-        my $genotype = $vcf_obj->getSampleActualGenotypes(sample=>$sample);
-        if (defined $genotype){ 
-            push (@sample_calls, $genotype);
-        }else{
-            push @sample_calls, "-";
-        }
-        my $ad = $vcf_obj->getSampleGenotypeField(sample => $sample, field => "AD"); 
-        my $allele_depths = '-';
-        if (defined $ad && $ad =~ /(\d+,*)+/){
-            my @ads = split(",", $ad);
-            my @allele_depth = ();
-            for (my $n = 0; $n < @ads and $n < @all_alleles; $n++){
-                push (@allele_depth, "$all_alleles[$n]=$ads[$n]");
+    if ($summarise_counts){
+        my %allele_counts = $vcf_obj->countAlleles(samples => \@samples);
+        my %genotype_counts = $vcf_obj->countGenotypes(samples => \@samples);
+        my @al_count_string = ();
+        my @gt_count_string = ();
+        foreach my $allele (sort keys %allele_counts){
+            if (defined $config->{do_not_simplify}){
+                push @al_count_string, "$allele=$allele_counts{$allele}";
+            }else{
+                push @al_count_string, "$all_alleles[$allele]=$allele_counts{$allele}";
             }
-            $allele_depths = join("/", @allele_depth);
         }
-        push (@sample_allele_depths, $allele_depths);
-        my $genotype_quality = "-";
-        my $gq = $vcf_obj->getSampleGenotypeField(sample => $sample, field => "GQ");
-        if (defined $gq && $gq =~ /(\d+\.*\d*)+/){
-       #     $genotype_quality = 100 - (100 * 10**(-$gq/10));
-            $genotype_quality = $gq;
+        foreach my $genotype (sort keys %genotype_counts){
+            my @gt = split(/[\/\|]/, $genotype);
+            my @actual_gt = ();
+            if (defined $config->{do_not_simplify}){
+                push @gt_count_string, "$genotype=$genotype_counts{$genotype}";
+            }else{
+                foreach my $g (@gt){
+                    if ($g =~ /^\d+$/){
+                        push @actual_gt, $all_alleles[$g];
+                    }else{
+                        push @actual_gt, $g; 
+                    }
+                }
+                my $actual_geno_string = join("/", @actual_gt);
+                push @gt_count_string, "$actual_geno_string=$genotype_counts{$genotype}";
+            }
         }
-        push (@sample_genotype_quality, $genotype_quality);
-    }
-    foreach my $call (@sample_calls){
-        push @vcf_values, $call;
-    }
-    foreach my $sample_depth (@sample_allele_depths){
-        push @vcf_values, $sample_depth;
-    }
-    foreach my $sample_gq (@sample_genotype_quality){
-        push @vcf_values, $sample_gq;
+        push @vcf_values, join(";", @al_count_string);
+        push @vcf_values, join(";", @gt_count_string);
+    }else{
+        my @sample_calls = ();
+        my @sample_allele_depths = ();
+        my @sample_genotype_quality = ();
+        foreach my $sample (@samples){
+            my $genotype = $vcf_obj->getSampleActualGenotypes(sample=>$sample);
+            if (defined $genotype){ 
+                push (@sample_calls, $genotype);
+            }else{
+                push @sample_calls, "-";
+            }
+            my $ad = $vcf_obj->getSampleGenotypeField(sample => $sample, field => "AD"); 
+            my $allele_depths = '-';
+            if (defined $ad && $ad =~ /(\d+,*)+/){
+                my @ads = split(",", $ad);
+                my @allele_depth = ();
+                for (my $n = 0; $n < @ads and $n < @all_alleles; $n++){
+                    push (@allele_depth, "$all_alleles[$n]=$ads[$n]");
+                }
+                $allele_depths = join("/", @allele_depth);
+            }
+            push (@sample_allele_depths, $allele_depths);
+            my $genotype_quality = "-";
+            my $gq = $vcf_obj->getSampleGenotypeField(sample => $sample, field => "GQ");
+            if (defined $gq && $gq =~ /(\d+\.*\d*)+/){
+        #     $genotype_quality = 100 - (100 * 10**(-$gq/10));
+                $genotype_quality = $gq;
+            }
+            push (@sample_genotype_quality, $genotype_quality);
+        }
+        foreach my $call (@sample_calls){
+            push @vcf_values, $call;
+        }
+        foreach my $sample_depth (@sample_allele_depths){
+            push @vcf_values, $sample_depth;
+        }
+        foreach my $sample_gq (@sample_genotype_quality){
+            push @vcf_values, $sample_gq;
+        }
     }
     #Add user-specified INFO fields after normal VCF fields
     foreach my $f (@info_fields){
@@ -710,16 +749,20 @@ sub get_header{
         foreach my $h ("Chrom", "Pos", "SNP ID", "Variant Quality", "Filters", "Genomic Ref", "Alt Alleles" ){
             push @head, $h;
         }
+        if ($summarise_counts){
+            push @head, "Allele Counts";
+            push @head, "Genotype Counts";
+        }else{
+            foreach my $sample (@samples){
+                push @head, $sample;
+            }
 
-        foreach my $sample (@samples){
-            push @head, $sample;
-        }
-
-        foreach my $sample (@samples){
-            push @head, "$sample Allele Depth";
-        }
-        foreach my $sample (@samples){
-            push @head, "$sample Phred Genotype Confidence";
+            foreach my $sample (@samples){
+                push @head, "$sample Allele Depth";
+            }
+            foreach my $sample (@samples){
+                push @head, "$sample Phred Genotype Confidence";
+            }
         }
         #Put user-specified INFO fields after normal vcf fields
         if (@info_fields){
