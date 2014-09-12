@@ -790,6 +790,14 @@ Minimum genotype quality for all samples - sets both --aff_quality and --un_qual
 
 Use this flag to cause the program to ignore non-existing samples rather than exiting.
 
+=item B<--forks>
+
+Number of forks to create for parallelising your analysis. By default no forking is done. To speed up your analysis you may specify the number of parallel processes to use here. (N.B. forking only occurs if a value of 2 or more is given here as creating 1 fork only results in increased overhead with no performance benefit).
+
+=item B<--cache>
+
+Cache size. Variants are processed in batches to allow for efficient parallelisation. When forks are used the default is to process up to 20,000 variants at once or 5,000 x no. forks if more than 4 forks are used. If you find this program comsumes too much memory when forking you may want to set a lower number here. When using forks you may get improved performance by specifying a higher cache size, however the increase in memory usage is proportional to your cache size multiplied by the number of forks.
+
 =item B<-b    --progress>
 
 Show a progress bar.
