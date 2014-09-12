@@ -15,11 +15,10 @@ use VcfReader;
 my @samples;
 my @evs;
 my $freq;
-my $quiet;
 my $forks = 1;
 my $buffer_size;
 my $cpus = Sys::CPU::cpu_count();
-my %opts = (samples => \@samples, esp_file => \@evs, freq => \$freq, quiet=>\$quiet, cache => \$buffer_size, forks => \$forks);
+my %opts = (samples => \@samples, esp_file => \@evs, freq => \$freq, cache => \$buffer_size, forks => \$forks);
 
 GetOptions(\%opts,
         "output=s",
@@ -32,7 +31,6 @@ GetOptions(\%opts,
         "f|freq=f" => \$freq,
         "t|forks=i" => \$forks,
         "cache=i"      => \$buffer_size,
-        "quiet",
         "Progress",
         ) or pod2usage(-exitval => 2, -message => "Syntax error") ;
 pod2usage (-verbose => 2) if $opts{manual};
@@ -534,10 +532,6 @@ Cache size. Variants are processed in batches to allow for efficient parallelisa
 =item B<-p    --progress>
 
 Use this flag to show a progress bar while this program is running.
-
-=item B<-q    --quiet>
-
-Use this flag to supress warnings if any variants in the SNP reference file do not have IDs.
 
 =item B<-h    --help>
 
