@@ -70,7 +70,7 @@ Use this flag to only print consequences from canonical transcripts when using -
 
 Use this flag to only annotate standard 'functional' variant classes (transcript_ablation, splice_donor_variant, splice_acceptor_variant, splice_region_variant, stop_gained, frameshift_variant, stop_lost, initiator_codon_variant, inframe_insertion, inframe_deletion, missense_variant, transcript_amplification, TFBS_ablation, TFBS_amplification, regulatory_region_ablation, regulatory_region_amplification).
 
-=item B<--classes>
+=item B<-c    --classes>
 
 Use this to specify a set of VEP variant classes to print in output. Overrides --functional option.
 
@@ -188,8 +188,8 @@ my $summarise_counts;
 my $help;
 my $man;
 GetOptions($config,
-    'classes=s{,}' => \@vep_classes,
-    'additional_classes=s{,}' => \@vep_add,
+    'c|classes=s{,}' => \@vep_classes,
+    'a|additional_classes=s{,}' => \@vep_add,
     'functional',
     'gene_anno',
     'text_output',
@@ -384,7 +384,10 @@ if (@ped_samples){
 }
 #check samples or get them if none specified
 if (not @samples){
+    eval{
     @samples = $vcf_obj->getSampleNames();
+    };
+    warn "$@" if $@;
 }else{
     my $header_string = $vcf_obj->getHeader(1);
     foreach my $sample (@samples){
