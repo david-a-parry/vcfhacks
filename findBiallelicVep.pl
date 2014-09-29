@@ -370,6 +370,9 @@ if (defined $min_matching_samples){
     die "ERROR: --num_matching (-n) argument must be greater than 0.\n" if $min_matching_samples < 1;
     die "ERROR: --num_matching (-n) value [$min_matching_samples] is greater than number of --samples identified (" .scalar(@samples). ")\n"
         if $min_matching_samples > @samples;
+    if ($min_matching_samples < @samples){
+        $allow_missing++;
+    }
     if ($pedigree){
         print STDERR "NOTE: --num_matching (-n) argument should be used in ".
             "conjunction with --num_matching_per_family (-y) when using a PED file ".
