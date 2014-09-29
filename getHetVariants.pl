@@ -63,7 +63,7 @@ getHetVariants.pl -i [vcf_file] [options]
 
 =item B<-i    --input>
 
-Input VCF file with SNPs annotated (e.g. by GATK's UnifiedGenotyper).
+Input VCF file.
 
 =item B<-o    --output>
 
