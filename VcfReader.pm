@@ -2007,6 +2007,35 @@ sub getSpan{
     return $end;
 }
 
+=item B<variantsHaveMatchingAlleles>
+
+For two lines check whether they contain the any matching alleles. Both variants have their alleles reduced to their simplest possible representations and then alleles are checked to see if CHROM, POS, REF and ALT values are the same for ANY of the alleles represented between the two lines.
+
+Requires two array references, one for each split line to compare. 
+
+ if (VcfReader::variantsHaveMatchingAlleles(\@line1, \@line2){
+     print "Lines match!";
+ }
+
+=cut
+
+sub variantsHaveMatchingAlleles{
+    my ($line1, $line2) = @_;
+    if (getVariantField($line1, "CHROM") ne getVariantField($line2, "CHROM")){
+        return 0;
+    }
+    my %min1 = minimizeAlleles($line1);
+    my %min2 = minimizeAlleles($line2);
+    foreach my $allele1 (keys %min1){
+        foreach my $allele2 (keys %min2){
+            next if $min1{$allele1}->{POS} ne $min2{$allele2}->{POS};
+            next if $min1{$allele1}->{REF} ne $min2{$allele2}->{REF};
+            next if $min1{$allele1}->{ALT} ne $min2{$allele2}->{ALT};
+            return 1;#we return 1 if ANY allele matches
+        }
+    }
+    return 0;
+}
 
 
 =back 
