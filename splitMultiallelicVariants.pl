@@ -11,16 +11,19 @@ use ParseVCF;
 
 my $input;
 my $out;
+my $find_only;
 my $help;
 my $manual;
 
-GetOptions('help' => \$help, 'manual' => \$manual, 'input=s{,}' => \$input, 'output=s' => \$out,
+GetOptions('help' => \$help, 'manual' => \$manual, 'input=s{,}' => \$input, 'output=s' => \$out, 'find' => \$find_only,
 ) or pod2usage(-exitval => 2, -message => "Syntax error") ;
 
 pod2usage (-verbose => 2) if $manual;
 pod2usage (-verbose => 1) if $help;
 pod2usage(-exitval => 2, -message => "--input argument is required") if not $input;
-
+if ($find_only){
+    print STDERR "Identifying and outputting unbalanced multiallelic variants only. Not splitting.\n";
+}
 my $OUT;
 if ($out){
    open ($OUT,">$out") or die "Can't open $out for writing: $!\n"; 
@@ -45,10 +48,14 @@ LINE:    while (my $line = $vcf_obj->readLine){
         }
     }
     if ($same_length and $diff_length){#SNV/MNV and Indel at same site
-        my @splits = $vcf_obj->splitMultiAllelicVariants();
-        print $OUT join("\n", @splits) ."\n";
+        if ($find_only){
+            print $OUT "$line\n";
+        }else{
+            my @splits = $vcf_obj->splitMultiAllelicVariants();
+            print $OUT join("\n", @splits) ."\n";
+        }
     }else{
-        print $OUT "$line\n";
+        print $OUT "$line\n" unless ($find_only);
     }
 }
 
@@ -77,6 +84,10 @@ VCF file input.
 =item B<-o    --output>
 
 Output file. Optional - default is STDOUT.
+
+=item B<-f    --find>
+
+Use this flag to find and print unbalanced variants that would normally be split. Only these (unedited) variants will be printed.
 
 =item B<-h    --help>
 
