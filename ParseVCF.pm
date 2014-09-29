@@ -1175,17 +1175,37 @@ sub splitMultiAllelicVariants{
     return  $self->{_currentLine} if (@alleles < 2);#not multiallelic
     my @splitLines = ();
     $self->getFormatFields();
+    my %ac = $self->countAlleles();
+    my $an = 0;
+    map {$an += $ac{$_}} keys %ac;
     my @possible_codes = $self->getAllPossibleGenotypeCodes();
     for (my $i = 0; $i < @alleles; $i++){
-                my $call_code = $i + 1;
+        my $call_code = $i + 1;
         my @line = ();
         foreach my $field (qw(CHROM POS ID REF)){
             push @line, $self->getVariantField($field);
         }
-        push @line, $alleles[$i];
+        push @line, $alleles[$i];#add current ALT allele
         foreach my $field (qw(QUAL FILTER INFO FORMAT)){
             if ($field eq 'INFO'){
-                push @line, $self->getVariantField($field) .";ParseVCF_split_variant-sample_fields_may_be_inaccurate";
+                my @new_inf;
+                my $inf = $self->getVariantField($field);
+                my @split_inf = split(";", $inf);
+                foreach my $f (@split_inf){
+                    if ($f =~ /^AC=/){
+                        if (exists $ac{$i}){
+                            push @new_inf, "AC=$ac{$i}";
+                        }
+                    }elsif ($f =~ /^AF=/){
+                        if (exists $ac{$i} and $an > 0){
+                            push @new_inf, "AF=" .($ac{$i}/$an);
+                        }
+                    }else{
+                        push @new_inf, $f;
+                    }
+                }
+                push @new_inf, "ParseVCF_split_variant-_fields_may_be_inaccurate";
+                push @line, join(";", @new_inf);    
             }else{
                 push @line, $self->getVariantField($field);
             }
