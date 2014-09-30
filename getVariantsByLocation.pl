@@ -380,16 +380,12 @@ sub process_vcf_filter{
                     if (VcfReader::variantsHaveMatchingAlleles(\@split, \@filter_split)){
                         print $OUT "$h\n";
                         $printed++;
-                        if ($span > $filt_span){
-                            $potential_overlaps{$h} = $span;
-                        }
+                        $potential_overlaps{$h} = $span;
                     }
                 }else{
                     print $OUT "$h\n";
                     $printed++;
-                    if ($span > $filt_span){
-                        $potential_overlaps{$h} = $span;
-                    }
+                    $potential_overlaps{$h} = $span;
                 }
             }
         }
@@ -407,34 +403,35 @@ sub open_output{
 }
 
 sub write_header{
+    if ($no_header){
+        return ;
+    }
     my $meta_head    = VcfReader::getMetaHeader($vcf);
-    if (not $no_header){
-        print $OUT "$meta_head\n";
-        print $OUT "##getVariantsByLocation.pl=\"";
-        my @opt_string = ();
+    print $OUT "$meta_head\n";
+    print $OUT "##getVariantsByLocation.pl=\"";
+    my @opt_string = ();
 
-        foreach my $k ( sort keys %opts ) {
-            if ( not ref $opts{$k} ) {
-                push @opt_string, "$k=$opts{$k}";
+    foreach my $k ( sort keys %opts ) {
+        if ( not ref $opts{$k} ) {
+            push @opt_string, "$k=$opts{$k}";
+        }
+        elsif ( ref $opts{$k} eq 'SCALAR' ) {
+            if ( defined ${ $opts{$k} } ) {
+                push @opt_string, "$k=${$opts{$k}}";
             }
-            elsif ( ref $opts{$k} eq 'SCALAR' ) {
-                if ( defined ${ $opts{$k} } ) {
-                    push @opt_string, "$k=${$opts{$k}}";
-                }
-                else {
-                    push @opt_string, "$k=undef";
-                }
-            }
-            elsif ( ref $opts{$k} eq 'ARRAY' ) {
-                if ( @{ $opts{$k} } ) {
-                    push @opt_string, "$k=" . join( ",", @{ $opts{$k} } );
-                }
-                else {
-                    push @opt_string, "$k=undef";
-                }
+            else {
+                push @opt_string, "$k=undef";
             }
         }
-        my $col_header = VcfReader::getColumnHeader($vcf);
-        print $OUT join( " ", @opt_string ) . "\"\n" . $col_header . "\n";
+        elsif ( ref $opts{$k} eq 'ARRAY' ) {
+            if ( @{ $opts{$k} } ) {
+                push @opt_string, "$k=" . join( ",", @{ $opts{$k} } );
+            }
+            else {
+                push @opt_string, "$k=undef";
+            }
+        }
     }
+    my $col_header = VcfReader::getColumnHeader($vcf);
+    print $OUT join( " ", @opt_string ) . "\"\n" . $col_header . "\n";
 }
