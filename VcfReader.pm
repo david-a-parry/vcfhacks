@@ -2009,12 +2009,12 @@ sub getSpan{
 
 =item B<variantsHaveMatchingAlleles>
 
-For two lines check whether they contain the any matching alleles. Both variants have their alleles reduced to their simplest possible representations and then alleles are checked to see if CHROM, POS, REF and ALT values are the same for ANY of the alleles represented between the two lines.
+For two lines check whether they contain any matching variant alleles. Both variants have their alleles reduced to their simplest possible representations and then alleles are checked to see if CHROM, POS, REF and ALT values are the same for ANY of the alleles represented between the two lines.
 
 Requires two array references, one for each split line to compare. 
 
  if (VcfReader::variantsHaveMatchingAlleles(\@line1, \@line2){
-     print "Lines match!";
+     print "Lines have matching alleles!";
  }
 
 =cut
