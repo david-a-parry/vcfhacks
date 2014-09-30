@@ -1,3 +1,19 @@
+#    Copyright 2014  David A. Parry
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
 package TextToExcel;
 use strict;
 use warnings;
@@ -243,7 +259,11 @@ sub _writeLineToExcel{
                     if ($i == $#{$args{preceding}}){
                         $bottom_cell = xl_rowcol_to_cell($temp_row + $rows_per_value + $row_extra - 1, $temp_column );
                     }
-                    $worksheet->merge_range_type($type, "$top_cell:$bottom_cell", $p, $format);
+                    if ($bottom_cell eq $top_cell){
+                        $worksheet->write($temp_row, $temp_column, $p, $format);
+                    }else{
+                        $worksheet->merge_range_type($type, "$top_cell:$bottom_cell", $p, $format);
+                    }
                     $temp_column++;
                 }else{
                     $worksheet->write($temp_row, $temp_column++, $p, $format);
@@ -295,7 +315,7 @@ sub _writeLineToExcel{
                         $bottom_cell = xl_rowcol_to_cell($temp_row + $rows_per_value + $row_extra - 1, $temp_column );
                     }
                     if ($bottom_cell eq $top_cell){
-                        $worksheet->write($temp_row, $temp_column++, $p, $format);
+                        $worksheet->write($temp_row, $temp_column, $p, $format);
                     }else{
                         $worksheet->merge_range_type($type, "$top_cell:$bottom_cell", $p, $format);
                     }
