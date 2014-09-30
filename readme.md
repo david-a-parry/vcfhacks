@@ -4,6 +4,29 @@ This project comprises a set of perl scripts and modules that may be useful for 
 
 __UPDATE__
 
+VERSION 0.1.13:
+
+30/9/14
+
+-added --summarise option to annovcfToSimple.pl to output variant/genotype counts rather than individual genotypes. Useful for VCFs with lots of samples.
+
+-annovcfToSimple.pl can now work with VCFs containing no samples.
+
+-added documentation for --forks and --cache options to filterOnSample.pl.
+
+-splitMultiallelicVariants.pl now edits AC and AF INFO fields appropriately.
+
+-added --find option to splitMultiallelicVariants.pl to identify and output unbalanced variants without changing variants.
+
+-fixed problem with findBiallelicVep.pl and findBiallelicSnpEff.pl not using --num_matching option correctly when working with PED files.
+
+-getVariantsByLocation.pl now has --vcf_filter option to output variants overlapping those of a another VCF
+
+-also added --matching option to getVariantsByLocation.pl to only output variants with matching alleles to those in VCFs specified by the --vcf_filter option.
+
+-fixed an error that might cause annovcfToSimple.pl to fail as result of trying to merge a single cell
+
+
 VERSION 0.1.12:
 
 1/9/14
@@ -13,6 +36,8 @@ VERSION 0.1.12:
 -added --silent option to getVariantsByLocation.pl to suppress warnings.
 
 -added HGVS annotations to the default fields retrived by annovcfToSimple.pl (when these fields are present).
+
+-getFunctionalVariantsVep.pl and getFunctionalVariantsSnpEff.pl scripts are now more careful with the checking of user-specified variant classes.
 
 -fixed a bug with filterVcfOnVcf.pl where linebreaks would not be added between variants when run without forks. 
 
