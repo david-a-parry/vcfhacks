@@ -7,7 +7,6 @@ use Sys::CPU;
 use Pod::Usage;
 use Term::ProgressBar;
 use Data::Dumper;
-use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use POSIX qw/strftime/;
 use FindBin;
 use lib "$FindBin::Bin";
@@ -85,7 +84,6 @@ if ( $opts{known_snps} ) {
 }
 my $progressbar;
 my $next_update      = 0;
-my $prev_percent     = 0;
 my $kept             = 0;    #variants not filtered
 my $filtered         = 0;    #variants filtered
 my $pathogenic_snps  = 0;
@@ -298,11 +296,11 @@ if ($forks < 2){
 VAR: while ( my $line = <$VCF> ) {
     next if $line =~ /^#/;
     $n++;
-    push @lines_to_process, $line;
     if ($progressbar) {
         $next_update = $progressbar->update($n) if $n >= $next_update;
     }
     if ($forks > 1){
+        push @lines_to_process, $line;
         if ( @lines_to_process >= $buffer_size ) {
             process_buffer();
             @lines_to_process = ();
