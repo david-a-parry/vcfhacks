@@ -383,7 +383,8 @@ foreach my $f ( keys %filter_vcf_samples ) {
         if ( $threshold or $maf or $filter_homozygotes ) {
             if ( not $filter_with_info ) {
                 die
-"Filter VCF $f has no samples. Use of --allele_frequency_filter, --threshold or --filter_homozygotes options is not allowed with filter VCFs without samples.\n";
+"Filter VCF $f has no samples. Use of --allele_frequency_filter, --threshold".
+" or --filter_homozygotes options is not allowed with filter VCFs without samples.\n";
             }
         }
     }
@@ -421,6 +422,9 @@ if ($progress) {
             #ETA   => "linear",
         }
     );
+}else{
+    $time = strftime( "%H:%M:%S", localtime );
+    print "[$time] Filtering started.\n";
 }
 
 my $meta_head = VcfReader::getMetaHeader($vcf);
@@ -1181,24 +1185,34 @@ sub check_pgts_gtc {
     my $f = shift;
     if ( not exists $filter_vcf_info{$f}->{PGTS} ) {
         die
-"Cannot filter on genotype information with the --info_filter option without possible genotypes (PGTS) info field. Filter VCF $f is missing this field from its header. This INFO field is available by processing a VCF containing multiple samples using the sampleCallsToInfo.pl script.\n";
+"Cannot filter on genotype information with the --info_filter option without " . 
+"possible genotypes (PGTS) info field. Filter VCF $f is missing this field from " .
+"its header. This INFO field is available by processing a VCF containing multiple" . 
+" samples using the sampleCallsToInfo.pl script.\n";
     }
     elsif ( $filter_vcf_info{$f}->{PGTS}->{Description} ne
         "\"Possible Genotype Call Codes (for ease of reference).\"" )
     {
         die
-"Filter VCF $f possible genotypes (PGTS) field does not match expected INFO field description. This INFO field is available by processing a VCF containing multiple samples using the sampleCallsToInfo.pl script.\n";
+"Filter VCF $f possible genotypes (PGTS) field does not match expected INFO field " .
+"description. This INFO field is available by processing a VCF containing multiple "
+."samples using the sampleCallsToInfo.pl script.\n";
     }
 
     if ( not exists $filter_vcf_info{$f}->{GTC} ) {
         die
-"Cannot filter on genotype information with the --info_filter option without genotype counts (GTC) info field. Filter VCF $f is missing this field from its header. This INFO field is available by processing a VCF containing multiple samples using the sampleCallsToInfo.pl script.\n";
+"Cannot filter on genotype information with the --info_filter option without ".
+"genotype counts (GTC) info field. Filter VCF $f is missing this field from ".
+"its header. This INFO field is available by processing a VCF containing multiple "
+."samples using the sampleCallsToInfo.pl script.\n";
     }
     elsif ( $filter_vcf_info{$f}->{GTC}->{Description} ne
         "\"Genotype counts in order of genotypes listed by PGTS field.\"" )
     {
         die
-"Filter VCF $f genotype counts (GTC) field does not match expected INFO field description. This INFO field is available by processing a VCF containing multiple samples using the sampleCallsToInfo.pl script.\n";
+"Filter VCF $f genotype counts (GTC) field does not match expected INFO field ".
+"description. This INFO field is available by processing a VCF containing multiple ".
+"samples using the sampleCallsToInfo.pl script.\n";
     }
 }
 
