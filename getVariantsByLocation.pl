@@ -1,18 +1,4 @@
 #!/usr/bin/perl
-#David Parry University of Leeds April 2011
-
-#This program is free software: you can redistribute it and/or modify
-#it under the terms of the GNU General Public License as published by
-#the Free Software Foundation, either version 3 of the License, or
-#(at your option) any later version.
-#
-#This program is distributed in the hope that it will be useful,
-#but WITHOUT ANY WARRANTY; without even the implied warranty of
-#MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.See the
-#GNU General Public License for more details.
-#
-#You should have received a copy of the GNU General Public License
-#along with this program.If not, see <http://www.gnu.org/licenses/>.
 
 =head1 NAME
 
@@ -105,7 +91,7 @@ Show this script's manual page.
 
 =head1 DESCRIPTION
 
-Takes a bed file or a list of regions/coordinates and outputs variants from a VCF file that lie within/overlap these regions. The VCF input must be sorted in coordinate order but can be either uncompressed (a .vridx index file will be created if it does not exist) or bgzip compressed (a tabix index will be created if it does not exist). Use with bgzip compressed VCFs requires Tabix.pm to be installed and tabix index creation requires the tabix executable to be installed. 
+Takes a bed file and/or a list of regions/coordinates and outputs variants from a VCF file that lie within/overlap these regions. The VCF input must be sorted in coordinate order but can be either uncompressed (a .vridx index file will be created if it does not exist) or bgzip compressed (a tabix index will be created if it does not exist). Use with bgzip compressed VCFs requires Tabix.pm to be installed and tabix index creation requires the tabix executable to be installed and in your PATH. 
 
 
 =cut
@@ -127,7 +113,7 @@ This program is free software: you can redistribute it and/or modify it under th
 
 use warnings;
 use strict;
-use Getopt::Long qw(:config no_ignore_case);
+use Getopt::Long;
 use Data::Dumper;
 use Pod::Usage;
 use POSIX qw/strftime/;
