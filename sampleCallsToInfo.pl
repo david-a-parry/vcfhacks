@@ -170,7 +170,7 @@ sub convertCallsToInfo{
                 my $f = "0.00";
                 eval{
                     $f = $alt/sum(@counts);
-                    $f = sprintf("%.3f", $f);
+                    $f = sprintf("%g", $f);
                 };
                 push @freqs, $f;
             }
