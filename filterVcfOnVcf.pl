@@ -779,8 +779,7 @@ sub filter_on_info_fields {
 
                     if ($maf) {
                         if (    @filter_vcfs == 1
-                            and exists $filter_vcf_info{$f}->{AF}
-                            and $maf >= 0.01 )
+                            and exists $filter_vcf_info{$f}->{AF})
                         {
                             my @afs = split(
                                 ",",
@@ -1167,12 +1166,11 @@ sub check_filter_vcf_info_fields {
     foreach my $f (@filter_vcfs) {
         if (   $threshold
             or $filter_homozygotes
-            or ( $maf and @filter_vcfs > 1 )
-            or ( $maf < 0.01 ) )
+            or ( $maf and @filter_vcfs > 1 ))
         {
             check_pgts_gtc($f);
         }
-        if ( $maf and @filter_vcfs == 1 and $maf >= 0.01 ) {
+        if ( $maf and @filter_vcfs == 1 ){
             if ( not exists $filter_vcf_info{$f}->{AF} ) {
                 check_pgts_gtc($f);
             }
