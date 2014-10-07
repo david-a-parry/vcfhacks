@@ -289,13 +289,6 @@ if (@missing) {
     prepare_files( \@missing, \%database );
 }
 
-my $pre_progressbar = Term::ProgressBar->new(
-    {
-        name  => "Parsing database",
-        count => keys(%database) + 1,
-        ETA   => "linear",
-    }
-);
 my $next_update  = 0;
 my $pre_progress = 0;
 my @all_annotations = qw(ENSGENE_ID ENTREZ_ID SYMBOL GO_ID GO_DESCRIPTION GENERIFS SUMMARY OMIM MGI_PHENOTYPE);
@@ -309,12 +302,19 @@ if (@annotations){
     @annotations = @all_annotations;
 }
     
-
+print STDERR "Initialising input VCF...\n";
 my $vcf_obj = ParseVCF->new( file => $vcf );
 my $vep_header = $vcf_obj->readVepHeader();
 die "No 'GENE' field identified in header for file $vcf - "
   . "please annotate with Ensembl's variant_effect_precictor.pl script.\n"
   if ( not exists $vep_header->{gene} );
+my $pre_progressbar = Term::ProgressBar->new(
+    {
+        name  => "Parsing database",
+        count => keys(%database) + 1,
+        ETA   => "linear",
+    }
+);
 $next_update = $pre_progressbar->update($pre_progress)
   if $pre_progress >= $next_update;
 
