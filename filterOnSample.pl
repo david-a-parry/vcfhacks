@@ -148,7 +148,6 @@ else {
     }
     if ( not $buffer_size ) {
         $buffer_size = 20000 > $forks * 5000 ? 20000 : $forks * 5000;
-        ; #can have small buffer as we don't have much overhead (files to search etc.) for this script
     }
     print STDERR
 "[INFO] Processing in batches of $buffer_size variants split among $forks forks.\n";
@@ -174,7 +173,11 @@ if ( defined $progress ) {
         print STDERR "$vcf has $total_variants variants. ";
     }
 }
-my %contigs       = VcfReader::getContigOrder($vcf);
+my %contigs = ();
+if ($forks){
+    %contigs = VcfReader::getContigOrder($vcf);
+}
+
 my %sample_to_col = VcfReader::getSamples(
         vcf         => $vcf,
         get_columns => 1,

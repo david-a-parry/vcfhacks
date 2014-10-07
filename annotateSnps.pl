@@ -99,7 +99,10 @@ if ( defined $opts{Progress} ) {
     $total_vcf = VcfReader::countVariants( $opts{input} );
     print STDERR "$opts{input} has $total_vcf variants. ";
 }
-my %contigs       = VcfReader::getContigOrder( $opts{input} );
+my %contigs = ();
+if ($forks){
+    %contigs       = VcfReader::getContigOrder( $opts{input} );
+}
 my %sample_to_col = ();
 if (@samples) {
     %sample_to_col = VcfReader::getSamples(

@@ -79,7 +79,10 @@ if ( defined $opts{Progress} ) {
         print STDERR "$opts{input} has $total_vcf variants. ";
     }
 }
-my %contigs       = VcfReader::getContigOrder( $opts{input} );
+my %contigs = ();
+if ($forks){
+    %contigs       = VcfReader::getContigOrder( $opts{input} );
+}
 my %sample_to_col = ();
 if (@samples) {
     %sample_to_col = VcfReader::getSamples(
@@ -511,7 +514,7 @@ Directory containing ESP VCF files. These can be downloaded from http://evs.gs.w
 
 =item B<-e    --esp_file>
 
-One or more ESP VCF files to use.
+One or more ESP VCF files to use. You may use this in addition to or instead of --dir argument, but for most uses it is envisaged that you will simply use the --dir argument to specify the location of a directory containing ESP files for each chromosome.
 
 =item B<-s    --samples>
 
