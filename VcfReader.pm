@@ -816,6 +816,7 @@ Retrieves the value for a given field from a given line. The first value passed 
 sub getVariantField{
     my ($split, $field) = @_;
     $field =~ s/^#+//;
+    croak "line passed to getVariantField must be an array reference " if ref $split ne 'ARRAY';
     croak "Invalid field ($field) passed to getVariantField method " 
         if not exists $vcf_fields{$field};
     if ($vcf_fields{$field} > $#{$split}){
@@ -875,6 +876,7 @@ If true, only alleles in the ALT column will be returned.
 sub readAlleles{
     my (%args) = @_;
     croak "line argument is required for readAlleles method " if not defined $args{line};
+    croak "line argument must be an array reference " if ref $args{line} ne 'ARRAY';
     my @alleles = split(",", getVariantField($args{line}, "ALT"));
     #if no variant at position then ALT will be "." and we want to remove it from our alleles array
     @alleles = grep {! /\./ } @alleles; 
@@ -1756,6 +1758,7 @@ sub countAlleles{
     #$count = $obj->countGenotypes(samples=>["sample1","sample2"], genotypes => '0/1');
     my (%args) = @_;
     croak "\"line\" argument must be passed to countAlleles " if not defined $args{line};
+    croak "line argument must be an array reference " if ref $args{line} ne 'ARRAY';
     if (defined $args{sample_to_columns}){
         if (ref $args{sample_to_columns} ne 'HASH'){
             croak "\"sample_to_columns\" argument passed to countAlleles must be a hash reference ";
@@ -2303,6 +2306,9 @@ sub by_first_last_line{
     #       my @sorted = sort { VcfReader::by_first_last_line($a, $b, \%contig_order) } @batches;
     #where \%contig_order has been generated using VcfReader::getContigOrder
     my ($a, $b, $contigs) = @_;
+    if (ref $a ne 'ARRAY' or ref $b ne 'ARRAY'){
+        croak "First 2 arguments passed to by_first_last_line must be ARRAY references ";
+    }
     my $a_first_chrom = getVariantField( $a->[0],  "CHROM", );
     my $a_first_pos   = getVariantField( $a->[0],  "POS", );
     my $a_last_chrom  = getVariantField( $a->[-1], "CHROM", );
