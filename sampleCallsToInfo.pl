@@ -1,17 +1,22 @@
 #!/usr/bin/perl
 use warnings;
 use strict;
+use Parallel::ForkManager;
 use Getopt::Long;
 use Pod::Usage;
 use Term::ProgressBar;
 use Data::Dumper;
 use POSIX qw/strftime/;
+use Sys::CPU;
 use List::Util qw(sum);
 use FindBin;
 use lib "$FindBin::Bin";
 use VcfReader;
 
 my $minGQ = 0;
+my $cpus  = Sys::CPU::cpu_count();
+my $forks = 0;
+my $buffer_size;
 my %opts = ();
 GetOptions(
     \%opts,
@@ -22,6 +27,8 @@ GetOptions(
     "help",
     "manual",  
     "progress",
+    "forks=i" => \$forks,
+    "cache=i" => \$buffer_size,
 ) or pod2usage( -exitval => 2, -message => "Syntax error" );
 pod2usage( -verbose => 2 ) if $opts{manual};
 pod2usage( -verbose => 1 ) if $opts{help};
@@ -37,6 +44,22 @@ if ( $opts{output} ) {
 else {
     $OUT = *STDOUT;
 }
+if ( $forks < 2 ) {
+    $forks       = 0;    #no point having overhead of forks for one fork
+}
+else {
+    if ( $forks > $cpus ) {
+        print STDERR
+"[Warning]: Number of forks ($forks) exceeds number of CPUs on this machine ($cpus)\n";
+    }
+    if ( not $buffer_size ) {
+        $buffer_size = 10000 > $forks * 1000 ? 10000 : $forks * 1000;
+        ;
+    }
+    print STDERR
+"[INFO] Processing in batches of $buffer_size variants split among $forks forks.\n";
+}
+
 
 my $progressbar;
 my $next_update = 0;
@@ -49,7 +72,11 @@ if ( defined $opts{progress} ) {
     $total_vcf = VcfReader::countVariants( $opts{input} );
     print STDERR "$opts{input} has $total_vcf variants. ";
 }
-
+my %contigs = ();
+if ($forks){
+    $total_vcf *= 3;
+    %contigs = VcfReader::getContigOrder($opts{input});
+}
 
 $time = strftime( "%H:%M:%S", localtime );
 print STDERR "\n[$time] Finished initializing input VCF\n";
@@ -113,19 +140,31 @@ if ( defined $opts{progress} and $total_vcf ) {
     );
 }
 
-my $n                = 0;
-my $VCF              = VcfReader::_openFileHandle( $opts{input} );
+my $n   = 0;
+my $VCF = VcfReader::_openFileHandle( $opts{input} );
 
+my @lines_to_process = ();
 VAR: while ( my $line = <$VCF> ) {
     next if $line =~ /^#/;
     $n++;
-    chomp $line;
-    my @split_line = split( "\t", $line );
-    my $l = convertCallsToInfo( \@split_line);
-    print $OUT "$l\n";
+    if ($forks ){
+        push @lines_to_process, $line;
+        if ( @lines_to_process >= $buffer_size ) {
+            process_buffer();
+            @lines_to_process = ();
+        }
+    }else{
+        chomp $line;
+        my @split_line = split( "\t", $line );
+        my $l = convertCallsToInfo( \@split_line);
+        print $OUT join("\t", @$l) ."\n";
+    }
     if ($progressbar) {
         $next_update = $progressbar->update($n) if $n >= $next_update;
     }
+}
+if ($forks){
+    process_buffer();
 }
 close $VCF;
 close $OUT;
@@ -139,9 +178,116 @@ print STDERR "\nTime finished: $time\n";
 ################################################
 #####################SUBS#######################
 ################################################
+sub process_buffer {
+    return if not @lines_to_process;
+    my @lines_to_print;
+    my $lines_per_slice = @lines_to_process;
+    if ( $forks > 0 ) {
+        $lines_per_slice =
+            int( @lines_to_process / $forks ) > 1
+          ? int( @lines_to_process / $forks )
+          : 1;
+    }
+    my @batch = ();
+
+    #get a batch for each thread
+    for ( my $i = 0 ; $i < @lines_to_process ; $i += $lines_per_slice ) {
+        my $last =
+          ( $i + $lines_per_slice - 1 ) < $#lines_to_process
+          ? $i + $lines_per_slice - 1
+          : $#lines_to_process;
+        if ( $i + $lines_per_slice >= @lines_to_process ) {
+            $last = $#lines_to_process;
+        }
+        my @temp = @lines_to_process[ $i .. $last ];
+        push @batch, \@temp;
+    }
+    my $pm = Parallel::ForkManager->new($forks);
+    $pm->run_on_finish(    # called BEFORE the first call to start()
+        sub {
+            my ( $pid, $exit_code, $ident, $exit_signal, $core_dump,
+                $data_structure_reference )
+              = @_;
+
+            if ( defined($data_structure_reference) ) {
+                my %res = %{$data_structure_reference};
+                if ( ref $res{keep} eq 'ARRAY' ) {
+                    push @lines_to_print, \@{ $res{keep} } if @{ $res{keep} };
+                }else{
+                    die "Unexpected return from child process $pid:\n". Dumper %res;
+                }
+                if ($progressbar) {
+                    $n += $res{batch_size};
+                    $next_update = $progressbar->update($n)
+                      if $n >= $next_update;
+                }
+            }
+            else {
+                die "ERROR: no message received from child process $pid!\n";
+            }
+        }
+    );
+    foreach my $b (@batch) {
+        $pm->start() and next;
+        my %results = process_batch($b);
+        $pm->finish( 0, \%results );
+    }
+    $pm->wait_all_children;
+    #print them
+    @lines_to_print =
+      sort { VcfReader::by_first_last_line( $a, $b, \%contigs ) }
+      @lines_to_print;
+    if (@lines_to_print) {
+        my $incr_per_batch = @lines_to_process / @lines_to_print;
+        foreach my $batch (@lines_to_print) {
+            my $incr_per_line = $incr_per_batch / @$batch;
+            foreach my $l (@$batch) {
+                if ( ref $l eq 'ARRAY' ) {
+                    print $OUT join( "\t", @$l ) . "\n";
+                }
+                else {
+                    print $OUT "$l\n";
+                }
+                if ($progressbar) {
+                    $n += $incr_per_line;
+                    $next_update = $progressbar->update($n)
+                      if $n >= $next_update;
+                }
+            }
+        }
+    }
+    else {
+        if ($progressbar) {
+            $n += @lines_to_process;
+            $next_update = $progressbar->update($n) if $n >= $next_update;
+        }
+    }
+}
+
+################################################
+sub process_batch {
+
+    #filter a set of lines
+    my ($batch) = @_;
+    my %results = ( batch_size => scalar(@$batch) );
+    foreach my $line ( @{$batch} ) {
+        chomp $line;
+        my @split = split("\t", $line);
+        my $l = convertCallsToInfo(\@split);
+        push @{ $results{keep} }, $l;
+    }
+    return %results;
+}
+
+################################################
 
 sub convertCallsToInfo{
     my ($line) = @_;
+    #debug
+    if (ref $line ne 'ARRAY'){
+        die "$line is not an array ref ";
+    }
+    #debug
     my $info = VcfReader::getVariantField($line, "INFO");
     my $ac = VcfReader::getVariantInfoField($line, "AC");
     my $af = VcfReader::getVariantInfoField($line, "AF");
@@ -194,11 +340,17 @@ sub convertCallsToInfo{
         }
     }
     $info .= ";GTC=" . join(",", @gtcs);
+    #debug
+    if (ref $line ne 'ARRAY'){
+        die "$line is not an array ref ";
+    }
+    #debug
     my $l = VcfReader::replaceVariantField($line, 'INFO', $info);
     if (defined $opts{keep_calls}){
-        return join("\t", @$l);
+        return $l;
     }else{
-        return join("\t", @$l[0..7]);
+        my @ar = @$l[0..7];
+        return \@ar;
     }
 }
 
@@ -240,6 +392,14 @@ Use this flag to keep FORMAT and sample genotype fields in the output. Default i
 =item B<-p    --progress>
 
 Show a progress bar.
+
+=item B<--forks>
+
+Number of forks to create for parallelising your analysis. By default no forking is done. To speed up your analysis you may specify the number of parallel processes to use here. (N.B. forking only occurs if a value of 2 or more is given here as creating 1 fork only results in increased overhead with no performance benefit).
+
+=item B<--cache>
+
+Cache size. Variants are processed in batches to allow for efficient parallelisation. When forks are used the default is to process up to 10,000 variants at once or 1,000 x no. forks if more than 10 forks are used. If you find this program comsumes too much memory when forking you may want to set a lower number here. When using forks you may get improved performance by specifying a higher cache size, however the increase in memory usage is proportional to your cache size multiplied by the number of forks.
 
 =item B<-h    --help>
 
