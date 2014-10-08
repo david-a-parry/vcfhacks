@@ -33,7 +33,7 @@ Output file name. Defaults to [input name].xlsx (or [input name].txt if --text_o
 
 =item B<-u    --summarise>
 
-Use this flag to summarise the number of alleles and genotypes found in samples rather than outputting genotype columns for each individual sample. If sample IDs are specified with --samples or --pedigree options only these samples will be counted in the summarised allele and genotype counts.
+Use this flag to summarise the number of alleles and genotypes found in samples rather than outputting genotype columns for each individual sample. If sample IDs are specified with --samples or --pedigree options only these samples will be counted in the summarised allele and genotype counts. This can be overriden by adding the word 'all' after this argument, in which case all samples in the VCF will be summarised and any samples specified by --samples or --pedigree options will still have their individual genotypes written to the output.
 
 =item B<-s    --samples>
 
@@ -202,7 +202,7 @@ GetOptions($config,
     'i|input=s' =>\$vcf,
     'output=s' => \$output,
     's|samples=s{,}' => \@samples,
-    'u|summarise' => \$summarise_counts,
+    'u|summarise:s' => \$summarise_counts,
     'pedigree=s{,}' => \@peds,
     'manual' => \$man,
     'help' => \$help) or die "Syntax error.\n";
@@ -462,7 +462,7 @@ LINE: while (my $vcf_line = $vcf_obj->readLine){
         }
     }
     #Get values for line
-    if (defined $config->{do_not_simplify} and not $summarise_counts){
+    if (defined $config->{do_not_simplify} and not defined $summarise_counts){
         @line = get_vcf_fields();    
     }else{
         @line = get_simplified_fields();    
@@ -585,9 +585,16 @@ sub get_simplified_fields{
         push @vcf_values, $vcf_obj->getVariantField($f);
     }
     my @all_alleles = $vcf_obj->readAlleles();
-    if ($summarise_counts){
-        my %allele_counts = $vcf_obj->countAlleles(samples => \@samples);
-        my %genotype_counts = $vcf_obj->countGenotypes(samples => \@samples);
+    if (defined $summarise_counts){
+        my %allele_counts = ();
+        my %genotype_counts = ();
+        if ($summarise_counts eq 'all'){
+            %allele_counts = $vcf_obj->countAlleles();
+            %genotype_counts = $vcf_obj->countGenotypes();
+        }else{
+            %allele_counts = $vcf_obj->countAlleles(samples => \@samples);
+            %genotype_counts = $vcf_obj->countGenotypes(samples => \@samples);
+        }
         my @al_count_string = ();
         my @gt_count_string = ();
         foreach my $allele (sort keys %allele_counts){
@@ -616,7 +623,8 @@ sub get_simplified_fields{
         }
         push @vcf_values, join(";", @al_count_string);
         push @vcf_values, join(";", @gt_count_string);
-    }else{
+    }
+    if (not defined $summarise_counts or (defined $summarise_counts and $summarise_counts eq 'all')){
         my @sample_calls = ();
         my @sample_allele_depths = ();
         my @sample_genotype_quality = ();
@@ -752,10 +760,11 @@ sub get_header{
         foreach my $h ("Chrom", "Pos", "SNP ID", "Variant Quality", "Filters", "Genomic Ref", "Alt Alleles" ){
             push @head, $h;
         }
-        if ($summarise_counts){
+        if (defined $summarise_counts){
             push @head, "Allele Counts";
             push @head, "Genotype Counts";
-        }else{
+        }
+        if (not defined $summarise_counts or (defined $summarise_counts and $summarise_counts eq 'all')){
             foreach my $sample (@samples){
                 push @head, $sample;
             }
