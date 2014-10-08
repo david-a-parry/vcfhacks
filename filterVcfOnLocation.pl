@@ -17,7 +17,7 @@
 
 =head1 NAME
 
-filterVcfOnLocation.pl - print variants from a vcf file that lie within a list of genomic regions
+filterVcfOnLocation.pl - print variants from a vcf file that lie within a list of genomic regions without requiring sorting of your VCF
 
 
 =head1 SYNOPSIS
@@ -41,7 +41,7 @@ Bed file containing regions to filter on (required unless using --regions argume
 
 =item B<-r    --regions>
 
-Specify one or more regions to filter on seperated with spaces in format "chr1:1-2000". Can be used in conjunction with or instead of --bed argument.
+Specify one or more regions to filter on seperated with spaces in format "X:1-2000" where X is the contig/chromosome name. Your contig chromosome names must match exactly as they are represented in your VCF.  Can be used in conjunction with or instead of --bed argument.
 
 =item B<-f    --flanks>
 
@@ -80,7 +80,7 @@ Show this script's manual page.
 
 filterVcfOnLocation.pl -i [vars.vcf] -b [regions.bed] 
 
-filterVcfOnLocation.pl -i [vars.vcf] -r chr1:2000000-50000000 -o [filtered.vcf]
+filterVcfOnLocation.pl -i [vars.vcf] -r 1:2000000-50000000 -o [filtered.vcf]
 
    
 =cut
@@ -88,7 +88,7 @@ filterVcfOnLocation.pl -i [vars.vcf] -r chr1:2000000-50000000 -o [filtered.vcf]
 
 =head1 DESCRIPTION
 
-Takes a bed file or a list of regions and filters variants from a vcf file that lie in these regions.
+Takes a bed file or a list of regions and filters variants from a vcf file that lie in these regions. For sorted VCF files it is recommended to use getVariantsByLocation.pl instead if you will be searching the same VCF repeatedly. This program (filterVcfOnLocation.pl) should be used if you want to search an unsorted VCF.
 
 
 =cut
