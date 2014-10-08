@@ -309,7 +309,7 @@ if ( defined $progress ) {
 }
 my %contigs = ();
 if ($forks){
-    %contigs       = VcfReader::getContigOrder( $opts{input} );
+    %contigs       = VcfReader::getContigOrder( $vcf );
 }
 my %sample_to_col = ();
 if (@samples) {
