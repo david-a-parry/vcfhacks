@@ -252,7 +252,7 @@ sub locate {
             $u = $i - 1;
         }
         elsif (
-            ( $self->_chromIsLessThanChrom($self->{_chrom}, $self->{_merged}->[$i]->{chrom}) )
+            ( $self->_chromIsLessThanChrom($self->{_merged}->[$i]->{chrom}, $self->{_chrom}) )
             or (  $self->{_chrom} eq $self->{_merged}->[$i]->{chrom}
                 and $self->{_position} > $self->{_merged}->[$i]->{start}
                 and $self->{_position} > $self->{_merged}->[$i]->{end} )
@@ -266,6 +266,8 @@ sub locate {
         {
             $self->{_location} = $i;
             return $i;
+        }else{
+            croak "Logic error - please report this bug! ";
         }
     }
     $self->{_location} = -1;
