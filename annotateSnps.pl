@@ -630,9 +630,7 @@ sub filterSnps {
         }
     }
     my $filter_count = 0;
-    my $inf          = VcfReader::getVariantField( $vcf_line, 'INFO' );
-    my $new_inf      = "$inf;SnpAnnotation=[";
-    my @ni           = ();
+    my @snp_info           = ();
     foreach my $allele ( sort { $a <=> $b } keys %min_vars ) {
         my @al_inf = ();
         if ( keys %{ $min_vars{$allele}->{snp_info} } ) {
@@ -650,10 +648,15 @@ sub filterSnps {
         else {
             push @al_inf, '.';
         }
-        push @ni, join( "|", @al_inf );
+        push @snp_info, join( "|", @al_inf );
     }
-    $new_inf .= join( ",", @ni ) . "]";
-    $vcf_line = VcfReader::replaceVariantField( $vcf_line, 'INFO', $new_inf );
+    my $annot = "[" . join( ",", @snp_info ) . "]";
+    $vcf_line = VcfReader::addVariantInfoField
+        (
+            line => $vcf_line,
+            id => "SnpAnnotation",
+            value => $annot,
+        );
     foreach my $allele ( keys %min_vars ) {
         $filter_count++ if ( $min_vars{$allele}->{filter_snp} );
     }

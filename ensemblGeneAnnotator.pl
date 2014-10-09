@@ -422,7 +422,6 @@ my $header = $vcf_obj->getHeader(1);
 print $OUT $header;
 LINE: while ( my $line = $vcf_obj->readLine ) {
     $vcf_line++;
-    my $inf = $vcf_obj->getVariantField('INFO');
     my %annot = ();
     my @csq = $vcf_obj->getVepFields( [ "Gene", "Consequence" ] );
     die
@@ -495,8 +494,9 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
     if ( not keys %annot ) {
 
 #IF FOR SOME REASON WE HAVEN'T FOUND ANY ENTREZ IDs THEN WE'RE FINISHED WITH THIS LINE
-        $inf .= ";GeneAnno=" . "|" x @annotations;
-        my $new_line = $vcf_obj->replaceVariantField('INFO', $inf);
+#       my $
+        my $ens_annot = "|" x @annotations;
+        my $new_line = $vcf_obj->addVariantInfoField('GeneAnno', $ens_annot);
         #print $OUT "-\t-\t-\t-\t-\t-\t-\t-\t$line\n";
         print $OUT "$new_line\n";
         next LINE;
@@ -653,8 +653,8 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
         }
         push @gene_anno, join("|", @single_anno);
     }
-    $inf .= ";GeneAnno=" . join(",", @gene_anno);
-    my $new_line = $vcf_obj->replaceVariantField('INFO', $inf);
+    my $ens_annot = join(",", @gene_anno);
+    my $new_line = $vcf_obj->addVariantInfoField('GeneAnno', $ens_annot);
     print $OUT "$new_line\n";
     $next_update = $progressbar->update($vcf_line) if $vcf_line >= $next_update;
 }

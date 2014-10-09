@@ -303,29 +303,39 @@ sub convertCallsToInfo{
             push @counts, $counts{$k};
         }
         if (@counts < 2){#no ALT alleles(?)
-            $info .= ";AF=0";
-            $info .= ";AC=0";
-        }
-        my @alt_counts = @counts[1..$#counts];
-        if (not $ac){
-            $info .= ";AC=" . join(",", @alt_counts) ;
-        }
-        if (not $af){
-            my @freqs = ();
-            foreach my $alt (@alt_counts){
-                my $f = "0.00";
-                eval{
-                    $f = $alt/sum(@counts);
-                    $f = sprintf("%g", $f);
-                };
-                push @freqs, $f;
+            if (not $af){
+                $info .= ";AF=0";
             }
-            $info .= ";AF=" . join(",", @freqs);
+            if (not $ac){
+                $info .= ";AC=0";
+            }
+        }else{
+            my @alt_counts = @counts[1..$#counts];
+            if (not $ac){
+                $info .= ";AC=" . join(",", @alt_counts) ;
+            }
+            if (not $af){
+                my @freqs = ();
+                foreach my $alt (@alt_counts){
+                    my $f = "0.00";
+                    eval{
+                        $f = $alt/sum(@counts);
+                        $f = sprintf("%g", $f);
+                    };
+                    push @freqs, $f;
+                }
+                $info .= ";AF=" . join(",", @freqs);
+            } 
         } 
+        $line = VcfReader::replaceVariantField($line, 'INFO', $info);
     }
-
     my @pgts = VcfReader::getAllPossibleGenotypeCodes($line);    
-    $info .= ";PGTS=" . join(",", @pgts);
+    $line = VcfReader::addVariantInfoField
+        (
+            line => $line,
+            id => "PGTS",
+            value => join(",", @pgts),
+        );
     my %gts = VcfReader::countGenotypes
                     (
                         line => $line,
@@ -339,17 +349,16 @@ sub convertCallsToInfo{
             push @gtcs, 0;
         }
     }
-    $info .= ";GTC=" . join(",", @gtcs);
-    #debug
-    if (ref $line ne 'ARRAY'){
-        die "$line is not an array ref ";
-    }
-    #debug
-    my $l = VcfReader::replaceVariantField($line, 'INFO', $info);
+    $line = VcfReader::addVariantInfoField
+        (
+            line => $line,
+            id => "GTC",
+            value => join(",", @gtcs),
+        );
     if (defined $opts{keep_calls}){
-        return $l;
+        return $line;
     }else{
-        my @ar = @$l[0..7];
+        my @ar = @$line[0..7];
         return \@ar;
     }
 }

@@ -138,9 +138,11 @@ while (my $line = $vcf_obj->readLine){
             next;
         }
     }
-    my $info = $vcf_obj->getVariantField('INFO');
-    $info .= ";CaddPhredScore=" . join(",", @cadd_scores);
-    $line = $vcf_obj->replaceVariantField('INFO', $info);
+    $line = $vcf_obj->addVariantInfoField
+        (
+            'CaddPhredScore', 
+            join(",", @cadd_scores),
+        );
     if ($opts{do_not_rank}){
         print $OUT "$line\n";
     }else{
