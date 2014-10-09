@@ -7,7 +7,7 @@ The following scripts support parallel execution using forks:
     filterVcfOnVcf.pl
     filterOnSample.pl
 
-Use the --forks option with these programs to specify the number of forks to use if desired.
+Use the --forks option with these programs to specify the number of forks to use (if desired).
 
 Examples are given below of what are envisaged to be typical uses of these programs. They are only intended as guidelines for use of some of these programs in order to get people started with these tools. 
 
@@ -49,4 +49,26 @@ See the various options in the help documentation for findBiallelicVep.pl for mo
 
 The getFunctionalVariantsVep.pl program identifies variants matching 'functional' criteria and can also be used to provide a list of gene IDs to ignore (e.g. lof tolerant genes).  You may want to use this program to filter genes on functional consequence when not looking for biallelic variation or to prefilter with a list of gene IDs before running findBiallelicVep.pl. You may also/instead want to use rankOnCaddScore.pl to rank variants ignoring functional annotation using Combined Annotation Dependent Depletion (CADD) scores.
 
-Having filtered/ranked you variant calls you may want to annotate gene information using ensemblGeneAnnotator.pl and produce a spreadsheet of your results using annovcfToSimple.pl.
+    perl rankOnCaddScore.pl -i input.vcf -o cadd_ranked.vcf -c ~/cadd_score_files/*.gz -n not_found_cadd_scores.tsv
+
+You may then want to submit your 'not_found_cadd_scores.tsv' to http://cadd.gs.washington.edu/score and rerun once you have downloaded and tabix indexed your missing results.
+
+Having filtered/ranked you variant calls you may want to annotate gene information using ensemblGeneAnnotator.pl . You may either create your own database with ensemblGeneAnnotator or download a pre-build database from: 
+
+    http://sourceforge.net/projects/vcfhacks/files/ensAnnotatorDatabase/
+
+Remember to unzip the database if you have downloaded the pre-built version. Annotation requires ensembl gene IDs annotated using Ensembl's variant effect predictor. 
+
+    perl ensemblGeneAnnotator.pl -i input.vcf -d ~/ensAnnotator -o annotated.vcf
+
+You may only want to annotate gene information for 'functional' variants and omit information for overlapping genes with synonymous/intronic/UTR variants, in which case use a command like the the following:
+
+    perl ensemblGeneAnnotator.pl -i input.vcf -d ~/ensAnnotator -o annotated.vcf --functional
+
+At this point you may wish to produce a spreadsheet of your results using annovcfToSimple.pl. The following should create an Excel spreadsheet (.xlsx) from a VEP and ensemblGeneAnnotator.pl annotated file:
+
+    perl annovcfToSimple.pl -g -v -i input.vcf -o input.xlsx
+
+If you have many samples in your VCF you may want to specify only a few using the --samples option or alternatively use the --summarise option to summarise the alleles and genotypes in your VCF rather than giving information for each sample.
+
+
