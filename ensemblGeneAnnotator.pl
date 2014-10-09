@@ -118,7 +118,6 @@ use File::Basename;
 use File::stat;
 use Cwd;
 use Term::ProgressBar;
-use Bio::SeqIO::entrezgene;
 
 #use Bio::SeqIO::entrezgene_interactants;
 use FindBin;
@@ -767,6 +766,14 @@ sub prepare_database {
         );
     }
     foreach my $file (@files) {
+        if ($file->{file} eq "Homo_sapiens.ags.gz"){
+            eval "use Bio::SeqIO::entrezgene; 1" 
+              or die "The Bio::SeqIO::entrezgene module must be installed in order ".
+              "to extract NCBI gene summaries for database creation. ".
+              "Please install bioperl and try again\n";
+        }
+    }
+    foreach my $file (@files) {
         my ( $file_name, $file_dir ) = fileparse( $file->{localfile} );
         if ( $file_name =~ /ensemblToEntrez/ )
         {    #we create this one when processing the human summaries
@@ -1094,7 +1101,9 @@ sub extract_ncbi_summaries {
 
     #produces file of gene ID plus Summary plus Interactants
     my ( $gene2xml, $agsfile, $sum_out, $ensToEntrezout ) = @_;
-   
+    eval "use Bio::SeqIO::entrezgene; 1" 
+        or die "The Bio::SeqIO::entrezgene module must be installed in order ".
+        "to extract NCBI gene summaries. Please install bioperl and try again\n";
     #my $io =  Bio::SeqIO->new(-format => 'entrezgene_interactants', -file => "$gene2xml -i $agsfile -b -x |");
     my $io = Bio::SeqIO->new(
         -format => 'entrezgene',
