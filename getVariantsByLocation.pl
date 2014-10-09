@@ -34,7 +34,7 @@ Specify one or more regions to filter on seperated with spaces in format "X:1-20
 
 A VCF file to use to find variants overlapping variants from your input. By default, variants from your input file will be printed if their coordinates overlap with any variants in these VCF files and variants are not checked to see whether they share the same alleles. To only print variants with matching alleles use the --matching argument. 
 
-Note, that the VCFs used in this argument do not have to be coordinate sorted, but that it is possible that you will output duplicated lines from your input if they are not. 
+Note, that the VCFs used in this argument do not have to be coordinate sorted, but that it is possible that you will output duplicated lines from your input if they are not. Your output will be in the same order as this VCF.
 
 This option can not be used in conjunction with --regions or --bed arguments.
 
