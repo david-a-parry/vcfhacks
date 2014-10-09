@@ -11,17 +11,18 @@ To run the scripts either add the enclosing directory to your PATH and make sure
 If you want to use scripts to search bgzip compressed VCFs or use rankOnCaddScore.pl you will also need to install the Tabix.pm perl module by Heng Li. Download pre-1.0 version of tabix from github (https://github.com/samtools/tabix) or clone the git repository (git clone https://github.com/samtools/tabix.git). If you downloaded the zipped version unzip to create the tabix directory. Next, cd into the new tabix directory and run 'make', cd into the 'perl' subdirectory, run 'perl Makefile.PL' and 'make test'. If tests succeed run '[sudo] make install' to complete Tabix.pm installation. If you get the error 'Subroutine Tabix::tabix_open redefined...' this is harmless and can be removed by replacing: 
 
 ```
-require XSLoader;
-XSLoader::load('Tabix', $VERSION);
+    require XSLoader;
+    XSLoader::load('Tabix', $VERSION);
 ```
 
 ...with... 
 
 ```
-{no warnings 'redefine';
-require XSLoader;
-XSLoader::load('Tabix', $VERSION);
-}
+    {
+    no warnings 'redefine';
+    require XSLoader;
+    XSLoader::load('Tabix', $VERSION);
+    }
 ```
 
 ...in Tabix.pm (and reinstalling). 
