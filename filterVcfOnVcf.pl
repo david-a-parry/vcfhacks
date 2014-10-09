@@ -387,7 +387,8 @@ foreach my $f ( keys %filter_vcf_samples ) {
             if ( not $filter_with_info ) {
                 die
 "Filter VCF $f has no samples. Use of --allele_frequency_filter, --threshold".
-" or --filter_homozygotes options is not allowed with filter VCFs without samples.\n";
+" or --filter_homozygotes options is not allowed with filter VCFs without samples ".
+"unless used with the --info_filter option.\n";
             }
         }
     }
