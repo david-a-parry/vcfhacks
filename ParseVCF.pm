@@ -1347,6 +1347,30 @@ sub replaceVariantField{
     return $self->{_currentLine} if defined wantarray;
 }
 
+sub addVariantInfoField{
+    my ($self, $field, $value) = @_;
+    croak "a field must be passed to addVariantInfoField method " if not defined $field;
+    $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
+    if ($field =~ /[,;]/){
+        croak "INFO field ($field) passed to addVariantInfoField method has invalid characters.\n";
+    }
+    if (defined $value && $value =~ /;/){
+        croak "value ($value) passed to addVariantInfoField method has invalid characters.\n";
+    }
+    my @info = split(";", $self->getVariantField('INFO'));
+    my @new_inf = ();
+    foreach my $inf (@info){
+        if ($inf ne $field and $inf !~ /^$field=/){
+            push @new_inf, $inf;
+        }
+    }
+    if (defined $value){
+        push @new_inf, "$field=$value";
+    }else{
+        push @new_inf, $field; 
+    }
+    return $self->replaceVariantField('INFO', join(";", @new_inf));
+}
 
 sub getColumnNumber{
     my ($self, $field) = @_;
