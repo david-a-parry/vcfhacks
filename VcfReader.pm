@@ -2130,14 +2130,28 @@ filename for output. If output is given data will be sent to STDOUT.
 
 =item contig_order 
 
-reference to a hash with contig names as keys and their relative order as values.
+reference to a hash with contig names as keys and their relative order as values. If provided without 'dict' argument contig headers will be replaced but without information such as length or assembly.
+
+=item dict
+
+reference to an array of replacement contig ID header lines in the format "##contig=<ID=1,[other fields]>" Use this to replace the contig headers in your VCF in the given order. 
 
 =back
 
- VcfReader::sortVcf(vcf => 'unsorted_file.vcf' output => 'sorted_file.vcf');
+ VcfReader::sortVcf(vcf => 'unsorted_file.vcf', output => 'sorted_file.vcf');
  
  my %contigs = (contig_1 => 0, contig_2 => 1,  contig_3 => 2);
- VcfReader::sortVcf(vcf => 'unsorted_file.vcf' output => 'sorted_file.vcf' contig_order => \%contigs);
+ my @dict = qw  (   ##contig=<ID=contig_1,length=249250621>  
+                    ##contig=<ID=contig_2,length=243199373=>
+                    ##contig=<ID=contig_3,length=198022430=>
+                );
+ VcfReader::sortVcf
+    (
+        vcf => 'unsorted_file.vcf', 
+        output => 'sorted_file.vcf', 
+        contig_order => \%contigs,
+        dict => \@dict,
+    );
 
 =cut
 sub sortVcf{
@@ -2146,6 +2160,8 @@ sub sortVcf{
     my (%args) = @_;
     croak "\"vcf\" argument is required for sortVcf function "  if not $args{vcf};
     my %contigs = ();
+    my %temp_dict = ();
+    my @dict = ();
     my $add_ids = 0;
     my $i = 0;
     if (not $args{contig_order}){
@@ -2155,8 +2171,20 @@ sub sortVcf{
             croak "contig_order argument passed to sortVcf method must be a hash reference ";
         }
         %contigs = %{$args{contig_order}};
+        if (not $args{dict}){
+            foreach my $k (sort {$contigs{$a} <=> $contigs{$b}} keys %contigs){
+                push @dict, "##contig=<ID=$k>";
+            }
+        }
+    }
+    if ($args{dict}){
+        if (ref $args{dict} ne 'ARRAY'){
+            croak "dict argument passed to sortVcf method must be an array reference ";
+        }
+        @dict = @{$args{dict}};
     }
 
+    my @head = getHeader($args{vcf});
     my $SORTOUT;
     if (exists $args{output}){
         open ($SORTOUT,  ">$args{output}") or croak "Can't open file $args{output} for output of sortVcf: $! ";
@@ -2168,36 +2196,54 @@ sub sortVcf{
     if ($@){#no Sort::External , sort in memory
         print STDERR "Reading variants into memory...\n";
         my $FH = _openFileHandle($args{vcf});
-        my @sort = readline $FH;
+        my @sort = ();
+        while (my $line = <$FH>){
+            next if $line =~ /^#/;
+            my @split = split("\t", $line);
+            my $chrom = $split[$vcf_fields{CHROM}];
+            if (%contigs){
+                croak "Contig '$chrom' is not present in user provided ".
+                    "contig order " if not exists $contigs{$chrom};
+            }elsif (not @dict){
+                $temp_dict{$chrom} = undef;
+            }
+            push @sort, \@split;
+        }
         close $FH;
-        @sort = grep { ! /^#/ } @sort;
+        if (not @dict){
+            @dict = map {"##contig=<ID=$_>"} sort _byContigsManual keys %temp_dict ;
+        }
+        @head = _replaceHeaderContigs(\@head, \@dict);
         print STDERR "Performing sort...\n";
+
         if (%contigs){
-            @sort = sort {$contigs{(split "\t", $a)[$vcf_fields{CHROM}]} <=> $contigs{(split "\t", $b)[$vcf_fields{CHROM}]} || 
-                        (split "\t", $a)[$vcf_fields{POS}] <=> (split "\t", $b)[$vcf_fields{POS}]
+            @sort = sort {$contigs{$a->[$vcf_fields{CHROM}]} <=> $contigs{$b->[$vcf_fields{CHROM}]} || 
+                        $a->[$vcf_fields{POS}] <=> $b->[$vcf_fields{POS}]
                     } @sort;
         }else{
-            @sort = sort { _byContigsManual((split "\t", $a)[$vcf_fields{CHROM}], (split "\t", $b)[$vcf_fields{CHROM}]) || 
-                           (split "\t", $a)[$vcf_fields{POS}] <=> (split "\t", $b)[$vcf_fields{POS}]
+            @sort = sort { _byContigsManual($a->[$vcf_fields{CHROM}], $b->[$vcf_fields{CHROM}]) || 
+                           $a->[$vcf_fields{POS}] <=> $b->[$vcf_fields{POS}]
                         } @sort;
         }
         print STDERR "Printing output...";
-        my $head = getHeader($args{vcf});
-        print $SORTOUT $head;
-        print $SORTOUT join('', @sort);
+        
+        print $SORTOUT join("\n", @head) ."\n";
+        foreach my $s (@sort){
+            print $SORTOUT join("\t", @$s) ;
+        }
     }else{
         my $vcfsort;
         if (%contigs){
             $vcfsort = 
-                sub { 
-                    $contigs{(split "\t", $Sort::External::a)[$vcf_fields{CHROM}]} <=> $contigs{(split "\t", $Sort::External::b)[$vcf_fields{CHROM}]} || 
-                    (split "\t", $Sort::External::a)[$vcf_fields{POS}] <=> (split "\t", $Sort::External::b)[$vcf_fields{POS}]
+                sub {
+                    $contigs{ $Sort::External::a->[$vcf_fields{CHROM}]} <=> $contigs{ $Sort::External::b->[$vcf_fields{CHROM}]} || 
+                    $Sort::External::a->[$vcf_fields{POS}] <=> $Sort::External::b->[$vcf_fields{POS}]
                 };
         }else{
             $vcfsort = 
                 sub {
-                    _byContigsManual((split "\t", $Sort::External::a)[$vcf_fields{CHROM}], (split "\t", $b)[$vcf_fields{CHROM}]) || 
-                    (split "\t", $a)[$vcf_fields{POS}] <=> (split "\t", $b)[$vcf_fields{POS}]
+                    _byContigsManual($Sort::External::a->[$vcf_fields{CHROM}],  $Sort::External::b->[$vcf_fields{CHROM}]) || 
+                    $Sort::External::a->[$vcf_fields{POS}] <=> $Sort::External::b->[$vcf_fields{POS}]
                 };
 
         }
@@ -2207,30 +2253,40 @@ sub sortVcf{
         my $n = 0;
         my $FH = _openFileHandle($args{vcf});
         while (my $line = <$FH>){
+            next if ($line =~ /^#/);
             $n++;
-            if ($line =~ /^#/){
-                print $SORTOUT $line;
-                next;
+            my @split = split("\t", $line);
+            my $chrom = $split[$vcf_fields{CHROM}];
+            if (%contigs){
+                croak "Contig '$chrom' is not present in user provided ".
+                    "contig order " if not exists $contigs{$chrom};
+            }elsif (not @dict){
+                $temp_dict{$chrom} = undef;
             }
-            push @feeds, $line;
+            push @feeds, \@split;
             if (@feeds > 99999){
                 $sortex->feed(@feeds);
                 @feeds = ();
-                print STDERR "Fed $n lines to sort...\n";
+                print STDERR "Fed $n variants to sort...\n";
             }
         }
         close $FH;
+        if (not @dict){
+            @dict = map {"##contig=<ID=$_>"} sort _byContigsManual keys %temp_dict ;
+        }
         $sortex->feed(@feeds) if @feeds;
-        print STDERR "Fed $n lines to sort...\n";
+        print STDERR "Fed $n variants to sort...\n";
         my $total = $n;
         print STDERR "Sorting and writing output...\n";
         $sortex->finish; 
         $n = 0;
+        @head = _replaceHeaderContigs(\@head, \@dict);
+        print $SORTOUT join("\n", @head) ."\n";
         while ( defined( $_ = $sortex->fetch ) ) {
-            print $SORTOUT $_;
+            print $SORTOUT join("\t", @$_);
             $n++;
             if (not $n % 100000){
-                print STDERR "Printed $n lines to output...\n";
+                print STDERR "Printed $n variants to output...\n";
             }
         }
     }
@@ -2240,6 +2296,27 @@ sub sortVcf{
     print STDERR " Done.\n";
     return $args{output} if defined wantarray
 }
+
+sub _replaceHeaderContigs{
+    my ($head, $dict) = @_;
+    if (ref $head ne 'ARRAY' or ref $dict ne 'ARRAY'){
+        croak "arguments passed to _replaceHeaderContigs must be array references "
+    }
+    my @new_head = ();
+    my $replaced;
+    foreach my $h (@$head){
+        if ($h =~ /^##contig=</){
+            if (not $replaced){
+                push @new_head, @$dict;
+                $replaced++;
+            }
+        }else{
+            push @new_head, $h;
+        }
+    }
+    return @new_head;
+}
+
 
 
 =item B<sortVariants>
