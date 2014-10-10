@@ -2160,28 +2160,29 @@ sub sortVcf{
     my (%args) = @_;
     croak "\"vcf\" argument is required for sortVcf function "  if not $args{vcf};
     my %contigs = ();
+    my $do_not_replace_header;
     my %temp_dict = ();
     my @dict = ();
     my $add_ids = 0;
     my $i = 0;
     if (not $args{contig_order}){
         %contigs = getContigOrderFromHeader($args{vcf});
+        $do_not_replace_header++ if %contigs;
     }else{
         if (ref $args{contig_order} ne 'HASH'){
             croak "contig_order argument passed to sortVcf method must be a hash reference ";
         }
         %contigs = %{$args{contig_order}};
-        if (not $args{dict}){
-            foreach my $k (sort {$contigs{$a} <=> $contigs{$b}} keys %contigs){
-                push @dict, "##contig=<ID=$k>";
-            }
-        }
     }
     if ($args{dict}){
         if (ref $args{dict} ne 'ARRAY'){
             croak "dict argument passed to sortVcf method must be an array reference ";
         }
         @dict = @{$args{dict}};
+    }elsif (%contigs and not $do_not_replace_header){
+        foreach my $k (sort {$contigs{$a} <=> $contigs{$b}} keys %contigs){
+            push @dict, "##contig=<ID=$k>";
+        }
     }
 
     my @head = getHeader($args{vcf});
@@ -2211,9 +2212,9 @@ sub sortVcf{
         }
         close $FH;
         if (not @dict){
-            @dict = map {"##contig=<ID=$_>"} sort _byContigsManual keys %temp_dict ;
+            @dict = map {"##contig=<ID=$_>"} sort byContigs keys %temp_dict ;
         }
-        @head = _replaceHeaderContigs(\@head, \@dict);
+        @head = _replaceHeaderContigs(\@head, \@dict) unless $do_not_replace_header;
         print STDERR "Performing sort...\n";
 
         if (%contigs){
@@ -2272,7 +2273,7 @@ sub sortVcf{
         }
         close $FH;
         if (not @dict){
-            @dict = map {"##contig=<ID=$_>"} sort _byContigsManual keys %temp_dict ;
+            @dict = map {"##contig=<ID=$_>"} sort byContigs keys %temp_dict ;
         }
         $sortex->feed(@feeds) if @feeds;
         print STDERR "Fed $n variants to sort...\n";
@@ -2280,7 +2281,7 @@ sub sortVcf{
         print STDERR "Sorting and writing output...\n";
         $sortex->finish; 
         $n = 0;
-        @head = _replaceHeaderContigs(\@head, \@dict);
+        @head = _replaceHeaderContigs(\@head, \@dict) unless $do_not_replace_header;
         print $SORTOUT join("\n", @head) ."\n";
         while ( defined( $_ = $sortex->fetch ) ) {
             print $SORTOUT join("\t", @$_);
@@ -2313,6 +2314,9 @@ sub _replaceHeaderContigs{
         }else{
             push @new_head, $h;
         }
+    }
+    if (not $replaced){
+        push @new_head, @$dict;
     }
     return @new_head;
 }
