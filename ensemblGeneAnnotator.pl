@@ -766,7 +766,7 @@ sub prepare_database {
         );
     }
     foreach my $file (@files) {
-        if ($file->{file} eq "Homo_sapiens.ags.gz"){
+        if (defined $file->{file} && $file->{file} eq "Homo_sapiens.ags.gz"){
             eval "use Bio::SeqIO::entrezgene; 1" 
               or die "The Bio::SeqIO::entrezgene module must be installed in order ".
               "to extract NCBI gene summaries for database creation. ".
