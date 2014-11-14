@@ -427,7 +427,9 @@ LINE: while (my $line = $vcf_obj->readLine){
     next LINE if not $have_variant;
 
     if ($identical_genotypes){
-        next LINE if not identical_genotypes(@samples);
+        unless (defined $min_matching_samples && $min_matching_samples < @samples){
+            next LINE if not identical_genotypes(@samples);
+        }
     }
     #check for identical genotypes within family if using a ped file
     if ($pedigree and not $min_matching_per_family){
