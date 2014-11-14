@@ -344,6 +344,7 @@ sub getSamples{
     }else{
         croak "readHeader method requires either 'vcf' or 'header arguments ";
     }
+    chomp @header;
     my @columns = split("\t", $header[-1]);
     return if @columns < 10;
     my @samples = @columns[9..$#columns];
@@ -462,7 +463,7 @@ sub getContigOrder{
     }
     return %contigs;
 }
-=item getContigOrderFromHeader
+=item B<getContigOrderFromHeader>
 
 Returns a hash of contig IDs to their relative order in the VCF (i.e. the first contig ID will have a value of 0, the next a value of 1 and so on) by reading the header. If contigs can't be found in the header it returns nothing. This can be used instead of "getContigOrder" where the VCF may be unsorted and you do not want to die because it cannot be indexed. Requires a vcf file as an argument. 
 
