@@ -437,7 +437,7 @@ sub getVepFields{
     #my @everything = $obj->getVepFields("All");
     #    e.g. $all_gene_cons_pph[0] -> {Gene} = ENSG000012345
 
-    my ($self, $fields) = @_;
+    my ($self, $fields, $no_warn) = @_;
     if (not $fields){
         croak "Method 'getVepFields' requires either an ARRAY reference or a scalar value as an argument";
     }elsif(ref $fields && ref $fields ne 'ARRAY'){
@@ -449,7 +449,7 @@ sub getVepFields{
     my @info_field = split(';', $self->getVariantField("INFO"));
     my @csqs = grep{/^CSQ/} @info_field;
     if (not @csqs){
-        carp "No CSQ field found in INFO field for line: $self->{_currentLine} ";
+        carp "No CSQ field found in INFO field for line: $self->{_currentLine} " unless $no_warn;
         return;
     }
     my @vep = split(",", $csqs[-1]);
@@ -471,7 +471,7 @@ sub getVepFields{
                     $value =~ s/^CSQ=//i;
                     push @return, $value;
                 }else{
-                    carp "$fields feature does not exist in CSQ field ";
+                    carp "$fields feature does not exist in CSQ field " unless $no_warn;
                 }
             }
         }
@@ -486,7 +486,7 @@ sub getVepFields{
                     $value =~ s/^CSQ=//i if $value;
                     $consequence{lc$f} = $value;
                 }else{
-                    carp "$f feature does not exist in CSQ field " unless $warned{lc$f};
+                    carp "$f feature does not exist in CSQ field " unless $warned{lc$f} or $no_warn;
                     $consequence{lc$f} = '';
                     $warned{lc$f}++;
                 }
