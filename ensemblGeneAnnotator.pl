@@ -124,7 +124,7 @@ use FindBin;
 use lib "$FindBin::Bin";
 use ParseVCF;
 
-our $genedir;
+my $genedir;
 my $help;
 my $man;
 my $out;
@@ -200,7 +200,7 @@ my %database     = (
     },
     mouse_phenotype_acc => {
         localfile => "$genedir/MGI_PhenotypicAllele.rpt",
-        col       => 5,
+        col       => 6,
         delimiter => "\t",
         url       => "ftp.informatics.jax.org",
         dir       => "pub/reports/",
@@ -527,7 +527,7 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
             $annot{$entrez_id}->{summary} = $humsum_line[2];
             $annot{$entrez_id}->{go_id}   = $humsum_line[4];
             $annot{$entrez_id}->{go_description} = $humsum_line[5];
-            $annot{$entrez_id}->{generif}     = $humsum_line[6];
+            $annot{$entrez_id}->{generifs}     = $humsum_line[6];
 
             #$annot{$entrez_id}->{interactants} = $humsum_line[8];
             my $mim_accession = $humsum_line[7];
@@ -595,7 +595,7 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
             $annot{$entrez_id}->{summary} = "";
             $annot{$entrez_id}->{go_id}   = "";
             $annot{$entrez_id}->{go_description} = "";
-            $annot{$entrez_id}->{generif}     = "";
+            $annot{$entrez_id}->{generifs}     = "";
 
             #$annot{$entrez_id}->{interactants} = "-";
             push( @{ $annot{$entrez_id}->{omim} }, "" );
@@ -1236,10 +1236,10 @@ sub get_MGI_phenotype {
           ( split "\t", line_with_index( $MGI_ENTREZ, $MGI_ENTREZ_INDEX, $i ) )
           [0];
         my $j = binSearchLineWithIndex( $accession, $PHENO, $PHENO_INDEX,
-            $pheno_line_count, 5 );
+            $pheno_line_count, 6 );
         if ( $j > 0 ) {
             my @phenos = split( ",",
-                ( split "\t", line_with_index( $PHENO, $PHENO_INDEX, $j ) )[9]
+                ( split "\t", line_with_index( $PHENO, $PHENO_INDEX, $j ) )[10]
             );
             if (@phenos) {
                 foreach my $ph (@phenos) {
