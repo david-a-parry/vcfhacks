@@ -66,7 +66,7 @@ Download and prepare reference files. Will download to directory specified by --
 
 =item B<-R    --REPAIR>
 
-Download missing reference files only. Will download to directory specified by --directory argument.
+Download missing reference files only (e.g. after an interrupted --DOWNLOAD_NEW command). Will download to directory specified by --directory argument.
 
 =item B<-h    --help>
 
@@ -83,7 +83,21 @@ Show manual page.
 
 =head1 DESCRIPTION
 
-This script reads VCF lines annotated with Ensembl's variant_effect_predictor.pl, identifies the corresponding Entrez Gene ID for each ensembl gene and annotates information from Gene RIFS, Gene Ontology, NCBI summaries, OMIM and MGI phenotypes to each variants INFO field. In order to conform to VCF format, text in annotations has spaces replaced with underscores, semi-colons replaced with the ^ symbol and commas replaced with the ` symbol. Multiple values for annotations are separated with two colons ("::"). 
+This script reads VCF lines annotated with Ensembl's variant_effect_predictor.pl, identifies the corresponding Entrez Gene ID for each ensembl gene and annotates information from Gene RIFS, Gene Ontology, NCBI summaries, OMIM and MGI phenotypes to each variants INFO field. In order to conform to VCF format, text in annotations has spaces replaced with underscores, semi-colons replaced with the ^ symbol and commas replaced with the ` symbol. Multiple values for annotations are separated with two colons ("::"). This is designed to allow for conversion of fields to readable text with a simple regex when attempting to report output in a human readable format.
+
+=head1 EXAMPLES 
+
+        ensemblGeneAnnotator.pl -i vep_annotated.vcf -d ~/ensGeneAnnotatorDatabase -o vep_and_ensGene_annotated.vcf
+        #annotate vep_annotated.vcf file using database folder located at ~/ensGeneAnnotatorDatabase
+        
+        ensemblGeneAnnotator.pl -i vep_annotated.vcf -d ~/ensGeneAnnotatorDatabase -o vep_and_ensGene_annotated.vcf --functional
+        #as above but only considering genes which have at least one 'functional' variant consequence
+        
+        ensemblGeneAnnotator.pl -d ~/newEnsGeneAnnotatorDatabase -D
+        #download files and create database in ~/newEnsGeneAnnotatorDatabase folder
+
+        ensemblGeneAnnotator.pl -d ~/newEnsGeneAnnotatorDatabase -R
+        #replace missing files in ~/newEnsGeneAnnotatorDatabase 
 
 =cut
 
@@ -95,7 +109,7 @@ University of Leeds
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2013  David A. Parry
+Copyright 2013, 2014  David A. Parry
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with this program. If not, see <http://www.gnu.org/licenses/>.
 
