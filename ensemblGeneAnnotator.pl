@@ -757,8 +757,8 @@ sub prepare_database {
     }
     my $db_percent  = 0;
     my $next_update = 0;
-    my $progressbar = Term::ProgressBar->new(
-        { name => "Prep Database", count => 100, ETA => "linear", } );
+    #my $progressbar = Term::ProgressBar->new(
+    #    { name => "Prep Database", count => 100, ETA => "linear", } );
     if ( not -e $genedir ) {
         mkdir $genedir || display_error_and_exit(
             "Permissions Error",
@@ -773,7 +773,16 @@ sub prepare_database {
               "Please install bioperl and try again\n";
         }
     }
+    my $t = @files;
+    if ( grep { /ensemblToEntrez/ } @files ){
+        $t--;
+        if ( !grep { /Homo_sapiens_ncbi_gene_all_summaries\.txt/ } @files ){
+            $t++;
+        }
+    }
+    my $n = 0;
     foreach my $file (@files) {
+        $n++;
         my ( $file_name, $file_dir ) = fileparse( $file->{localfile} );
         if ( $file_name =~ /ensemblToEntrez/ )
         {    #we create this one when processing the human summaries
@@ -783,6 +792,7 @@ sub prepare_database {
             }
             next;
         }
+        print STDERR "Processing $file_name, file $n of $t...\n";
         my $increment = 100 / @files;
         $increment /= 10;
         chdir $genedir || display_error_and_exit(
@@ -799,6 +809,7 @@ sub prepare_database {
             );
             $file_exists++;
         }
+        print STDERR "Connecting to $file->{url}...\n";
         my $ftpobj =
           Net::FTP->new( $file->{url} )
           || restore_file( $file_exists, $file )
@@ -814,16 +825,18 @@ sub prepare_database {
             "Could not download $file->{url}/$file->{dir}/$file->{file}"
           );
         $ftpobj->binary();
+        print STDERR "Downloading $file->{file}...\n";
         $ftpobj->get( $file->{file} )
           || restore_file( $file_exists, $file )
           && display_error_and_exit( "Download error",
             "Could not download $file->{url}/$file->{dir}/$file->{file}" );
         $db_percent += $increment;
-        $next_update = $progressbar->update($db_percent)
-          if $db_percent >= $next_update;
+        #$next_update = $progressbar->update($db_percent)
+          #if $db_percent >= $next_update;
         $increment *= 9;
 
         if ( $file->{file} =~ /\.gz$/ ) {
+            print STDERR "Decompressing $file->{file}...\n";
             $increment /= 3;
             ( my $output = $file->{file} ) =~ s/\.gz$//i;
             if ( $file->{file} =~ /\.ags/ )
@@ -845,8 +858,8 @@ sub prepare_database {
                     print $ZOUT $buffer;
                 }
                 $db_percent += $increment;
-                $next_update = $progressbar->update($db_percent)
-                  if $db_percent >= $next_update;
+                #$next_update = $progressbar->update($db_percent)
+                  #if $db_percent >= $next_update;
 
             }
             else {
@@ -855,13 +868,13 @@ sub prepare_database {
                   && display_error_and_exit( "Error decompressing file",
                     "Error decompressing $file->{file}" );
                 $db_percent += $increment;
-                $next_update = $progressbar->update($db_percent)
-                  if $db_percent >= $next_update;
+                #$next_update = $progressbar->update($db_percent)
+                  #if $db_percent >= $next_update;
             }
 
             #$file_name = $output unless $file->{file} =~ /\.ags/;
-            $next_update = $progressbar->update($db_percent)
-              if $db_percent >= $next_update;
+            #$next_update = $progressbar->update($db_percent)
+              #if $db_percent >= $next_update;
             $increment *= 2;
         }
         if ( $file->{file} =~ /\.ags/ ) {
@@ -870,6 +883,7 @@ sub prepare_database {
             #use gene2xml script to extract summaries...
             my $gene2xml = "./gene2xml";
             if ( not -e $gene2xml ) {
+                print STDERR "Retrieving gene2xml executable...\n";
                 download_gene2xml("./");
             }
             ( my $decomp_file = $file->{file} ) =~ s/\.gz$//;
@@ -878,8 +892,8 @@ sub prepare_database {
 #my $exit_status = `$command`;
 #display_error_and_continue("Error processing gene2xml command", "Exit status of $exit_status from $command") if $exit_status;
             $db_percent += $increment / 2;
-            $next_update = $progressbar->update($db_percent)
-              if $db_percent >= $next_update;
+            #$next_update = $progressbar->update($db_percent)
+              #if $db_percent >= $next_update;
 
 #unlink $file->{file} || display_error_and_exit( "Can't delete xml output ($file->{file})", "Check permissions - it is safe to manually delete this file now");
             my ( $enstoEntrez_file_name, $file_dir ) = fileparse( $database_ref->{ensemblToEntrez}->{localfile} );
@@ -895,6 +909,7 @@ sub prepare_database {
                 "Error creating file $database_ref->{ensemblToEntrez}->{localfile}",
                 "Check permissions and/or disk space."
                 );
+            print STDERR "Sorting and indexing ensemblToEntrez file...\n";
             sort_and_index_gene_files(
                 $enstoEntrez_file_name,
                 $database_ref->{ensemblToEntrez}->{col},
@@ -905,8 +920,8 @@ sub prepare_database {
                 $database_ref->{ensemblToEntrez}->{delimiter}
             );
             $db_percent += $increment / 2;
-            $next_update = $progressbar->update($db_percent)
-              if $db_percent >= $next_update;
+            #$next_update = $progressbar->update($db_percent)
+              #if $db_percent >= $next_update;
             unlink $decomp_file || display_error_and_continue(
                 "Can't delete decompressed ags file ($decomp_file)",
 "Check permissions - it is safe to manually delete this file now"
@@ -933,8 +948,8 @@ sub prepare_database {
                 print $HMD_MOD $line;
             }
             $db_percent += $increment;
-            $next_update = $progressbar->update($db_percent)
-              if $db_percent >= $next_update;
+            #$next_update = $progressbar->update($db_percent)
+              #if $db_percent >= $next_update;
             close $HMD_MOD;
             close $HMD_DOWN;
             unlink "$file->{file}.bak" || display_error_and_continue(
@@ -944,6 +959,7 @@ sub prepare_database {
             $increment *= 2;
         }
         chdir $dir;
+        print STDERR "Sorting and indexing $file_name...\n";
         sort_and_index_gene_files( "$file_dir/$file_name", $file->{col},
             \$db_percent, $increment, $progressbar, $next_update,
             $file->{delimiter} );
@@ -952,7 +968,8 @@ sub prepare_database {
             "Can't delete backup file \"$file.bkup\"",
             "Check permissions - it is safe to manually delete this file now" );
     }
-    $progressbar->update(100);
+    #$progressbar->update(100);
+    print STDERR "Database update finished.\n";
 }
 
 #########################################
@@ -984,8 +1001,8 @@ sub sort_and_index_gene_files {
     my $prev_counter = 0;
     while (<$FILE>) {
         $$prog_ref += $incr_per_line;
-        $next_update = $progressbar->update($$prog_ref)
-          if $$prog_ref >= $next_update;
+        #$next_update = $progressbar->update($$prog_ref)
+          #if $$prog_ref >= $next_update;
         next if /^#/;
         if ($check_taxon) {
             my $tax_id = ( split "\t" )[0];
@@ -1004,8 +1021,8 @@ sub sort_and_index_gene_files {
     $incr_per_line = ( $increment / 2 ) / @lines;
     @lines = sort { $a->[1] cmp $b->[1] } @lines;
     $$prog_ref += $increment / 2;
-    $next_update = $progressbar->update($$prog_ref)
-      if $$prog_ref >= $next_update;
+    #$next_update = $progressbar->update($$prog_ref)
+      #if $$prog_ref >= $next_update;
     my ( $tmp, $TEMP );
     ( $TEMP, $tmp ) = tempfile( "$dir/tmp_dharmaXXXX", UNLINK => 1 )
       or die "Can't create temporary sort file\n";
@@ -1015,8 +1032,8 @@ sub sort_and_index_gene_files {
 
     foreach my $line (@lines) {
         $$prog_ref += $incr_per_line;
-        $next_update = $progressbar->update($$prog_ref)
-          if $$prog_ref >= $next_update;
+        #$next_update = $progressbar->update($$prog_ref)
+          #if $$prog_ref >= $next_update;
         $prev_counter = int($line_counter);
         print $TEMP "$line->[0]\n";
     }
@@ -1031,8 +1048,8 @@ sub sort_and_index_gene_files {
     open( my $NEWFILE, "$file" ) || die "Can't open $file for reading ";
     build_index( $NEWFILE, $INDEX );
     $$prog_ref += $increment / 6;
-    $next_update = $progressbar->update($$prog_ref)
-      if $$prog_ref >= $next_update;
+    #$next_update = $progressbar->update($$prog_ref)
+      #if $$prog_ref >= $next_update;
 
 }
 
@@ -1105,9 +1122,11 @@ sub extract_ncbi_summaries {
         or die "The Bio::SeqIO::entrezgene module must be installed in order ".
         "to extract NCBI gene summaries. Please install bioperl and try again\n";
     #my $io =  Bio::SeqIO->new(-format => 'entrezgene_interactants', -file => "$gene2xml -i $agsfile -b -x |");
+    #open (my $fh, "$gene2xml -i $agsfile -b -x |") or die "Can't read $agsfile via $gene2xml: $!\n"; 
     my $io = Bio::SeqIO->new(
         -format => 'entrezgene',
-        -file   => "$gene2xml -i $agsfile -b -x |"
+        -file   => "$gene2xml -i $agsfile -b -x |" #BROKEN?!
+        #-fh     => $fh,
     );
     open( my $ENSOUT, ">$ensToEntrezout" )
       || die "Can't open $ensToEntrezout for writing\n";
@@ -1115,8 +1134,7 @@ sub extract_ncbi_summaries {
     open( my $SUMOUT, ">$sum_out" ) || die "Can't open $sum_out for writing\n";
 
     #while (my ($gene, $genestructure, $uncaptured, $inters)  = $io->next_seq)
-
-    
+    print STDERR "Extracting NCBI gene data from $agsfile - this may take some time...\n";
     while ( my ( $gene, $genestructure, $uncaptured ) = $io->next_seq ) {
     
         my $chrom;
