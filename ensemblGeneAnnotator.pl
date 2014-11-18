@@ -180,7 +180,7 @@ my %database     = (
         delimiter => "\t",
         url       => undef,
         dir       => undef,
-        file      => undef
+        file      => "ensemblToEntrez" 
     },    #create this one on the fly from human_summary
     orthologs => {
         localfile => "$genedir/HMD_Human5.rpt",
@@ -774,24 +774,21 @@ sub prepare_database {
         }
     }
     my $t = @files;
-    if ( grep { /ensemblToEntrez/ } @files ){
+    if ( grep { $_->{file} =~ /ensemblToEntrez/ } @files ){
         $t--;
-        if ( !grep { /Homo_sapiens_ncbi_gene_all_summaries\.txt/ } @files ){
+        if ( !grep { $_->{file} =~ /Homo_sapiens\.ags\.gz/ } @files ){
             $t++;
+            push @files, $database_ref->{human_summary};
         }
     }
     my $n = 0;
     foreach my $file (@files) {
-        $n++;
         my ( $file_name, $file_dir ) = fileparse( $file->{localfile} );
         if ( $file_name =~ /ensemblToEntrez/ )
         {    #we create this one when processing the human summaries
-            if ( !grep { /Homo_sapiens_ncbi_gene_all_summaries\.txt/ } @files )
-            {
-                push @files, $database_ref->{human_summary};
-            }
             next;
         }
+        $n++;
         print STDERR "Processing $file_name, file $n of $t...\n";
         my $increment = 100 / @files;
         $increment /= 10;
