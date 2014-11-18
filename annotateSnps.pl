@@ -175,10 +175,10 @@ if ( $opts{build} ) {
     }
 }
 if ( $opts{freq} ) {
-    my @freq_head = grep { /##INFO=<ID=(GMAF|CAF|G5A|G5|AF),/ } @snp_headers;
+    my @freq_head = grep { /##INFO=<ID=(GMAF|CAF|G5A|G5|AF|COMMON),/ } @snp_headers;
     if ( not @freq_head ) {
         print STDERR
-"WARNING - can't find allele frequency fields (GMAF, CAF, AF, G5A or G5) in dbSNP file headers, your SNP reference files probably don't have readable frequency data.\n";
+"WARNING - can't find allele frequency fields (GMAF, CAF, AF, G5A, G5 or COMMON) in dbSNP file headers, your SNP reference files probably don't have readable frequency data.\n";
     }
     else {
         push @add_head, @freq_head;
@@ -714,7 +714,7 @@ sub evaluate_snp {
 
     #my %info_fields = VcfReader::getInfoFields(vcf => $snp_file);
     my %info_values = ();
-    foreach my $f (qw (SCS CLNSIG dbSNPBuildID G5 G5A GMAF CAF AF)) {
+    foreach my $f (qw (SCS CLNSIG dbSNPBuildID G5 G5A GMAF CAF AF COMMON)) {
         my $value = VcfReader::getVariantInfoField( $snp_line, $f );
         if ( defined $value ) {
 
@@ -779,6 +779,11 @@ sub evaluate_snp {
             }
             if ( exists $info_values{G5A} ) {
                 return ( 1, 0, %info_values ) if $info_values{G5A};
+            }
+        }
+        if ( $freq <= 0.01 ) {
+            if ( exists $info_values{COMMON} ) {
+                return ( 1, 0, %info_values ) if $info_values{COMMON};
             }
         }
         if ( exists $info_values{GMAF} ) {
@@ -943,15 +948,7 @@ annotateSnps.pl -d dbSnp138.b37.vcf.gz clinvar_20130506.vcf -b 129 -f 1 --pathog
 
 The above command will remove variants if they were present in dbSNP build 129 or earlier dbSNP builds or if they are in later builds but have an allele frequency equal to or greater than 1 %. However, any variant with a 'pathogenic' or 'probably pathogenic' annotation will not be filtered regardless of frequency of dbSNP build.
 
-dbSNP VCF files are available from NCBI's ftp site. The latest version of human dbSNP containing allele frequency and dbSNP build information can be found here:
-
-ftp://ftp.ncbi.nlm.nih.gov/snp/organisms/human_9606/VCF/00-All.vcf.gz
-
-The latest version of ClinVar with pathogenic annotations is available here:
-
-ftp://ftp.ncbi.nlm.nih.gov/pub/clinvar/vcf/clinvar_00-latest.vcf.gz
-
-These files use the b37 human reference so should only be used if you are using this version of the human genome.
+dbSNP and ClinVar VCF files are available from NCBI's ftp site the Broad Institutes FTP site. Make sure you are using a file with the correct genome version for your data.
 
 =cut
 
