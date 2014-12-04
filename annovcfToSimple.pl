@@ -431,7 +431,7 @@ LINE: while (my $vcf_line = $vcf_obj->readLine){
             my $e_string;
             my @temp_prec;
             if (not $canonical_found){
-                $e_string = "No canonical variant";
+                $e_string = "No canonical transcript variant";
             }elsif (not $functional_found){
                 $e_string = "No valid functional variant";
             }elsif (not $sample_found){
