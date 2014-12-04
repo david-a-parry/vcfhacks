@@ -337,6 +337,9 @@ sub _writeLineToExcel{
 
     my $temp_column = $column + $columns_before;
     foreach my $f (@fields){
+        if (not defined $f){
+            $f = '';
+        } 
         if ($additional_rows > 0){
             my $type = 'string';
             if ($f =~ /^\d+(\.\d+)*]$/){
