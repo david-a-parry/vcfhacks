@@ -18,7 +18,7 @@ ensemblGeneAnnotator.pl - add gene annotations to a VCF file annotated by Ensemb
 
 =item B<-i    --input>
 
-Input VCF file annotated with variant_effect_predictor.pl. 
+Input VCF file annotated with variant_effect_predictor.pl. Required.
 
 =item B<-o    --output>
 
@@ -26,7 +26,7 @@ Output file name.
 
 =item B<-d    --directory>
 
-Directory containing reference files.
+Directory containing reference files. Will look for reference files in the same directory as this program if not supplied.
 
 =item B<-f    --functional>
 
@@ -81,10 +81,6 @@ Show manual page.
 
 =cut
 
-=head1 DESCRIPTION
-
-This script reads VCF lines annotated with Ensembl's variant_effect_predictor.pl, identifies the corresponding Entrez Gene ID for each ensembl gene and annotates information from Gene RIFS, Gene Ontology, NCBI summaries, OMIM and MGI phenotypes to each variants INFO field. In order to conform to VCF format, text in annotations has spaces replaced with underscores, semi-colons replaced with the ^ symbol and commas replaced with the ` symbol. Multiple values for annotations are separated with two colons ("::"). This is designed to allow for conversion of fields to readable text with a simple regex when attempting to report output in a human readable format.
-
 =head1 EXAMPLES 
 
         ensemblGeneAnnotator.pl -i vep_annotated.vcf -d ~/ensGeneAnnotatorDatabase -o vep_and_ensGene_annotated.vcf
@@ -98,6 +94,13 @@ This script reads VCF lines annotated with Ensembl's variant_effect_predictor.pl
 
         ensemblGeneAnnotator.pl -d ~/newEnsGeneAnnotatorDatabase -R
         #replace missing files in ~/newEnsGeneAnnotatorDatabase 
+
+
+=head1 DESCRIPTION
+
+This script reads VCF lines annotated with Ensembl's variant_effect_predictor.pl, identifies the corresponding human Entrez Gene ID for each ensembl gene and annotates information from Gene RIFS, Gene Ontology, NCBI summaries, OMIM and MGI phenotypes to each variants INFO field. In order to conform to VCF format, text in annotations has spaces replaced with underscores, semi-colons replaced with the ^ symbol and commas replaced with the ` symbol. Multiple values for annotations are separated with two colons ("::"). This is designed to allow for conversion of fields to readable text with a simple regex when attempting to report output in a human readable format.
+
+This program must create a local database of gene annotations to search, which is a time consuming process but only needs to be done occasionally, when you wish to update the stored annotations. Alternatively, a prebuilt database may be downloaded from http://sourceforge.net/projects/vcfhacks/files/ensAnnotatorDatabase/ 
 
 =cut
 
@@ -119,6 +122,7 @@ use warnings;
 use strict;
 use Config;
 use Getopt::Long qw(:config no_ignore_case);
+use POSIX qw/strftime/;
 use Pod::Usage;
 use Data::Dumper;
 use Net::FTP;
@@ -153,7 +157,7 @@ my $functional;
 my @annotations;
 
 GetOptions(
-    "input=s", \$vcf,
+    "input=s"                   => \$vcf,
     "directory=s"               => \$genedir,
     "output=s"                  => \$out,
     "separate"                  => \$separate,
@@ -270,7 +274,7 @@ else {
         push @missing_files, $m->{localfile};
     }
     display_error_and_exit(
-        "Missing database files - --DOWNLOAD_NEW option to correct this.",
+        "Missing database files - rerun with the --DOWNLOAD_NEW option to correct this.",
         "Can't find following files:\n" . join( "\n", @missing_files ) . "\n"
     ) if @missing;
 }
@@ -788,9 +792,9 @@ sub prepare_database {
         }
     }
     my $t = @files;
-    if ( grep { $_->{file} =~ /ensemblToEntrez/ } @files ){
+    if ( grep { $_->{file} eq "ensemblToEntrez" } @files ){
         $t--;
-        if ( !grep { $_->{file} =~ /Homo_sapiens\.ags\.gz/ } @files ){
+        if ( !grep { $_->{file} eq 'Homo_sapiens.ags.gz' } @files ){
             $t++;
             push @files, $database_ref->{human_summary};
         }
@@ -798,12 +802,13 @@ sub prepare_database {
     my $n = 0;
     foreach my $file (@files) {
         my ( $file_name, $file_dir ) = fileparse( $file->{localfile} );
-        if ( $file_name =~ /ensemblToEntrez/ )
+        if ( $file_name eq 'ensemblToEntrez' )
         {    #we create this one when processing the human summaries
             next;
         }
         $n++;
-        print STDERR "Processing $file_name, file $n of $t...\n";
+        my $time = strftime( "%H:%M:%S", localtime );
+        print STDERR "[$time] Processing $file_name, file $n of $t...\n";
         my $increment = 100 / @files;
         $increment /= 10;
         chdir $genedir || display_error_and_exit(
@@ -820,7 +825,8 @@ sub prepare_database {
             );
             $file_exists++;
         }
-        print STDERR "Connecting to $file->{url}...\n";
+        $time = strftime( "%H:%M:%S", localtime );
+        print STDERR "[$time] Connecting to $file->{url}...\n";
         my $ftpobj =
           Net::FTP->new( $file->{url} )
           || restore_file( $file_exists, $file )
@@ -836,7 +842,8 @@ sub prepare_database {
             "Could not download $file->{url}/$file->{dir}/$file->{file}"
           );
         $ftpobj->binary();
-        print STDERR "Downloading $file->{file}...\n";
+        $time = strftime( "%H:%M:%S", localtime );
+        print STDERR "[$time] Downloading $file->{file}...\n";
         $ftpobj->get( $file->{file} )
           || restore_file( $file_exists, $file )
           && display_error_and_exit( "Download error",
@@ -847,7 +854,8 @@ sub prepare_database {
         $increment *= 9;
 
         if ( $file->{file} =~ /\.gz$/ ) {
-            print STDERR "Decompressing $file->{file}...\n";
+            $time = strftime( "%H:%M:%S", localtime );
+            print STDERR "[$time] Decompressing $file->{file}...\n";
             $increment /= 3;
             ( my $output = $file->{file} ) =~ s/\.gz$//i;
             if ( $file->{file} =~ /\.ags/ )
@@ -894,7 +902,8 @@ sub prepare_database {
             #use gene2xml script to extract summaries...
             my $gene2xml = "./gene2xml";
             if ( not -e $gene2xml ) {
-                print STDERR "Retrieving gene2xml executable...\n";
+                $time = strftime( "%H:%M:%S", localtime );
+                print STDERR "[$time] Retrieving gene2xml executable...\n";
                 download_gene2xml("./");
             }
             ( my $decomp_file = $file->{file} ) =~ s/\.gz$//;
@@ -920,7 +929,8 @@ sub prepare_database {
                 "Error creating file $database_ref->{ensemblToEntrez}->{localfile}",
                 "Check permissions and/or disk space."
                 );
-            print STDERR "Sorting and indexing ensemblToEntrez file...\n";
+            $time = strftime( "%H:%M:%S", localtime );
+            print STDERR "[$time] Sorting and indexing ensemblToEntrez file...\n";
             sort_and_index_gene_files(
                 $enstoEntrez_file_name,
                 $database_ref->{ensemblToEntrez}->{col},
@@ -970,7 +980,8 @@ sub prepare_database {
             $increment *= 2;
         }
         chdir $dir;
-        print STDERR "Sorting and indexing $file_name...\n";
+        $time = strftime( "%H:%M:%S", localtime );
+        print STDERR "[$time] Sorting and indexing $file_name...\n";
         sort_and_index_gene_files( "$file_dir/$file_name", $file->{col},
             \$db_percent, $increment, $progressbar, $next_update,
             $file->{delimiter} );
@@ -980,7 +991,8 @@ sub prepare_database {
             "Check permissions - it is safe to manually delete this file now" );
     }
     #$progressbar->update(100);
-    print STDERR "Database update finished.\n";
+    my $time = strftime( "%H:%M:%S", localtime );
+    print STDERR "[$time] Database update finished.\n";
 }
 
 #########################################
@@ -1132,20 +1144,17 @@ sub extract_ncbi_summaries {
     eval "use Bio::SeqIO::entrezgene; 1" 
         or die "The Bio::SeqIO::entrezgene module must be installed in order ".
         "to extract NCBI gene summaries. Please install bioperl and try again\n";
-    #my $io =  Bio::SeqIO->new(-format => 'entrezgene_interactants', -file => "$gene2xml -i $agsfile -b -x |");
-    #open (my $fh, "$gene2xml -i $agsfile -b -x |") or die "Can't read $agsfile via $gene2xml: $!\n"; 
     my $io = Bio::SeqIO->new(
         -format => 'entrezgene',
-        -file   => "$gene2xml -i $agsfile -b -x |" #BROKEN?!
-        #-fh     => $fh,
+        -file   => "$gene2xml -i $agsfile -b -x |"
     );
     open( my $ENSOUT, ">$ensToEntrezout" )
       || die "Can't open $ensToEntrezout for writing\n";
 
     open( my $SUMOUT, ">$sum_out" ) || die "Can't open $sum_out for writing\n";
 
-    #while (my ($gene, $genestructure, $uncaptured, $inters)  = $io->next_seq)
-    print STDERR "Extracting NCBI gene data from $agsfile - this may take some time...\n";
+    my $time = strftime( "%H:%M:%S", localtime );
+    print STDERR "[$time] Extracting NCBI gene data from $agsfile - this may take some time...\n";
     while ( my ( $gene, $genestructure, $uncaptured ) = $io->next_seq ) {
     
         my $chrom;
