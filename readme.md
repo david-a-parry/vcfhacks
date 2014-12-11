@@ -32,6 +32,22 @@ Other perl modules required by these scripts are installable via CPAN - perl wil
 
 __UPDATE__
 
+_VERSION 0.1.15:_
+
+11/12/14
+
+-annotateSnps.pl now uses the dbSNP COMMON tag if present to filter variants if --freq argument is equal to or greater than 1 %
+
+-findBiallelicVep.pl and findBiallelicSnpEff.pl make smarter use of --equal_genotypes option if --num_matching argument is used. Previously all samples would have to share identical genotypes even if --num_matching option was used.
+
+-fixed issue with missing MGI and GeneRIFs information in ensemblGeneAnnotator.pl.
+
+-improved database updates with ensemblGeneAnnotator.pl.
+
+-sortVcf.pl can now take a .dict file to provide contig order for output. 
+
+-updated pre-built ensemblGeneAnnotator database (<http://sourceforge.net/projects/vcfhacks/files/ensAnnotatorDatabase/>) for this version. 
+
 _VERSION 0.1.14:_
 
 9/10/14
