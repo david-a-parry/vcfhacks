@@ -1204,7 +1204,7 @@ sub splitMultiAllelicVariants{
                         push @new_inf, $f;
                     }
                 }
-                push @new_inf, "ParseVCF_split_variant-_fields_may_be_inaccurate";
+                push @new_inf, "ParseVCF_split_variant-sample_fields_may_be_inaccurate" ;
                 push @line, join(";", @new_inf);    
             }else{
                 push @line, $self->getVariantField($field);
