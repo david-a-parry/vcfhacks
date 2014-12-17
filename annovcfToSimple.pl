@@ -35,6 +35,10 @@ Output file name. Defaults to [input name].xlsx (or [input name].txt if --text_o
 
 Use this flag to summarise the number of alleles and genotypes found in samples rather than outputting genotype columns for each individual sample. If sample IDs are specified with --samples or --pedigree options only these samples will be counted in the summarised allele and genotype counts. This can be overriden by adding the word 'all' after this argument, in which case all samples in the VCF will be summarised and any samples specified by --samples or --pedigree options will still have their individual genotypes written to the output.
 
+=item B<--contains_variant>
+
+Use this flag alongside the -u/--summarise option to add a columns summarising which samples contain variant genotypes. 
+
 =item B<-s    --samples>
 
 Sample ids to include in output. By default, genotypes for all samples in VCF will be written to the output, but if one or more samples are specified here only genotypes for these samples will be included in the output. Note, that this is ignored if --do_not_simplify argument is used unless using the --summarise flag.
@@ -185,6 +189,7 @@ my @peds;
 my $output;
 my $config = {};
 my $summarise_counts;
+my $summarise_samples_with_variants;
 my $help;
 my $man;
 GetOptions($config,
@@ -203,6 +208,7 @@ GetOptions($config,
     'output=s' => \$output,
     's|samples=s{,}' => \@samples,
     'u|summarise:s' => \$summarise_counts,
+    'contains_variant' => \$summarise_samples_with_variants,
     'pedigree=s{,}' => \@peds,
     'manual' => \$man,
     'help' => \$help) or die "Syntax error.\n";
@@ -595,8 +601,10 @@ sub get_simplified_fields{
             %allele_counts = $vcf_obj->countAlleles(samples => \@samples);
             %genotype_counts = $vcf_obj->countGenotypes(samples => \@samples);
         }
+            
         my @al_count_string = ();
         my @gt_count_string = ();
+        my @sample_var_string = ();
         foreach my $allele (sort keys %allele_counts){
             if (defined $config->{do_not_simplify}){
                 push @al_count_string, "$allele=$allele_counts{$allele}";
@@ -621,8 +629,40 @@ sub get_simplified_fields{
                 push @gt_count_string, "$actual_geno_string=$genotype_counts{$genotype}";
             }
         }
+        if (defined $summarise_samples_with_variants){
+            my %calls = ();
+            my %var_to_samples = ();
+            if ($summarise_counts eq 'all'){
+                %calls = $vcf_obj->getSampleCall(all => 1);
+            }else{
+                %calls = $vcf_obj->getSampleCall(multiple => \@samples);
+            }
+            foreach my $sample (sort keys %calls){
+                next if ($calls{$sample} =~/^0[\|\/]0$/);
+                next if ($calls{$sample} =~/^\.[\|\/]\.$/);
+                push @{$var_to_samples{$calls{$sample}}}, $sample;
+            }
+            foreach my $genotype (sort keys %var_to_samples){
+                my $sum_string = join(",", @{$var_to_samples{$genotype}});
+                if (! defined $config->{do_not_simplify}){
+                    my @gt = split(/[\/\|]/, $genotype);
+                    my @actual_gt = ();
+                    foreach my $g (@gt){
+                        if ($g =~ /^\d+$/){
+                            push @actual_gt, $all_alleles[$g];
+                        }else{
+                            push @actual_gt, $g; 
+                        }
+                    }
+                    $genotype = join("/", @actual_gt);
+                }
+                push @sample_var_string, "$genotype=$sum_string";
+                
+            }
+        }
         push @vcf_values, join(";", @al_count_string);
         push @vcf_values, join(";", @gt_count_string);
+        push @vcf_values, join(";", @sample_var_string);
     }
     if (not defined $summarise_counts or (defined $summarise_counts and $summarise_counts eq 'all')){
         my @sample_calls = ();
@@ -763,6 +803,9 @@ sub get_header{
         if (defined $summarise_counts){
             push @head, "Allele Counts";
             push @head, "Genotype Counts";
+            if (defined $summarise_samples_with_variants){
+                push @head, "Samples with variant";
+            }
         }
         if (not defined $summarise_counts or (defined $summarise_counts and $summarise_counts eq 'all')){
             foreach my $sample (@samples){
