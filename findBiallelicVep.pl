@@ -429,8 +429,9 @@ foreach my $k (sort keys %opts){
 }
 print $OUT join(" ", @opt_string) . "\"\n";
 print $OUT 
-"##INFO=<ID=findBiallelicSamplesHom,Number=A,Type=String,Description=\"For each allele a list of samples that were found to meet findBiallelicVep.pl's criteria for constituting a homozygous variant.\">\n"
-"##INFO=<ID=findBiallelicSamplesHet,Number=A,Type=String,Description=\"For each allele a list of samples that were found to meet findBiallelicVep.pl's criteria for constituting a potential compound heterozygous variant.\">\n"
+"##INFO=<ID=findBiallelicSamplesHom,Number=A,Type=String,Description=\"For each allele a list of samples that were found to meet findBiallelicVep.pl's criteria for constituting a homozygous variant.\">\n";
+print $OUT 
+"##INFO=<ID=findBiallelicSamplesHet,Number=A,Type=String,Description=\"For each allele a list of samples that were found to meet findBiallelicVep.pl's criteria for constituting a potential compound heterozygous variant.\">\n";
 print $OUT $vcf_obj->getHeader(1);
 
 #ALLOW FOR CUSTOM VCF BY LOGGING CHROM AND POS HEADER COL #s FOR SORTING OF VCF LINES
@@ -981,6 +982,7 @@ sub check_all_samples_biallelic{
                 #write INFO field like so:
                 #findBiallelicSamplesHom=sample1|sample2,sample5|sample6|sample7
                 #findBiallelicSamplesHet=sample3,sample4
+                @{$allele_to_sample{$c}} = sort @{$allele_to_sample{$c}};
                 my @alts = VcfReader::readAlleles(line => \@split_line, alt_alleles => 1);
                 my @info_add = ();
                 for (my $i = 0; $i < @alts; $i++){
@@ -1000,6 +1002,9 @@ sub check_all_samples_biallelic{
                             id => $field , 
                             value => join(",", @info_add),
                         );
+                if (exists $vcf_lines{$gene_counts->{$allele}->{vcf_line}}){
+                    delete $vcf_lines{$gene_counts->{$allele}->{vcf_line}};
+                }
                 $gene_counts->{$allele}->{vcf_line} = join("\t", @$new_line);
                 $vcf_lines{$gene_counts->{$allele}->{vcf_line}}++;
             }
