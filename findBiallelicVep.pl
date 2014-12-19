@@ -561,8 +561,6 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
         $next_update = $progressbar->update($line_count)
           if $line_count >= $next_update;
     }
-    my %transcript = ()
-      ; #hash of transcript ids that have a mutation type in @classes - using this hash protects us in case there are multiple alleles causing multiple mentions of the same transcript id in one VAR field
     my $chrom = $vcf_obj->getVariantField("CHROM");
     if ( $prev_chrom && $chrom ne $prev_chrom ) {
 
