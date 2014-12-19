@@ -429,9 +429,9 @@ foreach my $k (sort keys %opts){
 }
 print $OUT join(" ", @opt_string) . "\"\n";
 print $OUT 
-"##INFO=<ID=findBiallelicSamplesHom,Number=A,Type=String,Description=\"For each allele a list of samples that were found to meet findBiallelicVep.pl's criteria for constituting a homozygous variant.\">\n";
+"##INFO=<ID=findBiallelicVepSamplesHom,Number=A,Type=String,Description=\"For each allele a list of samples that were found to meet findBiallelicVep.pl's criteria for constituting a homozygous variant.\">\n";
 print $OUT 
-"##INFO=<ID=findBiallelicSamplesHet,Number=A,Type=String,Description=\"For each allele a list of samples that were found to meet findBiallelicVep.pl's criteria for constituting a potential compound heterozygous variant.\">\n";
+"##INFO=<ID=findBiallelicVepSamplesHet,Number=A,Type=String,Description=\"For each allele a list of samples that were found to meet findBiallelicVep.pl's criteria for constituting a potential compound heterozygous variant.\">\n";
 print $OUT $vcf_obj->getHeader(1);
 
 #ALLOW FOR CUSTOM VCF BY LOGGING CHROM AND POS HEADER COL #s FOR SORTING OF VCF LINES
@@ -960,9 +960,9 @@ sub check_all_samples_biallelic{
         foreach my $gt (@{$biallelic_candidates{$s}}){
             foreach my $allele ( split(/\//, $gt)){
                 my @split_line = split("\t", $gene_counts->{$allele}->{vcf_line});
-                my $field = "findBiallelicSamplesHom";
+                my $field = "findBiallelicVepSamplesHom";
                 if ($gene_counts->{$allele}->{$s} == 1){
-                    $field = "findBiallelicSamplesHet";
+                    $field = "findBiallelicVepSamplesHet";
                 }
                 my %allele_to_sample = ();
                 if (my $binfo  = VcfReader::getVariantInfoField(\@split_line, $field)){ 
