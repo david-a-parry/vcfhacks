@@ -439,7 +439,7 @@ foreach my $k ( sort keys %opts ) {
         }
     }
 }
-pprint $OUT join( " ", @opt_string ) . "\"\n";
+print $OUT join( " ", @opt_string ) . "\"\n";
 print $OUT
 "##INFO=<ID=findBiallelicSnpEffSamplesHom,Number=A,Type=String,Description=\"For each allele a list of samples that were found to meet findBiallelicSnpEff.pl's criteria for constituting a homozygous variant.\">\n";
 print $OUT
@@ -486,26 +486,38 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
     if ( $prev_chrom && $chrom ne $prev_chrom ) {
 
         #print biallelic mutations for previous chromosome here...
-        my @vcf_lines = ();
+        my %vcf_lines = ();
         foreach my $gene ( keys %allelic_genes ) {
-            my @add_lines = ();
+            my $found = 0;
 
-            #CHECK SEGREGATION IF PEDIGREE
+    #CHECK SEGREGATION IF PEDIGREE
             if ($pedigree) {
-                @add_lines =
-                  check_segregation( $ped, \%{ $allelic_genes{$gene} } );
+                 $found =  check_segregation( \%vcf_lines,  $ped, \%{ $allelic_genes{$gene} });
             }
             else {
-                @add_lines =
-                  check_all_samples_biallelic( \%{ $allelic_genes{$gene} } );
+                $found =
+                  check_all_samples_biallelic( \%vcf_lines, \%{ $allelic_genes{$gene} });
             }
-            if (@add_lines) {
-                push( @vcf_lines,                            @add_lines );
+            if ($found) {
                 push( @{ $listing{ $id_to_symbol{$gene} } }, $gene )
                   if $list_genes;
             }
         }
-        my $sort = sort_vcf_lines( \@vcf_lines, $chrom_header, $pos_header );
+        my @lines = ();
+        foreach my $k (keys %vcf_lines){#keys are vcf lines
+            my @split = split("\t", $k); 
+            my $converted_line = $k;
+            foreach my $l (keys %{$vcf_lines{$k}}){#keys are new INFO fields
+                my $new_split = VcfReader::addVariantInfoField(
+                    line  => \@split,
+                    id    => $l,
+                    value => $vcf_lines{$k}->{$l},
+                );
+                $converted_line = join("\t", @$new_split);
+            }
+            push @lines, $converted_line;
+        }
+        my $sort = sort_vcf_lines( \@lines, $chrom_header, $pos_header );
         print $OUT join( "\n", @$sort ) . "\n" if @$sort;
         %allelic_genes = ();
         %geneline      = ();
@@ -645,23 +657,36 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
     }
 }
 
-my @vcf_lines = ();
+my %vcf_lines = ();
 foreach my $gene ( keys %allelic_genes ) {
-    my @add_lines = ();
+    my $found = 0;
 
     #CHECK SEGREGATION IF PEDIGREE
     if ($pedigree) {
-        @add_lines = check_segregation( $ped, \%{ $allelic_genes{$gene} } );
+        $found = check_segregation( \%vcf_lines, $ped, \%{ $allelic_genes{$gene} }) ;
     }
     else {
-        @add_lines = check_all_samples_biallelic( \%{ $allelic_genes{$gene} } );
+        $found = check_all_samples_biallelic(\%vcf_lines,  \%{ $allelic_genes{$gene} }) ;
     }
-    if (@add_lines) {
-        push( @vcf_lines, @add_lines );
+    if ($found) {
         push( @{ $listing{ $id_to_symbol{$gene} } }, $gene ) if $list_genes;
     }
 }
-my $sort = sort_vcf_lines( \@vcf_lines, $chrom_header, $pos_header );
+my @lines = (); 
+foreach my $k (keys %vcf_lines){#keys are vcf lines
+    my @split = split("\t", $k); 
+    my $converted_line = $k;
+    foreach my $l (keys %{$vcf_lines{$k}}){#keys are new INFO fields
+        my $new_split = VcfReader::addVariantInfoField(
+            line  => \@split,
+            id    => $l,
+            value => $vcf_lines{$k}->{$l},
+        );
+        $converted_line = join("\t", @$new_split);
+    }
+    push @lines, $converted_line;
+}
+my $sort = sort_vcf_lines( \@lines, $chrom_header, $pos_header );
 print $OUT join( "\n", @$sort ) . "\n" if @$sort;
 
 if ($progressbar) {
@@ -971,7 +996,7 @@ sub check_segregation {
     #checks whether variants segregate appropriately per family
     #can check between multiple families using check_all_samples_biallelic
     #returns hash from $gene_counts with only correctly segregating alleles
-    my ( $p, $gene_counts ) = @_;
+    my ( $vcf_lines, $p, $gene_counts ) = @_;
     my @keys      = ( keys %{$gene_counts} );    #keys are "chr:pos-allele"
     my %seg_count = ()
       ; #return version of %{$gene_counts} containing only alleles that appear to segregate correctly
@@ -1083,20 +1108,19 @@ sub check_segregation {
 
 #Find any common variation by running check_all_samples_biallelic using \%seg_counts
     if ($min_matching_samples) {
-        return check_all_samples_biallelic( \%seg_count, 1 );
+        return check_all_samples_biallelic( $vcf_lines, \%seg_count, 1 );
     }
     else {
-        return check_all_samples_biallelic( \%seg_count );
+        return check_all_samples_biallelic( $vcf_lines, \%seg_count );
     }
 }
 
 ###########
 sub check_all_samples_biallelic {
-    my ( $gene_counts, $count_per_family ) = @_;
-
+    my ( $vcf_lines, $gene_counts, $count_per_family ) = @_;
+    my $found = 0; #return 1 if we've found a biallelic combination for this gene
 #we need to go through every possible combination of biallelic alleles
 #(represented as chr:pos/allele) to compare between @samples and against @$reject
-    my %vcf_lines;
     my @keys = ( keys %{$gene_counts} )
       ; #keys are "chr:pos-allele" values are hashes of samples to allele counts
     my %possible_biallelic_genotypes =
@@ -1110,7 +1134,7 @@ sub check_all_samples_biallelic {
     my %biallelic_candidates =
       get_biallelic( \@samples, $reject_genotypes, $incompatible_alleles,
         $min_matching_samples, $gene_counts, $count_per_family );
-
+    $found = keys %biallelic_candidates;
 #%biallelic_candidates - keys are samples, values are arrays of biallelic genotypes
     foreach my $s ( keys %biallelic_candidates ) {
         foreach my $gt ( @{ $biallelic_candidates{$s} } ) {
@@ -1122,8 +1146,7 @@ sub check_all_samples_biallelic {
                     $field = "findBiallelicSnpEffSamplesHet";
                 }
                 my %allele_to_sample = ();
-                if ( my $binfo =
-                    VcfReader::getVariantInfoField( \@split_line, $field ) )
+                if ( my $binfo = $vcf_lines->{$gene_counts->{$allele}->{vcf_line}}->{$field} )
                 {
                     my @perAllele = split( /\,/, $binfo );
                     for ( my $i = 0 ; $i < @perAllele ; $i++ ) {
@@ -1173,12 +1196,12 @@ sub check_all_samples_biallelic {
                 {
                     delete $vcf_lines{ $gene_counts->{$allele}->{vcf_line} };
                 }
-                $gene_counts->{$allele}->{vcf_line} = join( "\t", @$new_line );
-                $vcf_lines{ $gene_counts->{$allele}->{vcf_line} }++;
+                $vcf_lines->{$gene_counts->{$allele}->{vcf_line}}->{$field} =
+                    join( ",", @info_add );
             }
         }
     }
-    return keys %vcf_lines;
+    return $found;
 }
 
 ###########
@@ -1212,27 +1235,52 @@ sub create_var_hash {
         else {
             next;
         }
-        foreach my $s (@$aff, @$un) {
-            my $gt = $vcf_obj->getSampleCall(
-                sample => $s,
-                minGQ  => $genotype_quality
+        foreach my $s (@$aff){
+            addSampleToVarHash
+            (
+                $s, 
+                $coord, 
+                $i,
+                $aff_genotype_quality,
+                \%var_hash,
+                $vcf_obj,
             );
-            if ( $gt =~ /^$i[\/\|]$i$/ ) {
-                $var_hash{"$coord-$i"}->{$s} =
-                  2;    #homozygous for this alt allele
-            }
-            elsif ( $gt =~ /^[\d+\.][\/\|]$i$/ or $gt =~ /^$i[\/\|][\d+\.]$/ ) {
-                $var_hash{"$coord-$i"}->{$s} = 1;    #het for alt allele
-            }
-            elsif ( $gt =~ /^\.[\/\|]\.$/ ) {
-                $var_hash{"$coord-$i"}->{$s} = -1;    #no call
-            }
-            else {
-                $var_hash{"$coord-$i"}->{$s} = 0;    #does not carry alt allele
-            }
+        }
+        foreach my $s (@$un) {
+            addSampleToVarHash
+            (
+                $s, 
+                $coord, 
+                $i,
+                $unaff_genotype_quality,
+                \%var_hash,
+                $vcf_obj,
+            );
         }
     }
     return %var_hash;
+}
+
+###########
+sub addSampleToVarHash{
+    my ($sample, $coord, $allele, $gq, $hash, $vcf_obj) = @_;
+    my $gt = $vcf_obj->getSampleCall(
+        sample => $sample,
+        minGQ  => $gq
+    );
+    if ( $gt =~ /^$allele[\/\|]$allele$/ ) {
+        $$hash{"$coord-$allele"}->{$sample} =
+            2;    #homozygous for this alt allele
+    }
+    elsif ( $gt =~ /^[\d+\.][\/\|]$allele$/ or $gt =~ /^$allele[\/\|][\d+\.]$/ ) {
+        $$hash{"$coord-$allele"}->{$sample} = 1;    #het for alt allele
+    }
+    elsif ( $gt =~ /^\.[\/\|]\.$/ ) {
+        $$hash{"$coord-$allele"}->{$sample} = -1;    #no call
+    }
+    else {
+        $$hash{"$coord-$allele"}->{$sample} = 0;    #does not carry alt allele
+    }
 }
 ###########
 sub sort_gene_listing {
