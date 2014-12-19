@@ -12,6 +12,7 @@ use ParseVCF;
 use SortGenomicCoordinates;
 use ParsePedfile;
 use DbnsfpVcfFilter;
+use VcfReader;
 
 my $genotype_quality = 20;
 my $aff_genotype_quality ;#will convert to $genotype_quality value if not specified
@@ -362,7 +363,14 @@ foreach my $k (sort keys %opts){
         }
     }
 }
-print $OUT join(" ", @opt_string) . "\"\n" .  $vcf_obj->getHeader(1);
+pprint $OUT join(" ", @opt_string) . "\"\n";
+print $OUT 
+"##INFO=<ID=findBiallelicSnpEffSamplesHom,Number=A,Type=String,Description=\"For each allele a list of samples that were found to meet findBiallelicSnpEff.pl's criteria for constituting a homozygous variant.\">\n";
+print $OUT 
+"##INFO=<ID=findBiallelicSnpEffSamplesHet,Number=A,Type=String,Description=\"For each allele a list of samples that were found to meet findBiallelicSnpEff.pl's criteria for constituting a potential compound heterozygous variant.\">\n";
+print $OUT $vcf_obj->getHeader(1);
+
+#rint $OUT join(" ", @opt_string) . "\"\n" .  $vcf_obj->getHeader(1);
 
 #ALLOW FOR CUSTOM VCF BY LOGGING CHROM AND POS HEADER COL #s FOR SORTING OF VCF LINES
 my $chrom_header = $vcf_obj->getColumnNumber("CHROM");
@@ -871,7 +879,7 @@ sub check_all_samples_biallelic{
     #we need to go through every possible combination of biallelic alleles 
     #(represented as chr:pos/allele) to compare between @samples and against @$reject
     my %vcf_lines;
-    my @keys = (keys %{$gene_counts});#keys are "chr:pos/allele"
+    my @keys = (keys %{$gene_counts});#keys are "chr:pos-allele" values are hashes of samples to allele counts
     my %possible_biallelic_genotypes = ();#keys are samples, values are arrays of possible biallelic genotypes
     #first check @$reject alleles and collect non-pathogenic genotpes in %reject_genotypes - the assumption here is that
     # the disease alleles are rare so not likely to be in cis in a @reject sample while in trans in an affected sample therefore we can reject
@@ -883,6 +891,53 @@ sub check_all_samples_biallelic{
     foreach my $s (keys %biallelic_candidates){
         foreach my $gt (@{$biallelic_candidates{$s}}){
             foreach my $allele ( split(/\//, $gt)){
+                my @split_line = split("\t", $gene_counts->{$allele}->{vcf_line});
+                my $field = "findBiallelicSnpEffSamplesHom";
+                if ($gene_counts->{$allele}->{$s} == 1){
+                    $field = "findBiallelicSnpEffSamplesHet";
+                }
+                my %allele_to_sample = ();
+                if (my $binfo  = VcfReader::getVariantInfoField(\@split_line, $field)){ 
+                    my @perAllele = split(/\,/, $binfo);
+                    for (my $i = 0; $i < @perAllele; $i++){
+                        push @{$allele_to_sample{$i+1}}, grep {$_ ne '.'} split(/\|/, $perAllele[$i]);
+                    }
+                }
+                my $c = (split /-/, $allele)[1];
+                if (exists $allele_to_sample{$c}){
+                    if (not grep {$_ eq $s} @{$allele_to_sample{$c}}){
+                        push @{$allele_to_sample{$c}}, $s;
+                    }
+                }else{
+                    push @{$allele_to_sample{$c}}, $s;
+                }
+                #write INFO field like so:
+                #findBiallelicSamplesHom=sample1|sample2,sample5|sample6|sample7
+                #findBiallelicSamplesHet=sample3,sample4
+                @{$allele_to_sample{$c}} = sort @{$allele_to_sample{$c}};
+                my @alts = VcfReader::readAlleles(line => \@split_line, alt_alleles => 1);
+                my @info_add = ();
+                for (my $i = 0; $i < @alts; $i++){
+                    if (not exists $allele_to_sample{$i+1}){
+                        push @info_add, '.';
+                    }else{
+                        if (not @{$allele_to_sample{$i+1}}){
+                            push @info_add, '.';
+                        }else{
+                            push @info_add, join("|", @{$allele_to_sample{$i+1}});
+                        }
+                    }
+                }
+                my $new_line = VcfReader::addVariantInfoField
+                        (
+                            line => \@split_line,
+                            id => $field , 
+                            value => join(",", @info_add),
+                        );
+                if (exists $vcf_lines{$gene_counts->{$allele}->{vcf_line}}){
+                    delete $vcf_lines{$gene_counts->{$allele}->{vcf_line}};
+                }
+                $gene_counts->{$allele}->{vcf_line} = join("\t", @$new_line);
                 $vcf_lines{$gene_counts->{$allele}->{vcf_line}}++;
             }
         }
