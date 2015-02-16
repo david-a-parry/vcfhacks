@@ -1170,7 +1170,7 @@ sub countLines{
 sub splitMultiAllelicVariants{
     my ($self) = @_;
     $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
-    my @ref = split(",", $self->{_currentVar}->{REF});
+    my $ref = $self->{_currentVar}->{REF};
     my @alleles = split(",", $self->{_currentVar}->{ALT});
     return  $self->{_currentLine} if (@alleles < 2);#not multiallelic
     my @splitLines = ();
