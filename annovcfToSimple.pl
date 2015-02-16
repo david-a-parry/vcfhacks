@@ -662,7 +662,7 @@ sub get_simplified_fields{
         }
         push @vcf_values, join(";", @al_count_string);
         push @vcf_values, join(";", @gt_count_string);
-        push @vcf_values, join(";", @sample_var_string);
+        push @vcf_values, join(";", @sample_var_string) if defined $summarise_samples_with_variants;
     }
     if (not defined $summarise_counts or (defined $summarise_counts and $summarise_counts eq 'all')){
         my @sample_calls = ();
