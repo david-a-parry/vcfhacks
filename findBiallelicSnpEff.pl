@@ -113,7 +113,6 @@ GetOptions(
     'damaging=s{,}',
     'keep_any_damaging',
     'unpredicted_missense',
-    'gmaf=f',
     'maf=f',
     "1000_genomes_allele_frequency=f",
     'filter_dbnsfp=s{,}' => \@filter_dbnsfp,
@@ -150,7 +149,7 @@ pod2usage(
   and not $pedigree;
 pod2usage(
     -message =>
-"--gmaf option requires a value between 0.00 and 0.50 to filter on global minor allele frequency.\n",
+"--1000_genomes_allele_frequency option requires a value between 0.00 and 0.50 to filter on global minor allele frequency.\n",
     -exitval => 2
 ) if ( defined $gmaf && ( $gmaf < 0 or $gmaf > 0.5 ) );
 pod2usage(
