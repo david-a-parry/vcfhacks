@@ -18,7 +18,7 @@ ensemblGeneAnnotator.pl - add gene annotations to a VCF file annotated by Ensemb
 
 =item B<-i    --input>
 
-Input VCF file annotated with variant_effect_predictor.pl. Required.
+Input VCF file annotated with variant_effect_predictor.pl or snpEff. Required.
 
 =item B<-o    --output>
 
@@ -28,13 +28,17 @@ Output file name.
 
 Directory containing reference files. Will look for reference files in the same directory as this program if not supplied.
 
+=item B<-s    --snpEff>
+
+Use SnpEff annotations instead of VEP annotations to identify genes. You must have used the -geneId flag when annotating with snpEff for this script to work.
+
 =item B<-f    --functional>
 
 Use this flag to only annotate standard 'functional' variant classes (transcript_ablation, splice_donor_variant, splice_acceptor_variant, splice_region_variant, stop_gained, frameshift_variant, stop_lost, initiator_codon_variant, inframe_insertion, inframe_deletion, missense_variant, transcript_amplification, TFBS_ablation, TFBS_amplification, regulatory_region_ablation, regulatory_region_amplification). Prevents annotation of gene information for genes/transcripts that overlap a variant but are not affected in a way defined by one of these variant classes.
 
 =item B<-c    --classes>
 
-Use this to specify VEP variant classes to annotate. Gene information will only be annotated for genes affected by one of these variant classes. Overrides --functional option.
+Use this to specify VEP/SnpEff variant classes to annotate. Gene information will only be annotated for genes affected by one of these variant classes. Overrides --functional option.
 
 =item B<-a    --additional_classes>
 
@@ -150,17 +154,16 @@ my $vcf;
 my $prep;
 my $downdb;
 my $repair;
-my $separate;
 my @classes;
 my @add;
 my $functional;
 my @annotations;
-
+my $snpEff_mode;
 GetOptions(
     "input=s"                   => \$vcf,
     "directory=s"               => \$genedir,
     "output=s"                  => \$out,
-    "separate"                  => \$separate,
+    "snpEff"                    => \$snpEff_mode,
     "functional"                => \$functional,
     "classes=s{,}"              => \@classes,
     "add=s{,}"                  => \@add,
@@ -321,10 +324,22 @@ if (@annotations){
     
 print STDERR "Initialising input VCF...\n";
 my $vcf_obj = ParseVCF->new( file => $vcf );
-my $vep_header = $vcf_obj->readVepHeader();
-die "No 'GENE' field identified in header for file $vcf - "
-  . "please annotate with Ensembl's variant_effect_precictor.pl script.\n"
-  if ( not exists $vep_header->{gene} );
+if ($snpEff_mode){
+    my $snp_eff_header = $vcf_obj->readSnpEffHeader();
+    die "No 'Effect' field identified in header for file $vcf - " .
+    "please annotate with SnpEff.\n" if (not exists $snp_eff_header->{Effect});
+    checkAndParseSnpEffClasses(\@classes, \@add);
+}else{
+    my $vep_header = $vcf_obj->readVepHeader();
+    die "No 'GENE' field identified in header for file $vcf - "
+    . "please annotate with Ensembl's variant_effect_precictor.pl script.\n"
+    if ( not exists $vep_header->{gene} );
+    if ( @classes or @add ) {
+        $functional = 1;
+    }
+    checkAndParseVepClasses();
+}
+
 my $pre_progressbar = Term::ProgressBar->new(
     {
         name  => "Parsing database",
@@ -335,68 +350,6 @@ my $pre_progressbar = Term::ProgressBar->new(
 $next_update = $pre_progressbar->update($pre_progress)
   if $pre_progress >= $next_update;
 
-if ( @classes or @add ) {
-    $functional = 1;
-}
-
-my @valid = qw (transcript_ablation
-  splice_donor_variant
-  splice_acceptor_variant
-  stop_gained
-  frameshift_variant
-  stop_lost
-  initiator_codon_variant
-  inframe_insertion
-  inframe_deletion
-  missense_variant
-  transcript_amplification
-  splice_region_variant
-  incomplete_terminal_codon_variant
-  synonymous_variant
-  stop_retained_variant
-  coding_sequence_variant
-  mature_miRNA_variant
-  5_prime_UTR_variant
-  3_prime_UTR_variant
-  intron_variant
-  NMD_transcript_variant
-  non_coding_exon_variant
-  nc_transcript_variant
-  upstream_gene_variant
-  downstream_gene_variant
-  TFBS_ablation
-  TFBS_amplification
-  TF_binding_site_variant
-  regulatory_region_variant
-  regulatory_region_ablation
-  regulatory_region_amplification
-  feature_elongation
-  feature_truncation
-  intergenic_variant);
-
-if ( not @classes ) {
-    @classes = qw (transcript_ablation
-      splice_donor_variant
-      splice_acceptor_variant
-      splice_region_variant
-      stop_gained
-      frameshift_variant
-      stop_lost
-      initiator_codon_variant
-      inframe_insertion
-      inframe_deletion
-      missense_variant
-      transcript_amplification
-      TFBS_ablation
-      TFBS_amplification
-      regulatory_region_ablation
-      regulatory_region_amplification);
-}
-push( @classes, @add ) if (@add);
-foreach my $class (@classes) {
-    die "Error - variant class '$class' not recognised.\n"
-      if not grep { /$class/i } @valid;
-}
 
 foreach my $k ( keys %database ) {
     open( my $IN, $database{$k}->{localfile} )
@@ -431,26 +384,38 @@ my $vcf_line = 0;
 $next_update = 0;
 print $OUT join( "", @{ $vcf_obj->get_metaHeader() } );
 print $OUT
-    "##INFO=<ID=GeneAnno,Number=.,Type=String,Description=\"Collected Entrez/MGI  gene annotations from for VEP annotated human genes. ". 
+    "##INFO=<ID=GeneAnno,Number=.,Type=String,Description=\"Collected Entrez/MGI gene annotations from for VEP/SnpEff annotated human genes. ". 
     "Multiple values per annotation are separated using two colons ('::'), spaces are replaced with underscores, commas are replaced with the ` ".
     "symbol, and semi-colons are replaced with the ^ symbol so that regexes can be used to extract the original text programmatically. ".
     "Format: " . join("|", @annotations) ."\">\n";
 
 my $header = $vcf_obj->getHeader(1);
 print $OUT $header;
+my $gene_field = "gene";#if using VEP annotations we get Gene ID from this key
+if ($snpEff_mode){
+    $gene_field = "Gene_Name";#if using SnpEff annotations we get Gene ID from this key
+}
 LINE: while ( my $line = $vcf_obj->readLine ) {
     $vcf_line++;
     my %annot = ();
-    my @csq = $vcf_obj->getVepFields( [ "Gene", "Consequence" ] );
-    die
+    my @csq = ();
+    if ($snpEff_mode){
+        @csq = $vcf_obj->getSnpEffFields([ "Effect", "Gene_Name", "Transcript_BioType" ] ); #returns array of hashes e.g. $csq[0]->{Gene_Name} = 'ABCA1' ; $csq[0]->{EFFECT} = 'DOWNSTREAM'
+        die
+"No consequence field found for line:\n$line\nPlease annotated your VCF file with SnpEff before running this program with the --snpEff_mode option.\n"
+        if not @csq;
+    }else{
+        @csq = $vcf_obj->getVepFields( [ "Gene", "Consequence" ] );
+        die
 "No consequence field found for line:\n$line\nPlease annotated your VCF file with ensembl's variant effect precictor before running this program.\n"
-      if not @csq;
+        if not @csq;
+    }
     foreach my $c (@csq) {
         if ($functional) {
-            next if ( not check_consequence( \@classes, $c ) );
+            next if ( not check_consequence( $c ) );
         }
         my $i = binSearchLineWithIndex(
-            $c->{gene},
+            $c->{$gene_field},
             $database{ensemblToEntrez}->{fh},
             $database{ensemblToEntrez}->{idx},
             $database{ensemblToEntrez}->{length},
@@ -467,9 +432,9 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
                 )
             );
             chomp @ens_line;
-            if ( $ens_line[ $database{ensemblToEntrez}->{col} ] eq $c->{gene} )
+            if ( $ens_line[ $database{ensemblToEntrez}->{col} ] eq $c->{$gene_field} )
             {
-                push @{ $annot{ $ens_line[1] }->{ensgene_id} }, $c->{gene};
+                push @{ $annot{ $ens_line[1] }->{ensgene_id} }, $c->{$gene_field};
             }
             else {
                 last;
@@ -484,7 +449,7 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
             )
         );
         chomp @ens_line;
-        push @{ $annot{ $ens_line[1] }->{ensgene_id} }, $c->{gene};
+        push @{ $annot{ $ens_line[1] }->{ensgene_id} }, $c->{$gene_field};
         for (
             my $j = $i + 1 ;
             $j <= $database{ensemblToEntrez}->{length} ;
@@ -500,9 +465,9 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
                 )
             );
             chomp @ens_line;
-            if ( $ens_line[ $database{ensemblToEntrez}->{col} ] eq $c->{gene} )
+            if ( $ens_line[ $database{ensemblToEntrez}->{col} ] eq $c->{$gene_field} )
             {
-                push @{ $annot{ $ens_line[1] }->{ensgene_id} }, $c->{gene};
+                push @{ $annot{ $ens_line[1] }->{ensgene_id} }, $c->{$gene_field};
             }
             else {
                 last;
@@ -684,6 +649,130 @@ for my $k ( keys %database ) {
 }
 $vcf_obj -> DESTROY();
 
+
+########################################
+sub checkAndParseSnpEffClasses{
+
+    my @valid = qw (INTERGENIC
+                UPSTREAM
+                UTR_5_PRIME
+                UTR_5_DELETED
+                START_GAINED
+                SPLICE_SITE_ACCEPTOR
+                SPLICE_SITE_DONOR
+                START_LOST
+                SYNONYMOUS_START
+                CDS
+                GENE
+                TRANSCRIPT
+                EXON
+                EXON_DELETED
+                NON_SYNONYMOUS_CODING
+                SYNONYMOUS_CODING
+                FRAME_SHIFT
+                CODON_CHANGE
+                CODON_INSERTION
+                CODON_CHANGE_PLUS_CODON_INSERTION
+                CODON_DELETION
+                CODON_CHANGE_PLUS_CODON_DELETION
+                STOP_GAINED
+                SYNONYMOUS_STOP
+                STOP_LOST
+                INTRON               
+                UTR_3_PRIME
+                UTR_3_DELETED
+                DOWNSTREAM
+                INTRON_CONSERVED
+                INTERGENIC_CONSERVED
+                INTRAGENIC
+                RARE_AMINO_ACID
+                NON_SYNONYMOUS_START);
+
+    if (not @classes){
+        @classes = qw (
+                UTR_5_DELETED
+                SPLICE_SITE_ACCEPTOR
+                SPLICE_SITE_DONOR
+                START_LOST
+                EXON_DELETED
+                NON_SYNONYMOUS_CODING
+                FRAME_SHIFT
+                CODON_INSERTION
+                CODON_CHANGE_PLUS_CODON_INSERTION
+                CODON_DELETION
+                CODON_CHANGE_PLUS_CODON_DELETION
+                STOP_GAINED
+                STOP_LOST
+                UTR_3_DELETED
+                RARE_AMINO_ACID
+                );
+    }
+    push (@classes, @add) if (@add);
+    foreach my $class (@classes){
+        die "Error - variant class '$class' not recognised.\n" if not grep {/^$class$/i} @valid;
+    }
+}
+########################################
+sub checkAndParseVepClasses{
+    my @valid = qw (transcript_ablation
+    splice_donor_variant
+    splice_acceptor_variant
+    stop_gained
+    frameshift_variant
+    stop_lost
+    initiator_codon_variant
+    inframe_insertion
+    inframe_deletion
+    missense_variant
+    transcript_amplification
+    splice_region_variant
+    incomplete_terminal_codon_variant
+    synonymous_variant
+    stop_retained_variant
+    coding_sequence_variant
+    mature_miRNA_variant
+    5_prime_UTR_variant
+    3_prime_UTR_variant
+    intron_variant
+    NMD_transcript_variant
+    non_coding_exon_variant
+    nc_transcript_variant
+    upstream_gene_variant
+    downstream_gene_variant
+    TFBS_ablation
+    TFBS_amplification
+    TF_binding_site_variant
+    regulatory_region_variant
+    regulatory_region_ablation
+    regulatory_region_amplification
+    feature_elongation
+    feature_truncation
+    intergenic_variant);
+
+    if ( not @classes ) {
+        @classes = qw (transcript_ablation
+        splice_donor_variant
+        splice_acceptor_variant
+        splice_region_variant
+        stop_gained
+        frameshift_variant
+        stop_lost
+        initiator_codon_variant
+        inframe_insertion
+        inframe_deletion
+        missense_variant
+        transcript_amplification
+        TFBS_ablation
+        TFBS_amplification
+        regulatory_region_ablation
+        regulatory_region_amplification);
+    }
+    push( @classes, @add ) if (@add);
+    foreach my $class (@classes) {
+        die "Error - variant class '$class' not recognised.\n"
+        if not grep { /$class/i } @valid;
+    }
+}
 ########################################
 sub convert_text{
     #replace characters not compatible with VCF
@@ -695,24 +784,42 @@ sub convert_text{
 }
 ########################################
 sub check_consequence {
+    my ( $annot ) = @_;
+    if ($snpEff_mode){
+        return check_snpeff_consequence($annot);
+    }else{
+        return check_vep_consequence($annot);
+    }
+}
+########################################
+sub check_snpeff_consequence {
+    my ( $annot ) = @_;
+    if ($annot->{Transcript_BioType} =~ /nonsense_mediated_decay|pseudogene$/i){
+        return 0;
+    }
+CLASS: foreach my $class (@classes) {
+        if (lc$annot->{Effect} eq lc$class){
+            return 1;
+        }
+    }
+    return 0;
+}
+########################################
+sub check_vep_consequence {
 
     #return 1 if matches class and isn't a NMD_transcript_variant
-    my ( $classes, $annot ) = @_;
-    my $match = 0;
-  CLASS: foreach my $class (@$classes) {
-        my @anno_csq = split( /\&/, $annot->{consequence} );
-        if ( grep { /NMD_transcript_variant/i } @anno_csq ) {
-            return 0;
-        }
-        else {
-            foreach my $ac (@anno_csq) {
-                if ( lc $ac eq lc $class ) {
-                    return 1;
-                }
+    my ( $annot ) = @_;
+    my @anno_csq = split( /\&/, $annot->{consequence} );
+    if ( grep { /NMD_transcript_variant/i } @anno_csq ) {
+        return 0;
+    }
+CLASS: foreach my $class (@classes) {
+        foreach my $ac (@anno_csq) {
+            if ( lc $ac eq lc $class ) {
+                return 1;
             }
         }
     }
-
     #no match
     return 0;
 }
