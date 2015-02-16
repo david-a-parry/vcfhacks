@@ -644,7 +644,7 @@ sub filter_on_info_fields {
     my ( $vcf_line, $search_args ) = @_;
     my $qual  = VcfReader::getVariantField( $vcf_line, 'QUAL' );
     my $chrom = VcfReader::getVariantField( $vcf_line, 'CHROM' );
-    if ( $qual < $min_qual ) {
+    if ($min_qual &&  $qual < $min_qual ) {
         return;
     }
 
@@ -914,7 +914,7 @@ sub filter_on_vcf_samples {
     my ( $vcf_line, $search_args ) = @_;
     my $qual  = VcfReader::getVariantField( $vcf_line, 'QUAL' );
     my $chrom = VcfReader::getVariantField( $vcf_line, 'CHROM' );
-    if ( $qual < $min_qual ) {
+    if ($min_qual &&  $qual < $min_qual ) {
         return;
     }
 
