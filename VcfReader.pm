@@ -1890,19 +1890,19 @@ sub _getGenotype{
                                  $col,
                                  );
     if ($min_gq > 0){
-        if (not defined getSampleGenotypeField(
+        my $gq = getSampleGenotypeField(
                         line => $line, 
-                        column=>$col, 
-                        field=>'GQ')
-        ){
+                        column=>$col,
+                        field=>'GQ',
+        );
+        if (not defined $gq){
             #no GQ field - return no call (the above generally means that the call is './.' anyway)
             return './.';
         }
-        if (getSampleGenotypeField(
-                        line => $line, 
-                        column=>$col ,
-                        field=>'GQ',
-        ) < $min_gq){
+        if ($gq eq '.'){
+            return './.';
+        }
+        if ($gq < $min_gq){
             return './.';
         }
     }
