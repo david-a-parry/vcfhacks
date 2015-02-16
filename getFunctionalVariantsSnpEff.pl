@@ -35,12 +35,14 @@ my @gene_lists; #array of files containing Ensembl Gene IDs to filter
 my @samples;
 my $in_every_sample;
 my $matching_genes = 0;#will change to '' if user specifies --find_shared_genes but provides no argument, in which case print to STDERR
+my $gene_id_mode;
 my %opts = ("help" => \$help, 
             "manual" => \$manual,
             "pass" => \$pass,
             "progress" => \$progress,
             "input" => \$infile,
             "output" => \$outfile,
+            "gene_id_mode" => $gene_id_mode,
             "classes" => \@classes,
             "additional_classes" => \@add,
             "effect_impact" => \@effect_impact,
@@ -102,7 +104,6 @@ if ($matching_genes){
     "--find_shared_genes option requires at least one sample to be specified with the --samples argument.\n", 
     -exitval => 2) if not @samples;
 }
-
 my @csq_fields = qw (
                 Effect
                 Effect_Impact
@@ -378,9 +379,14 @@ sub checkGeneList{
         #CHECK TO SEE WHETHER INPUT USES GENE SYMBOLS OR ENSEMBL IDs?
 
         #$id_field++ until $head[$id_field] eq 'Ensembl Gene ID' or $id_field > $#head;
-        $id_field++ until $head[$id_field] eq 'Associated Gene Name' or $id_field > $#head;
+        if ($gene_id_mode){
+            $id_field++ until $head[$id_field] eq 'Ensembl Gene ID' or $id_field > $#head;
+        }else{
+            $id_field++ until $head[$id_field] eq 'Associated Gene Name' or $id_field > $#head;
+        }
         if ($id_field > $#head){
-            #die "Can't find 'Ensembl Gene ID' field in header of gene list file '$gene_file'.\n";
+            die "Can't find 'Ensembl Gene ID' field in header of gene list file '$gene_file'.\n" 
+                if $gene_id_mode;
             die "Can't find 'Associated Gene Name' field in header of gene list file '$gene_file'.\n";
         }
         while (chomp(my $line = <$GENE>)){
@@ -699,7 +705,11 @@ If using multiple programs with the --damaging argument use this flag to keep va
 
 =item B<-l    --list>
 
-File containing a list of genes that should be filtered (e.g. LOF-tolerant genes). The program expects a tab delimited list with a header line specifying 'Associated Gene Name' for the column containing gene symbols. 
+File containing a list of genes that should be filtered (e.g. LOF-tolerant genes). The program expects a tab delimited list with a header line specifying 'Associated Gene Name' for the column containing gene symbols unless --gene_id flag is used, in which case 'Ensembl Gene ID' column is required. 
+
+=item B<--g    --gene_id_mode>
+
+Use this flag if you have used SnpEff with -geneId flag to annotate IDs rather than gene names and you are using the --list option.
 
 =item B<-r    --remove_headers>
 
