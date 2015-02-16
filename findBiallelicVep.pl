@@ -1300,8 +1300,13 @@ sub create_var_hash {
         if ( uc($vep_allele) eq uc( $annotation->{allele} ) ) {
             $var_hash{"$coord-$i"}->{mutation} = $annotation;
             $var_hash{"$coord-$i"}->{vcf_line} = $vcf_obj->get_currentLine;
-        }
-        else {
+        }elsif($annotation->{allele} eq 'insertion' and (length($alt) > length($ref))){
+            $var_hash{"$coord-$i"}->{mutation} = $annotation;
+            $var_hash{"$coord-$i"}->{vcf_line} = $vcf_obj->get_currentLine;
+        }elsif($annotation->{allele} eq 'deletion' and (length($alt) < length($ref))){
+            $var_hash{"$coord-$i"}->{mutation} = $annotation;
+            $var_hash{"$coord-$i"}->{vcf_line} = $vcf_obj->get_currentLine;
+        }else {
             next;
         }
         foreach my $s (@$aff){
