@@ -173,7 +173,7 @@ use Excel::Writer::XLSX::Utility;
 use Pod::Usage;
 use File::Basename;
 use FindBin;
-use lib "$FindBin::Bin";
+use lib "$FindBin::Bin/lib";
 use ParseVCF;
 use ParsePedfile;
 use TextToExcel;

@@ -116,7 +116,7 @@ use Pod::Usage;
 use POSIX qw/strftime/;
 use Term::ProgressBar;
 use FindBin;
-use lib "$FindBin::Bin";
+use lib "$FindBin::Bin/lib";
 use SortGenomicCoordinates;
 use ParseVCF;
 

@@ -2,7 +2,7 @@
 use strict;
 use warnings;
 use FindBin;
-use lib "$FindBin::Bin";
+use lib "$FindBin::Bin/lib";
 use VcfReader;
 
 die "Usage: countVariants.pl input1.vcf input2.vcf ...\n" if @ARGV <  1;

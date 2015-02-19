@@ -7,7 +7,7 @@ use Pod::Usage;
 use Term::ProgressBar;
 use Data::Dumper;
 use FindBin;
-use lib "$FindBin::Bin";
+use lib "$FindBin::Bin/lib";
 use ParseVCF;
 use SortGenomicCoordinates;
 use ParsePedfile;

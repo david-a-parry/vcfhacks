@@ -10,7 +10,7 @@ use POSIX qw/strftime/;
 use Sys::CPU;
 use List::Util qw(sum);
 use FindBin;
-use lib "$FindBin::Bin";
+use lib "$FindBin::Bin/lib";
 use VcfReader;
 
 my $minGQ = 0;

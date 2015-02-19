@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use Data::Dumper;
 use FindBin;
-use lib "$FindBin::Bin";
+use lib "$FindBin::Bin/lib";
 use ParseVCF;
 use Pod::Usage;
 use Getopt::Long;

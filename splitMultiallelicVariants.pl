@@ -6,7 +6,7 @@ use Pod::Usage;
 use Data::Dumper;
 use Term::ProgressBar;
 use FindBin;
-use lib "$FindBin::Bin";
+use lib "$FindBin::Bin/lib";
 use ParseVCF;
 
 my $input;

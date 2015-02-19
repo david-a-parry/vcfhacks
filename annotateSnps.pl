@@ -9,7 +9,7 @@ use Term::ProgressBar;
 use Data::Dumper;
 use POSIX qw/strftime/;
 use FindBin;
-use lib "$FindBin::Bin";
+use lib "$FindBin::Bin/lib";
 use VcfReader;
 my @samples;
 my @dbsnp ;

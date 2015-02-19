@@ -143,7 +143,7 @@ use Term::ProgressBar;
 
 #use Bio::SeqIO::entrezgene_interactants;
 use FindBin;
-use lib "$FindBin::Bin";
+use lib "$FindBin::Bin/lib";
 use ParseVCF;
 
 my $genedir;

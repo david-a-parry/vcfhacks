@@ -15,7 +15,7 @@ use Term::ProgressBar;
 use POSIX qw/strftime/;
 use List::Util qw(sum);
 use FindBin;
-use lib "$FindBin::Bin";
+use lib "$FindBin::Bin/lib";
 use VcfReader;
 my $cpus  = Sys::CPU::cpu_count();
 my $forks = 0;

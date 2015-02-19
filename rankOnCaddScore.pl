@@ -10,7 +10,7 @@ use Data::Dumper;
 use Term::ProgressBar;
 use Tabix;
 use FindBin;
-use lib "$FindBin::Bin";
+use lib "$FindBin::Bin/lib";
 use ParseVCF;
 
 #TO DO - allow multiple cadd files, do not annotate if exact variant not found

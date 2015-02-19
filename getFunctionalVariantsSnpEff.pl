@@ -8,7 +8,7 @@ use Data::Dumper;
 use Scalar::Util qw(looks_like_number);
 use Term::ProgressBar;
 use FindBin;
-use lib "$FindBin::Bin";
+use lib "$FindBin::Bin/lib";
 use ParseVCF;
 use DbnsfpVcfFilter;
 

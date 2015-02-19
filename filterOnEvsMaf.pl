@@ -10,7 +10,7 @@ use Data::Dumper;
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use POSIX qw/strftime/;
 use FindBin;
-use lib "$FindBin::Bin";
+use lib "$FindBin::Bin/lib";
 use VcfReader;
 my @samples;
 my @evs;
