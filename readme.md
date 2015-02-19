@@ -2,6 +2,8 @@ __vcfhacks__
 
 This project comprises a set of perl scripts and modules that may be useful for VCF manipulation when trying to discover disease-causing variants in sequencing data. Although more biologists are taking to the commandline many do not have the time or inclination to really get to grips with the more obtuse programs used in the field of bioinformatics. The aim of this project is to provide conceptually simple programs that perform common useful tasks. 
 
+Usage examples are included in the attached examples.md markdown document which can also be viewed at https://github.com/gantzgraf/vcfhacks/blob/master/examples.md
+
 __INSTALLATION__
 
 Unzip the downloaded file and ensure you keep the .pl scripts in the same directory as the 'lib' folder containing .pm module files.  The lib folder also contains two Variant Effect Predictor (VEP) plugin modules (SpliceConsensus.pm and SpliceConsensusFilter.pm) which should be installed in your VEP cache 'Plugins' folder if you want to use them. The SpliceConsensus.pm annotations can be used for variant filtering purposes in getFunctionalVariantsVep.pl and findBiallelicVep.pl.
