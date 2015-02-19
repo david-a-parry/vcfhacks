@@ -18,7 +18,7 @@ Typically we may first want to remove common variation from a VCF. The example b
 
     perl annotateSnps.pl -d dbSnp138.b37.vcf.gz clinvar_20130506.vcf -b 129 -f 1 --pathogenic -i input.vcf -o input_snpfiltered.vcf --progress
 
-However, these days, we probably do not need to use the fudged tactic of removing SNPs from dbSNP129 or earlier thanks to the wealth of frequency data no available both in dbSNP and other databases, so generally I would omit the --build option as below:
+However, these days, we probably do not need to use the fudged tactic of removing SNPs from dbSNP129 or earlier thanks to the wealth of frequency data no available both in dbSNP and other databases, so generally I would omit the --build option such as in the example below:
 
     perl annotateSnps.pl -d dbSnp138.b37.vcf.gz clinvar_20130506.vcf -f 1 --pathogenic -i input.vcf -o input_snpfiltered.vcf --progress
 
@@ -38,7 +38,7 @@ We can also filter using VCFs such as those available from the ExAC project usin
 
     perl filterVcfOnVcf.pl -i input_snpfiltered_evsfiltered.vcf -f ExAC.r0.1.sites.vep.vcf.gz -o input_snpfiltered_evsfiltered_vcffiltered.vcf -y 0.01  -w 
 
-[Also see notes on *sampleCallsToInfo.pl* and filterVcfOnVcf.pl under the *MISC USEFUL TOOLS* section.]
+[Also see notes on sampleCallsToInfo.pl and filterVcfOnVcf.pl under the MISC USEFUL TOOLS section.]
 
 If we have a multisample VCF we may want to only keep variants present in our sample of interest or family members:
 

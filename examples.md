@@ -22,7 +22,7 @@ Typically we may first want to remove common variation from a VCF. The example b
 
     perl annotateSnps.pl -d dbSnp138.b37.vcf.gz clinvar_20130506.vcf -b 129 -f 1 --pathogenic -i input.vcf -o input_snpfiltered.vcf --progress
 
-However, these days, we probably do not need to use the fudged tactic of removing SNPs from dbSNP129 or earlier thanks to the wealth of frequency data no available both in dbSNP and other databases, so generally I would omit the --build option as below:
+However, these days, we probably *do not need to use the fudged tactic of removing SNPs from dbSNP129 or earlier* thanks to the wealth of frequency data no available both in dbSNP and other databases, so generally I would omit the --build option such as in the example below:
 
     perl annotateSnps.pl -d dbSnp138.b37.vcf.gz clinvar_20130506.vcf -f 1 --pathogenic -i input.vcf -o input_snpfiltered.vcf --progress
 
@@ -34,11 +34,11 @@ Having filtered common variation from dbSNP and ESP databases we may want to **f
 
     perl filterVcfOnVcf.pl -i input_snpfiltered_evsfiltered.vcf -f controls.vcf -o input_snpfiltered_evsfiltered_vcffiltered.vcf
 
-We may only want to filter using these VCFs if variants are present above a certain allele frequency, in which case we can pass the "--allele_frequency_filter/-y" option. The following command filters any variant present at an allele frequency of 1 % or higher in the controls.vcf file: 
+We may only want to filter using these VCFs if variants are present above a certain **allele frequency**, in which case we can pass the **--allele_frequency_filter/-y** option. The following command filters any variant present at an allele frequency of 1 % or higher in the controls.vcf file: 
 
     perl filterVcfOnVcf.pl -i input_snpfiltered_evsfiltered.vcf -f controls.vcf -o input_snpfiltered_evsfiltered_vcffiltered.vcf -y 0.01 
 
-We can also filter using VCFs such as those available from the ExAC project using allele frequency (AF) annotations in the VCF INFO field if we pass the "--info_filter/-w" option: 
+We can also filter using VCFs such as those available from the **ExAC** project using allele frequency (AF) annotations in the VCF INFO field if we pass the **--info_filter/-w** option: 
 
     perl filterVcfOnVcf.pl -i input_snpfiltered_evsfiltered.vcf -f ExAC.r0.1.sites.vep.vcf.gz -o input_snpfiltered_evsfiltered_vcffiltered.vcf -y 0.01  -w 
 
