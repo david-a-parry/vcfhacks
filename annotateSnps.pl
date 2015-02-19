@@ -884,7 +884,7 @@ Optional output file to print identified SNPs to.  If --build or --freq argument
 
 =item B<-d    --dbsnp_file>
 
-SNP reference VCF file(s). IDs from these files will be used to annotate/filter the input VCF file.  If an ID already exists IDs from matching variants will be appended to the ID field.
+SNP reference VCF file(s). IDs from these files will be used to annotate/filter the input VCF file.  If an ID already exists IDs from matching variants will be appended to the ID field. Your dbSNP file MUST USE THE SAME REFERENCE as your input VCF.
 
 SNP vcf files for use can be downloaded from the NCBI FTP site (ftp://ftp.ncbi.nih.gov/snp/) or from the Broad Institutes FTP site (e.g. ftp://ftp.broadinstitute.org/bundle/1.5/b37/). Clinically annotated VCFs are available from the NCBI FTP site.
 
