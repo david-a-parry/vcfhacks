@@ -4,7 +4,7 @@ This project comprises a set of perl scripts and modules that may be useful for 
 
 __INSTALLATION__
 
-Unzip the downloaded file and ensure you keep the .pl scripts in the same directory as the .pm module files.  The exceptions to this are the two Variant Effect Predictor (VEP) plugin modules (SpliceConsensus.pm and SpliceConsensusFilter.pm) which should be installed in your VEP cache 'Plugins' folder if you want to use them. The SpliceConsensus.pm annotations can be used for variant filtering purposes in getFunctionalVariantsVep.pl and findBiallelicVep.pl.
+Unzip the downloaded file and ensure you keep the .pl scripts in the same directory as the 'lib' folder containing .pm module files.  The lib folder also contains two Variant Effect Predictor (VEP) plugin modules (SpliceConsensus.pm and SpliceConsensusFilter.pm) which should be installed in your VEP cache 'Plugins' folder if you want to use them. The SpliceConsensus.pm annotations can be used for variant filtering purposes in getFunctionalVariantsVep.pl and findBiallelicVep.pl.
 
 To run the scripts either add the enclosing directory to your PATH and make sure the scripts are executable (e.g. 'chmod +x vcfhacks/*.pl') or run each script using 'perl [location of script]' followed by the required arguments. Help information is available for most scripts by running the script with either '--help' or '--manual' options. 
 
