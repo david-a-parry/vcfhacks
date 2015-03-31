@@ -58,7 +58,7 @@ List of gene annotations to include in output. By default all of the following c
     OMIM
     MGI_PHENOTYPE
 
-Specify one or more of these to limit the annotations in your output to these calsses only.
+Specify one or more of these to limit the annotations in your output to these classes only.
 
 =item B<-P    --PREPARE>
 
@@ -203,6 +203,14 @@ my %database     = (
         dir       => undef,
         file      => "ensemblToEntrez" 
     },    #create this one on the fly from human_summary
+    gene2refseq => {
+        localfile => "$genedir/gene2refseq",
+        col       => 3,
+        delimiter => "\t",
+        url       => "ftp.ncbi.nlm.nih.gov",
+        dir       => "gene/DATA",
+        file      => "gene2refseq.gz"
+    },
     orthologs => {
         localfile => "$genedir/HMD_Human5.rpt",
         col       => 1,
@@ -398,6 +406,7 @@ if ($snpEff_mode){
 LINE: while ( my $line = $vcf_obj->readLine ) {
     $vcf_line++;
     my %annot = ();
+    my @entrez_ids = ();
     my @csq = ();
     if ($snpEff_mode){
         @csq = $vcf_obj->getSnpEffFields([ "Effect", "Gene_Name", "Transcript_BioType" ] ); #returns array of hashes e.g. $csq[0]->{Gene_Name} = 'ABCA1' ; $csq[0]->{EFFECT} = 'DOWNSTREAM'
@@ -414,80 +423,17 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
         if ($functional) {
             next if ( not check_consequence( $c ) );
         }
-        my $i = binSearchLineWithIndex(
-            $c->{$gene_field},
-            $database{ensemblToEntrez}->{fh},
-            $database{ensemblToEntrez}->{idx},
-            $database{ensemblToEntrez}->{length},
-            $database{ensemblToEntrez}->{col}
-        );
-        next if ( $i < 1 );
-        for ( my $j = $i - 1 ; $j > 0 ; $j-- ) {
-            my @ens_line = split(
-                "\t",
-                line_with_index(
-                    $database{ensemblToEntrez}->{fh},
-                    $database{ensemblToEntrez}->{idx},
-                    $j
-                )
-            );
-            chomp @ens_line;
-            if ( $ens_line[ $database{ensemblToEntrez}->{col} ] eq $c->{$gene_field} )
-            {
-                push @{ $annot{ $ens_line[1] }->{ensgene_id} }, $c->{$gene_field};
-            }
-            else {
-                last;
-            }
+        if ($c->{$gene_field} =~ /^ENS/){
+            push @entrez_ids, search_ensembl_id($c); 
+        }elsif($c->{$gene_field} =~ /^\d+$/){
+            push @entrez_ids, $c->{$gene_field} ; 
+        }elsif($c->{$gene_field} =~ /^[NX][MR]_\d+$/){
+            push @entrez_ids, search_refseq_id($c); 
         }
-        my @ens_line = split(
-            "\t",
-            line_with_index(
-                $database{ensemblToEntrez}->{fh},
-                $database{ensemblToEntrez}->{idx},
-                $i
-            )
-        );
-        chomp @ens_line;
-        push @{ $annot{ $ens_line[1] }->{ensgene_id} }, $c->{$gene_field};
-        for (
-            my $j = $i + 1 ;
-            $j <= $database{ensemblToEntrez}->{length} ;
-            $j++
-          )
-        {
-            my @ens_line = split(
-                "\t",
-                line_with_index(
-                    $database{ensemblToEntrez}->{fh},
-                    $database{ensemblToEntrez}->{idx},
-                    $j
-                )
-            );
-            chomp @ens_line;
-            if ( $ens_line[ $database{ensemblToEntrez}->{col} ] eq $c->{$gene_field} )
-            {
-                push @{ $annot{ $ens_line[1] }->{ensgene_id} }, $c->{$gene_field};
-            }
-            else {
-                last;
-            }
-        }
-    }
-    if ( not keys %annot ) {
-
-#IF FOR SOME REASON WE HAVEN'T FOUND ANY ENTREZ IDs THEN WE'RE FINISHED WITH THIS LINE
-#       my $
-        my $ens_annot = "|" x @annotations;
-        my $new_line = $vcf_obj->addVariantInfoField('GeneAnno', $ens_annot);
-        #print $OUT "-\t-\t-\t-\t-\t-\t-\t-\t$line\n";
-        print $OUT "$new_line\n";
-        next LINE;
     }
 
     #USE ENTREZ IDs TO SEARCH DATABSE FILES
-    foreach my $entrez_id ( keys %annot ) {
-        remove_duplicates( \@{ $annot{$entrez_id}->{ensgene_id} } );
+    foreach my $entrez_id ( @entrez_ids ) {
         my $i = binSearchLineWithIndex(
             $entrez_id,
             $database{human_summary}->{fh},
@@ -508,6 +454,7 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
             );
             $annot{$entrez_id}->{symbol}  = $humsum_line[1];
             $annot{$entrez_id}->{summary} = $humsum_line[2];
+            push @{ $annot{$entrez_id}->{ensgene_id} }, split(/\|/, $humsum_line[3]);
             $annot{$entrez_id}->{go_id}   = $humsum_line[4];
             $annot{$entrez_id}->{go_description} = $humsum_line[5];
             $annot{$entrez_id}->{generifs}     = $humsum_line[6];
@@ -613,6 +560,13 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
             push( @{ $annot{$entrez_id}->{mgi_phenotype} }, "" );
         }
     }
+    if ( not keys %annot) {
+        my $ens_annot = "|" x @annotations;
+        my $new_line = $vcf_obj->addVariantInfoField('GeneAnno', $ens_annot);
+        #print $OUT "-\t-\t-\t-\t-\t-\t-\t-\t$line\n";
+        print $OUT "$new_line\n";
+        next LINE;
+    }
     my @gene_anno = ();
     foreach my $entrez_id ( keys %annot ) {
         my @single_anno = ();
@@ -621,6 +575,7 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
                 push @single_anno, $entrez_id;    
             }elsif (exists $annot{$entrez_id}->{lc($annot)}){
                 if (ref ($annot{$entrez_id}->{lc($annot)}) eq 'ARRAY'){
+                    remove_duplicates( \@{ $annot{$entrez_id}->{lc($annot)} } );
                     my @conv = ();
                     foreach my $g (@{$annot{$entrez_id}->{lc($annot)}}){
                         push @conv, convert_text($g);
@@ -649,6 +604,141 @@ for my $k ( keys %database ) {
 }
 $vcf_obj -> DESTROY();
 
+########################################
+sub search_refseq_id{
+    my ($csq) = @_;
+    my @ids = ();
+    (my $nm_short = $csq->{$gene_field}) =~ s/\.\d+$//;
+    my $i = binSearchRefseqWithIndex(
+        $nm_short,
+        $database{gene2refseq}->{fh},
+        $database{gene2refseq}->{idx},
+        $database{gene2refseq}->{length},
+        $database{gene2refseq}->{col}
+    );
+    return if ( $i < 1 );
+    for ( my $j = $i - 1 ; $j > 0 ; $j-- ) {
+        my @ens_line = split(
+            "\t",
+            line_with_index(
+                $database{gene2refseq}->{fh},
+                $database{gene2refseq}->{idx},
+                $j
+            )
+        );
+        chomp @ens_line;
+        (my $ref_short = $ens_line[ $database{gene2refseq}->{col} ]) =~ s/\.\d\+$//;
+        if ( $ref_short eq $nm_short )
+        {
+            push @ids, $ens_line[1] ; 
+        }
+        else {
+            last;
+        }
+    }
+    my @ens_line = split(
+        "\t",
+        line_with_index(
+            $database{ensemblToEntrez}->{fh},
+            $database{ensemblToEntrez}->{idx},
+            $i
+        )
+    );
+    chomp @ens_line;
+    push @ids, $ens_line[1] ; 
+    for (
+        my $j = $i + 1 ;
+        $j <= $database{ensemblToEntrez}->{length} ;
+        $j++
+        )
+    {
+        my @ens_line = split(
+            "\t",
+            line_with_index(
+                $database{ensemblToEntrez}->{fh},
+                $database{ensemblToEntrez}->{idx},
+                $j
+            )
+        );
+        chomp @ens_line;
+        (my $ref_short = $ens_line[ $database{gene2refseq}->{col} ]) =~ s/\.\d\+$//;
+        if ( $ref_short eq $nm_short )
+        {
+            push @ids, $ens_line[1] ; 
+        }
+        else {
+            last;
+        }
+    }
+    return @ids;
+}
+
+
+########################################
+sub search_ensembl_id{
+    my ($csq) = @_;
+    my @ids = (); 
+    my $i = binSearchLineWithIndex(
+        $csq->{$gene_field},
+        $database{ensemblToEntrez}->{fh},
+        $database{ensemblToEntrez}->{idx},
+        $database{ensemblToEntrez}->{length},
+        $database{ensemblToEntrez}->{col}
+    );
+    return if ( $i < 1 );
+    for ( my $j = $i - 1 ; $j > 0 ; $j-- ) {
+        my @ens_line = split(
+            "\t",
+            line_with_index(
+                $database{ensemblToEntrez}->{fh},
+                $database{ensemblToEntrez}->{idx},
+                $j
+            )
+        );
+        chomp @ens_line;
+        if ( $ens_line[ $database{ensemblToEntrez}->{col} ] eq $csq->{$gene_field} )
+        {
+            push @ids, $ens_line[1];
+        }
+        else {
+            last;
+        }
+    }
+    my @ens_line = split(
+        "\t",
+        line_with_index(
+            $database{ensemblToEntrez}->{fh},
+            $database{ensemblToEntrez}->{idx},
+            $i
+        )
+    );
+    chomp @ens_line;
+    push @ids, $ens_line[1];
+    for (
+        my $j = $i + 1 ;
+        $j <= $database{ensemblToEntrez}->{length} ;
+        $j++
+        )
+    {
+        my @ens_line = split(
+            "\t",
+            line_with_index(
+                $database{ensemblToEntrez}->{fh},
+                $database{ensemblToEntrez}->{idx},
+                $j
+            )
+        );
+        chomp @ens_line;
+        if ( $ens_line[ $database{ensemblToEntrez}->{col} ] eq $csq->{$gene_field} )
+        {
+            push @ids, $ens_line[1];
+        }
+        else {
+            last;
+        }
+    }
+    return @ids;
+}
 
 ########################################
 sub checkAndParseSnpEffClasses{
@@ -1233,6 +1323,33 @@ sub binSearchLineWithIndex {
                 $u = $i - 1;
             }
             elsif ( $x gt $line[$column] ) {
+                $l = $i + 1;
+            }
+            else {
+                return $i;
+            }
+        }
+    }
+    return 0;
+}
+######################################################################
+sub binSearchRefseqWithIndex {
+    my ( $x, $FILE, $FILE_INDEX, $u, $column, $delimiter ) = @_;
+    my $l = 1;
+    $delimiter = "\t" if not $delimiter;
+    while ( $l <= $u ) {
+        my $i = int( ( $u + $l ) / 2 );
+        my $line = line_with_index( $FILE, $FILE_INDEX, $i );
+        if ( $line =~ /^#/ ) {
+            $l = $i + 1;
+        }
+        else {
+            my @line = split( /$delimiter/, $line );
+			(my $refshort = $line[$column]) =~ s/\.\d+$//;
+            if ( $x lt $refshort ) {
+                $u = $i - 1;
+            }
+            elsif ( $x gt $refshort ) {
                 $l = $i + 1;
             }
             else {
