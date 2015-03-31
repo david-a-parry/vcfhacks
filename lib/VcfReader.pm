@@ -720,7 +720,7 @@ Requires a VCF filename as the only argument.
 sub readIndex{
     my ($vcf) = @_;
     my %contigs = ();
-    if ($vcf =~/\.gz/){
+    if ($vcf =~/\.gz$/){
         #if compressed just create index if it doesn't exist and return
         my $index = "$vcf.tbi"; 
         if (not -e $index){
@@ -2541,7 +2541,7 @@ sub getSearchArguments{
 #for uncompressed files
 #or tabix_iterator for bgzip compressed files
     my ($vcf, $contig_index) = @_;
-    if ($vcf =~ /\.gz/){ 
+    if ($vcf =~ /\.gz$/){ 
         eval "use Tabix; 1" 
             or croak "Tabix module is not installed and VCF file $vcf appears to be (b)gzip compressed.  ".
             "  Please install Tabix.pm in order to search bgzip compressed VCFs.\n";
