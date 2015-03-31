@@ -428,7 +428,7 @@ if ($progress) {
     );
 }else{
     $time = strftime( "%H:%M:%S", localtime );
-    print "[$time] Filtering started.\n";
+    print STDERR "[$time] Filtering started.\n";
 }
 
 my $meta_head = VcfReader::getMetaHeader($vcf);
