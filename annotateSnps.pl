@@ -197,10 +197,8 @@ if (@add_head) {
         $add =~ s/\>$//;
     }
     my $headstring =
-"##INFO=<ID=SnpAnnotation,Number=A,Type=String,Description=\"Collection of SNP annotations per allele from dbSNP VCF files. "
-      . "Reference files had the following annotations: ["
-      . join( " ", @add_head )
-      . "]\">\n";
+"##INFO=<ID=SnpAnnotation,Number=A,Type=String,Description=\"Collection of SNP annotations per allele from dbSNP VCF files: ". 
+    join(", ", @dbsnp) .".\">\n";
     print $OUT $headstring;
     print $KNOWN $headstring if $KNOWN;
 }
