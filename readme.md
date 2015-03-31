@@ -56,7 +56,7 @@ _VERSION 0.1.16:_
 
 -progress bar in ensemblGeneAnnotator.pl is now optional with the --progress option
 
--updated pre-built ensemblGeneAnnotator database (<http://sourceforge.net/projects/vcfhacks/files/ensAnnotatorDatabase/>) again.
+-updated pre-built ensemblGeneAnnotator database (<https://github.com/gantzgraf/vcfhacks/releases/download/v.0.1.16/ensAnnotatorDb.zip> or  <http://sourceforge.net/projects/vcfhacks/files/ensAnnotatorDatabase/>) again.
 
 _VERSION 0.1.15:_
 
