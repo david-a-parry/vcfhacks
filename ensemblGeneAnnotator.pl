@@ -60,6 +60,10 @@ List of gene annotations to include in output. By default all of the following c
 
 Specify one or more of these to limit the annotations in your output to these classes only.
 
+=item B<-p    --progress>
+
+Show a progress bar.
+
 =item B<-P    --PREPARE>
 
 Sort and index reference files (e.g. if you've downloaded them manually).
@@ -156,6 +160,7 @@ my $downdb;
 my $repair;
 my @classes;
 my @add;
+my $progress; 
 my $functional;
 my @annotations;
 my $snpEff_mode;
@@ -168,6 +173,7 @@ GetOptions(
     "classes=s{,}"              => \@classes,
     "add=s{,}"                  => \@add,
     "gene_annotations=s{,}"     => \@annotations,
+    "progress"                  => \$progress, 
     "PREPARE"                   => \$prep,
     "DOWNLOAD_NEW"              => \$downdb,
     "REPAIR"                    => \$repair,
@@ -203,14 +209,18 @@ my %database     = (
         dir       => undef,
         file      => "ensemblToEntrez" 
     },    #create this one on the fly from human_summary
-    gene2refseq => {
-        localfile => "$genedir/gene2refseq",
-        col       => 3,
-        delimiter => "\t",
-        url       => "ftp.ncbi.nlm.nih.gov",
-        dir       => "gene/DATA",
-        file      => "gene2refseq.gz"
-    },
+
+#    gene2refseq => {
+#        localfile => "$genedir/gene2refseq",
+#        col       => 3,
+#        delimiter => "\t",
+#        url       => "ftp.ncbi.nlm.nih.gov",
+#        dir       => "gene/DATA",
+#        file      => "gene2refseq.gz"
+#    },#this file is big and not used by anything except maybe by a custom made SnpEff database
+#    #might be worth including at a later date but will need to implement some processing
+#    to reduce the filesize (filter on taxonomy and throwaway entries without nucleotide IDs)
+
     orthologs => {
         localfile => "$genedir/HMD_Human5.rpt",
         col       => 1,
@@ -348,17 +358,16 @@ if ($snpEff_mode){
     checkAndParseVepClasses();
 }
 
-my $pre_progressbar = Term::ProgressBar->new(
-    {
-        name  => "Parsing database",
-        count => keys(%database) + 1,
-        ETA   => "linear",
-    }
-);
-$next_update = $pre_progressbar->update($pre_progress)
-  if $pre_progress >= $next_update;
-
-
+my $pre_progressbar;
+if ($progress){
+    $pre_progressbar = Term::ProgressBar->new(
+        {
+            name  => "Parsing database",
+            count => scalar(keys(%database)) ,
+            ETA   => "linear",
+        }
+    );
+}
 foreach my $k ( keys %database ) {
     open( my $IN, $database{$k}->{localfile} )
       || die "Can't open reference file $database{$k}->{localfile}: $!\n";
@@ -377,17 +386,21 @@ foreach my $k ( keys %database ) {
       "Can't open reference index file $database{$k}->{localfile}.idx: $!\n";
     binmode $database{$k}->{idx};
     $pre_progress++;
-    $next_update = $pre_progressbar->update($pre_progress)
-      if $pre_progress >= $next_update;
+    if ($progress){
+        $next_update = $pre_progressbar->update($pre_progress)
+            if $pre_progress >= $next_update;
+    }
 }
 
-my $progressbar = Term::ProgressBar->new(
+my $progressbar; 
+if ($progress){
+    $progressbar = Term::ProgressBar->new(
     {
         name  => "Annotating",
         count => $vcf_obj->get_totalLines,
         ETA   => "linear",
-    }
-);
+    });
+}
 my $vcf_line = 0;
 $next_update = 0;
 print $OUT join( "", @{ $vcf_obj->get_metaHeader() } );
@@ -428,7 +441,8 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
         }elsif($c->{$gene_field} =~ /^\d+$/){
             push @entrez_ids, $c->{$gene_field} ; 
         }elsif($c->{$gene_field} =~ /^[NX][MR]_\d+$/){
-            push @entrez_ids, search_refseq_id($c); 
+            #not implemented unless we decide to include gene2refseq in database
+           # push @entrez_ids, search_refseq_id($c); 
         }
     }
 
@@ -594,10 +608,14 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
     my $ens_annot = join(",", @gene_anno);
     my $new_line = $vcf_obj->addVariantInfoField('GeneAnno', $ens_annot);
     print $OUT "$new_line\n";
-    $next_update = $progressbar->update($vcf_line) if $vcf_line >= $next_update;
+    if ($progress){
+        $next_update = $progressbar->update($vcf_line) if $vcf_line >= $next_update;
+    }
 }
-$progressbar->update( $vcf_obj->get_totalLines )
-  if $vcf_obj->get_totalLines >= $next_update;
+if ($progress){
+    $progressbar->update( $vcf_obj->get_totalLines )
+        if $vcf_obj->get_totalLines >= $next_update;
+}
 for my $k ( keys %database ) {
     close $database{$k}->{fh};
     close $database{$k}->{idx};
