@@ -194,7 +194,7 @@ $genedir = "$script_dir/gene_ref_files" if ( not $genedir );
 $genedir =~ s/\/$//;
 my $OUT;
 if ($out) {
-    open( $OUT, ">$out" ) || die "Can't open $out for writing: $!\n";
+    open( $OUT, ">$out" ) or die "Can't open $out for writing: $!\n";
 }
 else {
     $OUT = \*STDOUT;
@@ -370,19 +370,19 @@ if ($progress){
 }
 foreach my $k ( keys %database ) {
     open( my $IN, $database{$k}->{localfile} )
-      || die "Can't open reference file $database{$k}->{localfile}: $!\n";
+      or die "Can't open reference file $database{$k}->{localfile}: $!\n";
     $database{$k}->{fh} = $IN;
 }
 foreach my $k ( keys %database ) {
     open( $database{$k}->{idx}, $database{$k}->{localfile} . ".idx" )
-      || die
+      or die
       "Can't open reference index file $database{$k}->{localfile}.idx: $!\n";
     binmode $database{$k}->{idx};
     $database{$k}->{length} =
       get_file_length_from_index( $database{$k}->{idx} );
     close $database{$k}->{idx};
     open( $database{$k}->{idx}, $database{$k}->{localfile} . ".idx" )
-      || die
+      or die
       "Can't open reference index file $database{$k}->{localfile}.idx: $!\n";
     binmode $database{$k}->{idx};
     $pre_progress++;
@@ -993,10 +993,12 @@ sub prepare_database {
     #my $progressbar = Term::ProgressBar->new(
     #    { name => "Prep Database", count => 100, ETA => "linear", } );
     if ( not -e $genedir ) {
-        mkdir $genedir || display_error_and_exit(
-            "Permissions Error",
+        unless (mkdir $genedir){
+            display_error_and_exit(
+                    "Permissions Error",
 "Can't create directory $genedir for database files - please check permissions"
-        );
+            );
+        }
     }
     foreach my $file (@files) {
         if (defined $file->{file} && $file->{file} eq "Homo_sapiens.ags.gz"){
@@ -1026,14 +1028,14 @@ sub prepare_database {
         print STDERR "[$time] Processing $file_name, file $n of $t...\n";
         my $increment = 100 / @files;
         $increment /= 10;
-        chdir $genedir || display_error_and_exit(
+        chdir $genedir or display_error_and_exit(
             "Directory Error",
             "Can't move to directory $genedir",
         );
         my $file_exists = 0;
 
         if ( -e $file ) {
-            move( $file, "$file.bkup" ) || display_error_and_exit(
+            move( $file, "$file.bkup" ) or display_error_and_exit(
                 "File Error",
                 "Error creating file backup of $file->{localfile}",
                 "Check permissions and/or disk space."
@@ -1044,15 +1046,15 @@ sub prepare_database {
         print STDERR "[$time] Connecting to $file->{url}...\n";
         my $ftpobj =
           Net::FTP->new( $file->{url} )
-          || restore_file( $file_exists, $file )
+          or restore_file( $file_exists, $file )
           && display_error_and_exit( "Can't connect to site $file->{url}",
             "Could not download $file->{url}/$file->{dir}/$file->{file}" );
         $ftpobj->login( "anonymous", "" )
-          || restore_file( $file_exists, $file )
+          or restore_file( $file_exists, $file )
           && display_error_and_exit( "Can't login to $file->{url}",
             "Could not download $file->{url}/$file->{dir}/$file->{file}" );
         $ftpobj->cwd( $file->{dir} )
-          || restore_file( $file_exists, $file ) && display_error_and_exit(
+          or restore_file( $file_exists, $file ) && display_error_and_exit(
             "Can't locate directory $file->{dir} at $file->{url}",
             "Could not download $file->{url}/$file->{dir}/$file->{file}"
           );
@@ -1060,7 +1062,7 @@ sub prepare_database {
         $time = strftime( "%H:%M:%S", localtime );
         print STDERR "[$time] Downloading $file->{file}...\n";
         $ftpobj->get( $file->{file} )
-          || restore_file( $file_exists, $file )
+          or restore_file( $file_exists, $file )
           && display_error_and_exit( "Download error",
             "Could not download $file->{url}/$file->{dir}/$file->{file}" );
         $db_percent += $increment;
@@ -1078,11 +1080,11 @@ sub prepare_database {
                  #for some reason gzipped ASN1 file seems to give premature EOF even in binmode, so use MultiStream option
                 my $z = new IO::Uncompress::Gunzip $file->{file},
                   MultiStream => 1
-                  || restore_file( $file_exists, $file )
+                  or restore_file( $file_exists, $file )
                   && display_error_and_exit( "Error decompressing file",
                     "Error decompressing $file->{file}" );
                 open( my $ZOUT, ">$output" )
-                  || restore_file( $file_exists, $file )
+                  or restore_file( $file_exists, $file )
                   && display_error_and_exit( "Error decompressing file",
                     "Error decompressing $file->{file}" );
                 binmode $ZOUT;
@@ -1098,7 +1100,7 @@ sub prepare_database {
             }
             else {
                 gunzip( $file->{file} => $output )
-                  || restore_file( $file_exists, $file )
+                  or restore_file( $file_exists, $file )
                   && display_error_and_exit( "Error decompressing file",
                     "Error decompressing $file->{file}" );
                 $db_percent += $increment;
@@ -1130,16 +1132,16 @@ sub prepare_database {
             #$next_update = $progressbar->update($db_percent)
               #if $db_percent >= $next_update;
 
-#unlink $file->{file} || display_error_and_exit( "Can't delete xml output ($file->{file})", "Check permissions - it is safe to manually delete this file now");
+#unlink $file->{file} or display_error_and_exit( "Can't delete xml output ($file->{file})", "Check permissions - it is safe to manually delete this file now");
             my ( $enstoEntrez_file_name, $file_dir ) = fileparse( $database_ref->{ensemblToEntrez}->{localfile} );
             extract_ncbi_summaries( $gene2xml, $decomp_file, "$file_name.tmp",
                 $enstoEntrez_file_name .".tmp" );
-                move( "$file_name.tmp", $file_name ) || display_error_and_exit(
+                move( "$file_name.tmp", $file_name ) or display_error_and_exit(
                 "File Error",
                 "Error creating file $file_name",
                 "Check permissions and/or disk space."
                 );
-                move( $enstoEntrez_file_name .".tmp", $enstoEntrez_file_name) || display_error_and_exit(
+                move( $enstoEntrez_file_name .".tmp", $enstoEntrez_file_name) or display_error_and_exit(
                 "File Error",
                 "Error creating file $database_ref->{ensemblToEntrez}->{localfile}",
                 "Check permissions and/or disk space."
@@ -1158,26 +1160,26 @@ sub prepare_database {
             $db_percent += $increment / 2;
             #$next_update = $progressbar->update($db_percent)
               #if $db_percent >= $next_update;
-            unlink $decomp_file || display_error_and_continue(
+            unlink $decomp_file or display_error_and_continue(
                 "Can't delete decompressed ags file ($decomp_file)",
 "Check permissions - it is safe to manually delete this file now"
             );
 
-#unlink $xml_out || display_error_and_exit( "Can't delete xml output ($xml_out)", "Check permissions - it is safe to manually delete this file now");
+#unlink $xml_out or display_error_and_exit( "Can't delete xml output ($xml_out)", "Check permissions - it is safe to manually delete this file now");
         }
         if ( $file->{file} =~ /HMD_Human5\.rpt/ ) {
             $increment /= 3;
             move( $file->{file}, "$file->{file}.bak" )
-              || display_error_and_exit(
+              or display_error_and_exit(
                 "File Error",
                 "Error creating file backup of $file->{file}",
                 "Check permissions and/or disk space."
               );
             open( my $HMD_DOWN, "$file->{file}.bak" )
-              || display_error_and_exit( "File Read Error",
+              or display_error_and_exit( "File Read Error",
                 "Can't open $file->{file}.bak to read" );
             open( my $HMD_MOD, ">$file->{file}" )
-              || display_error_and_exit( "Write Error",
+              or display_error_and_exit( "Write Error",
                 "Can't open $file->{file} to write." );
             while ( my $line = <$HMD_DOWN> ) {
                 next if $line !~ /^[0-9MXYU]/;
@@ -1188,7 +1190,7 @@ sub prepare_database {
               #if $db_percent >= $next_update;
             close $HMD_MOD;
             close $HMD_DOWN;
-            unlink "$file->{file}.bak" || display_error_and_continue(
+            unlink "$file->{file}.bak" or display_error_and_continue(
                 "Can't delete backup file $file->{file}.bak",
 "Check permissions - it is safe to manually delete this file now"
             );
@@ -1201,7 +1203,7 @@ sub prepare_database {
             \$db_percent, $increment, $progressbar, $next_update,
             $file->{delimiter} );
         unlink "$file.bkup"
-          || display_error_and_continue(
+          or display_error_and_continue(
             "Can't delete backup file \"$file.bkup\"",
             "Check permissions - it is safe to manually delete this file now" );
     }
@@ -1217,7 +1219,7 @@ sub sort_and_index_gene_files {
         $progressbar, $next_update, $delimiter
     ) = @_;    #column no. is 0 based
     open( my $FILE, $file )
-      || die "Can't open $file for sorting and indexing!\n";
+      or die "Can't open $file for sorting and indexing!\n";
     my ( $file_short, $dir ) = fileparse($file);
     my @lines;
     $delimiter = "\t" if not $delimiter;
@@ -1230,7 +1232,7 @@ sub sort_and_index_gene_files {
     my $incr_per_line = ( $increment / 6 ) / $line_count;
 
     #print STDERR "increment per line is $incr_per_line\n";
-    open( $FILE, $file ) || die "Can't open $file for sorting and indexing!\n";
+    open( $FILE, $file ) or die "Can't open $file for sorting and indexing!\n";
     my $check_taxon = 0;
     $check_taxon = 1
       if ( $file =~ /gene2go/ or $file =~ /generifs/ )
@@ -1281,9 +1283,9 @@ sub sort_and_index_gene_files {
     #print STDERR "$file replaced with sorted version.\n";
     my $indexfile = $file . ".idx";
     open( my $INDEX, "+>$indexfile" )
-      || die "can't open $indexfile for writing index ";
+      or die "can't open $indexfile for writing index ";
     binmode $INDEX;
-    open( my $NEWFILE, "$file" ) || die "Can't open $file for reading ";
+    open( my $NEWFILE, "$file" ) or die "Can't open $file for reading ";
     build_index( $NEWFILE, $INDEX );
     $$prog_ref += $increment / 6;
     #$next_update = $progressbar->update($$prog_ref)
@@ -1391,9 +1393,9 @@ sub extract_ncbi_summaries {
         -file   => "$gene2xml -i $agsfile -b -x |"
     );
     open( my $ENSOUT, ">$ensToEntrezout" )
-      || die "Can't open $ensToEntrezout for writing\n";
+      or die "Can't open $ensToEntrezout for writing\n";
 
-    open( my $SUMOUT, ">$sum_out" ) || die "Can't open $sum_out for writing\n";
+    open( my $SUMOUT, ">$sum_out" ) or die "Can't open $sum_out for writing\n";
 
     my $time = strftime( "%H:%M:%S", localtime );
     print STDERR "[$time] Extracting NCBI gene data from $agsfile - this may take some time...\n";
@@ -1585,12 +1587,12 @@ sub download_gene2xml {
     my $site = "ftp.ncbi.nlm.nih.gov";
     my $dir  = "toolbox/ncbi_tools/converters/by_program/gene2xml";
     my $ftpobj =
-      Net::FTP->new($site) || display_error_and_exit( "Can't connect to $site ",
+      Net::FTP->new($site) or display_error_and_exit( "Can't connect to $site ",
         "Could not download gene2xml" );
     $ftpobj->login( "anonymous", "" )
-      || display_error_and_exit( "Login to $site failed",
+      or display_error_and_exit( "Login to $site failed",
         "Login failed when attempting to download gene2xml" );
-    $ftpobj->cwd($dir) || display_error_and_exit(
+    $ftpobj->cwd($dir) or display_error_and_exit(
         "Couldn't change directory to $dir at $site",
         "cwd failed when attempting to download gene2xml"
     );
@@ -1615,12 +1617,12 @@ sub download_gene2xml {
         );
     }
     $ftpobj->get($prog)
-      || display_error_and_exit( "Failed to retrieve $prog from $site", "$!" );
+      or display_error_and_exit( "Failed to retrieve $prog from $site", "$!" );
     my $output = "gene2xml";
     gunzip( $prog => $output )
-      || display_error_and_exit( "Extract of $prog failed", "$!" );
+      or display_error_and_exit( "Extract of $prog failed", "$!" );
     chmod 0755, $output
-      || display_error_and_exit( "Could not make $output executable", "$!" );
+      or display_error_and_exit( "Could not make $output executable", "$!" );
     chdir $pwd;
 }
 
