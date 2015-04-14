@@ -8,7 +8,7 @@ Usage examples are included in the attached examples.md markdown document which 
 
 __INSTALLATION__
 
-These programs are all command line utilities. To run these programs you simply need to download and extract the tar.bz2 file for your plaform (currently only 64 bit Linux Mac OS X systems are supported) and change into the newly created vcfhacks_binaries directory. Each program can be run from this directory using the command ***./[program_name]***  (e.g. ***./annotateSnps***) or you may prefer to move the programs somewhere in your $PATH or add the new vcfhacks_binaries to your $PATH to be able to run these programs from any directory. 
+These programs are all command line utilities. To run these programs you simply need to download and extract the tar.bz2 file for your plaform (currently only 64 bit Linux Mac OS X systems are supported) and change into the newly created vcfhacks_binaries directory. Each program can be run from this directory using the command *./[program_name]*  (e.g. *./annotateSnps*) or you may prefer to move the programs somewhere in your $PATH or add the new vcfhacks_binaries to your $PATH to be able to run these programs from any directory. 
 
 __UPDATE__
 
