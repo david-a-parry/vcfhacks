@@ -1,18 +1,10 @@
-# vcfhacks
+__vcfhacks__
 
-This project comprises a set of perl programs and modules that may be useful for VCF manipulation when trying to discover disease-causing variants in sequencing data. Although more biologists are taking to the commandline many do not have the time or inclination to really get to grips with the more obtuse programs used in the field of bioinformatics. The aim of this project is to provide conceptually simple programs that perform common useful tasks. 
+This project comprises a set of perl scripts and modules that may be useful for VCF manipulation when trying to discover disease-causing variants in sequencing data. Although more biologists are taking to the commandline many do not have the time or inclination to really get to grips with the more obtuse programs used in the field of bioinformatics. The aim of this project is to provide conceptually simple programs that perform common useful tasks. 
 
-Usage examples are included in the examples.md markdown documents which can also be viewed at https://github.com/gantzgraf/vcfhacks/blob/master/examples.md or https://github.com/gantzgraf/vcfhacks/blob/master/examples_bin.md
+Usage examples are included in the attached examples.md markdown document which can also be viewed at https://github.com/gantzgraf/vcfhacks/blob/master/examples.md
 
-## INSTALLATION
-
-You may either download these programs as perl scripts or as precompiled binaries for 64-bit Linux or Mac OS X. The binary executables are provided for ease so that users do not have to install the various perl modules required by these scripts. Users that are comfortable installing perl modules may prefer to use the scripts, which are considerably smaller than the binaries and do not suffer the slight lag in startup. 
-
-### BINARIES
-
-These programs are all command line utilities. To run these programs you simply need to download and extract the tar.bz2 file for your plaform (currently only 64 bit Linux Mac OS X systems are supported) and change into the newly created vcfhacks_binaries directory. Each program can be run from this directory using the command ***./[program_name]***  (e.g. ***./annotateSnps***) or you may prefer to move the programs somewhere in your $PATH or add the new vcfhacks_binaries to your $PATH to be able to run these programs from any directory. You may need to make the programs executable before they will run (e.g. by running 'chmod +x *' from within your vcfhacks_binaries directory). 
-
-### SCRIPTS
+__INSTALLATION__
 
 Unzip the downloaded file and ensure you keep the .pl scripts in the same directory as the 'lib' folder containing .pm module files.  The lib folder also contains two Variant Effect Predictor (VEP) plugin modules (SpliceConsensus.pm and SpliceConsensusFilter.pm) which should be installed in your VEP cache 'Plugins' folder if you want to use them. The SpliceConsensus.pm annotations can be used for variant filtering purposes in getFunctionalVariantsVep.pl and findBiallelicVep.pl.
 

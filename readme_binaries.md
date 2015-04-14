@@ -1,44 +1,14 @@
-# vcfhacks
+__vcfhacks__
 
-This project comprises a set of perl programs and modules that may be useful for VCF manipulation when trying to discover disease-causing variants in sequencing data. Although more biologists are taking to the commandline many do not have the time or inclination to really get to grips with the more obtuse programs used in the field of bioinformatics. The aim of this project is to provide conceptually simple programs that perform common useful tasks. 
+This project comprises a set of programs that may be useful for VCF manipulation when trying to discover disease-causing variants in sequencing data. Although more biologists are taking to the commandline many do not have the time or inclination to really get to grips with the more obtuse programs used in the field of bioinformatics. The aim of this project is to provide conceptually simple programs that perform common useful tasks. 
 
-Usage examples are included in the examples.md markdown documents which can also be viewed at https://github.com/gantzgraf/vcfhacks/blob/master/examples.md or https://github.com/gantzgraf/vcfhacks/blob/master/examples_bin.md
+This readme refers to the binary release available for 64-bit Linux and Mac OS X systems. The binary release is designed so that users may run these programs without having to worry about installing the various perl modules required to run the perl scripts. 
 
-## INSTALLATION
+Usage examples are included in the attached examples.md markdown document which can also be viewed at https://github.com/gantzgraf/vcfhacks/blob/master/examples_bin.md
 
-You may either download these programs as perl scripts or as precompiled binaries for 64-bit Linux or Mac OS X. The binary executables are provided for ease so that users do not have to install the various perl modules required by these scripts. Users that are comfortable installing perl modules may prefer to use the scripts, which are considerably smaller than the binaries and do not suffer the slight lag in startup. 
+__INSTALLATION__
 
-### BINARIES
-
-These programs are all command line utilities. To run these programs you simply need to download and extract the tar.bz2 file for your plaform (currently only 64 bit Linux Mac OS X systems are supported) and change into the newly created vcfhacks_binaries directory. Each program can be run from this directory using the command ***./[program_name]***  (e.g. ***./annotateSnps***) or you may prefer to move the programs somewhere in your $PATH or add the new vcfhacks_binaries to your $PATH to be able to run these programs from any directory. You may need to make the programs executable before they will run (e.g. by running 'chmod +x *' from within your vcfhacks_binaries directory). 
-
-### SCRIPTS
-
-Unzip the downloaded file and ensure you keep the .pl scripts in the same directory as the 'lib' folder containing .pm module files.  The lib folder also contains two Variant Effect Predictor (VEP) plugin modules (SpliceConsensus.pm and SpliceConsensusFilter.pm) which should be installed in your VEP cache 'Plugins' folder if you want to use them. The SpliceConsensus.pm annotations can be used for variant filtering purposes in getFunctionalVariantsVep.pl and findBiallelicVep.pl.
-
-To run the scripts either add the enclosing directory to your PATH and make sure the scripts are executable (e.g. 'chmod +x vcfhacks/*.pl') or run each script using 'perl [location of script]' followed by the required arguments. Help information is available for most scripts by running the script with either '--help' or '--manual' options. 
-
-If you want to use scripts to search bgzip compressed VCFs or use rankOnCaddScore.pl you will also need to install the Tabix.pm perl module by Heng Li. Download pre-1.0 version of tabix from github (https://github.com/samtools/tabix) or clone the git repository (git clone https://github.com/samtools/tabix.git). If you downloaded the zipped version unzip to create the tabix directory. Next, cd into the new tabix directory and run 'make', cd into the 'perl' subdirectory, run 'perl Makefile.PL' and 'make test'. If tests succeed run '[sudo] make install' to complete Tabix.pm installation. If you get the error 'Subroutine Tabix::tabix_open redefined...' this is harmless and can be removed by replacing: 
-
-```
-    require XSLoader;
-    XSLoader::load('Tabix', $VERSION);
-```
-
-...with... 
-
-```
-    {
-    no warnings 'redefine';
-    require XSLoader;
-    XSLoader::load('Tabix', $VERSION);
-    }
-```
-
-...in Tabix.pm (and reinstalling). 
-
-Other perl modules required by these scripts are installable via CPAN - perl will complain that they are not available in "@INC" when you attempt to run these programs if they are not on your system. Please see http://www.cpan.org/modules/INSTALL.html for instructions on how to install these modules.
-
+These programs are all command line utilities. To run these programs you simply need to download and extract the tar.bz2 file for your plaform (currently only 64 bit Linux Mac OS X systems are supported) and change into the newly created vcfhacks_binaries directory. Each program can be run from this directory using the command ***./[program_name]***  (e.g. ***./annotateSnps***) or you may prefer to move the programs somewhere in your $PATH or add the new vcfhacks_binaries to your $PATH to be able to run these programs from any directory. 
 
 __UPDATE__
 
