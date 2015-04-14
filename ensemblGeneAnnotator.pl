@@ -1,131 +1,5 @@
 #!/usr/bin/perl 
 
-=head1 NAME
-
-ensemblGeneAnnotator.pl - add gene annotations to a VCF file annotated by Ensembl's variant_effect_predictor.pl
-
-=head1 SYNOPSIS
-
-        ensemblGeneAnnotator.pl -i [VEP annotated vcf file] -d [directory containing reference files] [options]
-        ensemblGeneAnnotator.pl -h (display help message)
-        ensemblGeneAnnotator.pl -m (display manual page)
-
-=cut
-
-=head1 ARGUMENTS
-
-=over 8
-
-=item B<-i    --input>
-
-Input VCF file annotated with variant_effect_predictor.pl or snpEff. Required.
-
-=item B<-o    --output>
-
-Output file name.
-
-=item B<-d    --directory>
-
-Directory containing reference files. Will look for reference files in the same directory as this program if not supplied.
-
-=item B<-s    --snpEff>
-
-Use SnpEff annotations instead of VEP annotations to identify genes. You must have used the -geneId flag when annotating with snpEff for this script to work.
-
-=item B<-f    --functional>
-
-Use this flag to only annotate standard 'functional' variant classes (transcript_ablation, splice_donor_variant, splice_acceptor_variant, splice_region_variant, stop_gained, frameshift_variant, stop_lost, initiator_codon_variant, inframe_insertion, inframe_deletion, missense_variant, transcript_amplification, TFBS_ablation, TFBS_amplification, regulatory_region_ablation, regulatory_region_amplification). Prevents annotation of gene information for genes/transcripts that overlap a variant but are not affected in a way defined by one of these variant classes.
-
-=item B<-c    --classes>
-
-Use this to specify VEP/SnpEff variant classes to annotate. Gene information will only be annotated for genes affected by one of these variant classes. Overrides --functional option.
-
-=item B<-a    --additional_classes>
-
-Use this to specify additional VEP variant classes to annotate as well as those used by --functional.
-
-=item B<-g    --gene_annotations>
-
-List of gene annotations to include in output. By default all of the following classes are included:
-
-    ENSGENE_ID
-    ENTREZ_ID
-    SYMBOL
-    GO_ID
-    GO_DESCRIPTION
-    GENERIFS
-    SUMMARY
-    OMIM
-    MGI_PHENOTYPE
-
-Specify one or more of these to limit the annotations in your output to these classes only.
-
-=item B<-p    --progress>
-
-Show a progress bar.
-
-=item B<-P    --PREPARE>
-
-Sort and index reference files (e.g. if you've downloaded them manually).
-
-=item B<-D    --DOWNLOAD_NEW>
-
-Download and prepare reference files. Will download to directory specified by --directory argument.
-
-=item B<-R    --REPAIR>
-
-Download missing reference files only (e.g. after an interrupted --DOWNLOAD_NEW command). Will download to directory specified by --directory argument.
-
-=item B<-h    --help>
-
-Show help message.
-
-=item B<-m    --manual>
-
-Show manual page.
-
-
-=back 
-
-=cut
-
-=head1 EXAMPLES 
-
-        ensemblGeneAnnotator.pl -i vep_annotated.vcf -d ~/ensGeneAnnotatorDatabase -o vep_and_ensGene_annotated.vcf
-        #annotate vep_annotated.vcf file using database folder located at ~/ensGeneAnnotatorDatabase
-        
-        ensemblGeneAnnotator.pl -i vep_annotated.vcf -d ~/ensGeneAnnotatorDatabase -o vep_and_ensGene_annotated.vcf --functional
-        #as above but only considering genes which have at least one 'functional' variant consequence
-        
-        ensemblGeneAnnotator.pl -d ~/newEnsGeneAnnotatorDatabase -D
-        #download files and create database in ~/newEnsGeneAnnotatorDatabase folder
-
-        ensemblGeneAnnotator.pl -d ~/newEnsGeneAnnotatorDatabase -R
-        #replace missing files in ~/newEnsGeneAnnotatorDatabase 
-
-
-=head1 DESCRIPTION
-
-This script reads VCF lines annotated with Ensembl's variant_effect_predictor.pl, identifies the corresponding human Entrez Gene ID for each ensembl gene and annotates information from Gene RIFS, Gene Ontology, NCBI summaries, OMIM and MGI phenotypes to each variants INFO field. In order to conform to VCF format, text in annotations has spaces replaced with underscores, semi-colons replaced with the ^ symbol and commas replaced with the ` symbol. Multiple values for annotations are separated with two colons ("::"). This is designed to allow for conversion of fields to readable text with a simple regex when attempting to report output in a human readable format.
-
-This program must create a local database of gene annotations to search, which is a time consuming process but only needs to be done occasionally, when you wish to update the stored annotations. Alternatively, a prebuilt database may be downloaded from http://sourceforge.net/projects/vcfhacks/files/ensAnnotatorDatabase/ 
-
-=cut
-
-=head1 AUTHOR
-
-David A. Parry
-University of Leeds
-
-
-=head1 COPYRIGHT AND LICENSE
-
-Copyright 2013, 2014  David A. Parry
-
-This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with this program. If not, see <http://www.gnu.org/licenses/>.
-
-=cut
-
 use warnings;
 use strict;
 use Config;
@@ -180,9 +54,9 @@ GetOptions(
     "help"                      => \$help,
     "manual"                    => \$man
 ) or pod2usage( -message => "Syntax error", -exitval => 2 );
-pod2usage( -verbose => 2 ) if $man;
-pod2usage( -verbose => 1 ) if $help;
-pod2usage( -exitval => 2, -message => "--input is required" )
+pod2usage( -verbose => 2, ) if $man;
+pod2usage( -verbose => 1, ) if $help;
+pod2usage( -exitval => 2, -message => "--input is required", )
   if not $vcf
   and not $downdb
   and not $prep
@@ -1202,10 +1076,12 @@ sub prepare_database {
         sort_and_index_gene_files( "$file_dir/$file_name", $file->{col},
             \$db_percent, $increment, $progressbar, $next_update,
             $file->{delimiter} );
-        unlink "$file.bkup"
-          or display_error_and_continue(
-            "Can't delete backup file \"$file.bkup\"",
-            "Check permissions - it is safe to manually delete this file now" );
+        if (-e "$file.bkup"){
+            unlink "$file.bkup"
+                or display_error_and_continue(
+                "Can't delete backup file \"$file.bkup\"",
+                "Check permissions - it is safe to manually delete this file now" );
+        }
     }
     #$progressbar->update(100);
     my $time = strftime( "%H:%M:%S", localtime );
@@ -1625,4 +1501,131 @@ sub download_gene2xml {
       or display_error_and_exit( "Could not make $output executable", "$!" );
     chdir $pwd;
 }
+
+
+=head1 NAME
+
+ensemblGeneAnnotator.pl - add gene annotations to a VCF file annotated by Ensembl's variant_effect_predictor.pl
+
+=head1 SYNOPSIS
+
+        ensemblGeneAnnotator.pl -i [VEP annotated vcf file] -d [directory containing reference files] [options]
+        ensemblGeneAnnotator.pl -h (display help message)
+        ensemblGeneAnnotator.pl -m (display manual page)
+
+=cut
+
+=head1 ARGUMENTS
+
+=over 8
+
+=item B<-i    --input>
+
+Input VCF file annotated with variant_effect_predictor.pl or snpEff. Required.
+
+=item B<-o    --output>
+
+Output file name.
+
+=item B<-d    --directory>
+
+Directory containing reference files. Will look for reference files in the same directory as this program if not supplied.
+
+=item B<-s    --snpEff>
+
+Use SnpEff annotations instead of VEP annotations to identify genes. You must have used the -geneId flag when annotating with snpEff for this script to work.
+
+=item B<-f    --functional>
+
+Use this flag to only annotate standard 'functional' variant classes (transcript_ablation, splice_donor_variant, splice_acceptor_variant, splice_region_variant, stop_gained, frameshift_variant, stop_lost, initiator_codon_variant, inframe_insertion, inframe_deletion, missense_variant, transcript_amplification, TFBS_ablation, TFBS_amplification, regulatory_region_ablation, regulatory_region_amplification). Prevents annotation of gene information for genes/transcripts that overlap a variant but are not affected in a way defined by one of these variant classes.
+
+=item B<-c    --classes>
+
+Use this to specify VEP/SnpEff variant classes to annotate. Gene information will only be annotated for genes affected by one of these variant classes. Overrides --functional option.
+
+=item B<-a    --additional_classes>
+
+Use this to specify additional VEP variant classes to annotate as well as those used by --functional.
+
+=item B<-g    --gene_annotations>
+
+List of gene annotations to include in output. By default all of the following classes are included:
+
+    ENSGENE_ID
+    ENTREZ_ID
+    SYMBOL
+    GO_ID
+    GO_DESCRIPTION
+    GENERIFS
+    SUMMARY
+    OMIM
+    MGI_PHENOTYPE
+
+Specify one or more of these to limit the annotations in your output to these classes only.
+
+=item B<-p    --progress>
+
+Show a progress bar.
+
+=item B<-P    --PREPARE>
+
+Sort and index reference files (e.g. if you've downloaded them manually).
+
+=item B<-D    --DOWNLOAD_NEW>
+
+Download and prepare reference files. Will download to directory specified by --directory argument.
+
+=item B<-R    --REPAIR>
+
+Download missing reference files only (e.g. after an interrupted --DOWNLOAD_NEW command). Will download to directory specified by --directory argument.
+
+=item B<-h    --help>
+
+Show help message.
+
+=item B<-m    --manual>
+
+Show manual page.
+
+
+=back 
+
+=cut
+
+=head1 EXAMPLES 
+
+        ensemblGeneAnnotator.pl -i vep_annotated.vcf -d ~/ensGeneAnnotatorDatabase -o vep_and_ensGene_annotated.vcf
+        #annotate vep_annotated.vcf file using database folder located at ~/ensGeneAnnotatorDatabase
+        
+        ensemblGeneAnnotator.pl -i vep_annotated.vcf -d ~/ensGeneAnnotatorDatabase -o vep_and_ensGene_annotated.vcf --functional
+        #as above but only considering genes which have at least one 'functional' variant consequence
+        
+        ensemblGeneAnnotator.pl -d ~/newEnsGeneAnnotatorDatabase -D
+        #download files and create database in ~/newEnsGeneAnnotatorDatabase folder
+
+        ensemblGeneAnnotator.pl -d ~/newEnsGeneAnnotatorDatabase -R
+        #replace missing files in ~/newEnsGeneAnnotatorDatabase 
+
+
+=head1 DESCRIPTION
+
+This script reads VCF lines annotated with Ensembl's variant_effect_predictor.pl, identifies the corresponding human Entrez Gene ID for each ensembl gene and annotates information from Gene RIFS, Gene Ontology, NCBI summaries, OMIM and MGI phenotypes to each variants INFO field. In order to conform to VCF format, text in annotations has spaces replaced with underscores, semi-colons replaced with the ^ symbol and commas replaced with the ` symbol. Multiple values for annotations are separated with two colons ("::"). This is designed to allow for conversion of fields to readable text with a simple regex when attempting to report output in a human readable format.
+
+This program must create a local database of gene annotations to search, which is a time consuming process but only needs to be done occasionally, when you wish to update the stored annotations. Alternatively, a prebuilt database may be downloaded from http://sourceforge.net/projects/vcfhacks/files/ensAnnotatorDatabase/ 
+
+=cut
+
+=head1 AUTHOR
+
+David A. Parry
+University of Leeds
+
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2013, 2014  David A. Parry
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+=cut
 
