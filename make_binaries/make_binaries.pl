@@ -2,6 +2,7 @@
 use strict;
 use warnings;
 use File::Copy::Recursive qw(rcopy);
+use File::Path qw (remove_tree);
 use FindBin qw($Bin);
 
 my @needs_tabix = qw (
@@ -13,6 +14,11 @@ my @needs_tabix = qw (
         rankOnCaddScore.pl
         sampleCallsToInfo.pl
 );
+my @needs_sort_external = qw (
+        sortVcf.pl
+        rankOnCaddScore.pl
+);
+
 my $dir = "$Bin/../";
 opendir (my $DIR, $dir) or die "Cannot read current directory $dir: $!\n";
 my @files = readdir($DIR); 
@@ -56,6 +62,9 @@ foreach my $f (@files){
         if (grep {$_ eq $f} @needs_tabix){
             $pp_cmd .= " -M Tabix";
         }
+        if (grep {$_ eq $f} @needs_sort_external){
+            $pp_cmd .= " -M Sort::External";
+        }
         print STDERR "Making binary with command: $pp_cmd\n";
         system($pp_cmd); 
         if ($?){
@@ -67,4 +76,18 @@ foreach my $f (@files){
         chdir("..");
     }
 }
- 
+print STDERR "Cleaning up $bin_dir...\n";
+chdir($bin_dir);
+foreach my $f (@files){
+    next if $f =~ /^\./;
+    if ($f !~ /\.pl$/){
+        if ( -d $f){
+            print STDERR "Recursively removing directory $f.\n";
+            remove_tree($f, {verbose => 1} );
+        }else{
+            if (-e $f){
+                unlink $f;
+            }
+        }
+    }
+}
