@@ -10,6 +10,7 @@ my @needs_tabix = qw (
         filterOnSample.pl
         filterVcfOnVcf.pl
         getVariantsByLocation.pl
+        rankOnCaddScore.pl
         sampleCallsToInfo.pl
 );
 my $dir = "$Bin/../";
@@ -30,6 +31,7 @@ foreach my $f (@files){
         open (my $OUT, ">$out") or die "Can't open $out for writing: $!\n";
         while (my $line = <$IN>){
             $line =~ s/$f/$exe/g; 
+            $line =~ s/pod2usage\s*\(/pod2usage(noperldoc => 1, /;
             print $OUT $line;
         }
         close $IN;
@@ -46,7 +48,11 @@ foreach my $f (@files){
     if ($f =~ /\.pl$/){
         (my $exe = $f) =~ s/\.pl$//;
         chdir($bin_dir);
-        my $pp_cmd = "pp -c $f -o $exe";
+        my $pp = "pp";
+        if ($^O eq 'darwin'){
+            $pp = "pp5.16";
+        }
+        my $pp_cmd = "$pp -c $f -o $exe";
         if (grep {$_ eq $f} @needs_tabix){
             $pp_cmd .= " -M Tabix";
         }
@@ -57,6 +63,7 @@ foreach my $f (@files){
         }else{
             print STDERR "Done.\n"; 
         }
+        unlink $f or warn "Error removing $f from $bin_dir: $!\n"; 
         chdir("..");
     }
 }
