@@ -63,7 +63,7 @@ foreach my $f (@files){
             $pp_cmd .= " -M Tabix";
         }
         if (grep {$_ eq $f} @needs_sort_external){
-            $pp_cmd .= " -M Sort::External";
+            $pp_cmd .= " -M Sort::External --lib /opt/local/lib/perl5/site_perl/5.16.3/darwin-thread-multi-2level/";
         }
         print STDERR "Making binary with command: $pp_cmd\n";
         system($pp_cmd); 
@@ -86,7 +86,8 @@ foreach my $f (@files){
             remove_tree($f, {verbose => 1} );
         }else{
             if (-e $f){
-                unlink $f;
+                print STDERR "Removing file $f.\n";
+                unlink $f or warn "ERROR removing $f: $!\n";
             }
         }
     }
