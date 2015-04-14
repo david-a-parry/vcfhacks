@@ -858,6 +858,7 @@ sub checkVarMatches {
 annotateSnps.pl - annotate and optionally filter SNPs from a VCF file 
 
 =head1 SYNOPSIS
+
         annotateSnps.pl -i [vcf file] -d [reference SNP vcf file] [options]
         annotateSnps.pl -h (display help message)
         annotateSnps.pl -m (display manual page)
