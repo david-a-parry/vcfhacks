@@ -2234,19 +2234,11 @@ sub sortVcf{
             print $SORTOUT join("\t", @$s) ;
         }
     }else{
-        my $vcfsort;
+        my $sortex;
         if (%contigs){
-            $vcfsort = 
-                sub {
-                    (my $a_chrom = substr($Sort::External::a, 0, 25)) =~ s/\s+$//;
-                    (my $b_chrom = substr($Sort::External::b, 0, 25)) =~ s/\s+$//;
-                    (my $a_pos = substr($Sort::External::a, 25, 4)) ;
-                    (my $b_pos = substr($Sort::External::b, 25, 4)) ;
-                    $contigs{$a_chrom} <=> $contigs{$b_chrom} ||
-                    $a_pos cmp $b_pos;
-                };
+            $sortex = Sort::External->new(mem_threshold => 1024**2 * 16);
         }else{
-            $vcfsort = 
+            my $vcfsort = 
                 sub {
                     (my $a_chrom = substr($Sort::External::a, 0, 25)) =~ s/\s+$//;
                     (my $b_chrom = substr($Sort::External::b, 0, 25)) =~ s/\s+$//;
@@ -2256,9 +2248,9 @@ sub sortVcf{
                     $a_pos cmp $b_pos;
                 };
 
+            $sortex = Sort::External->new(mem_threshold => 1024**2 * 16, 
+                                          sortsub => $vcfsort);
         }
-        my $sortex = Sort::External->new(mem_threshold => 1024**2 * 24, 
-                                        sortsub => $vcfsort);
         my @feeds = ();
         my $n = 0;
         my $FH = _openFileHandle($args{vcf});
@@ -2268,13 +2260,17 @@ sub sortVcf{
             my @split = split("\t", $line);
             my $chrom = $split[$vcf_fields{CHROM}];
             my $pos = $split[$vcf_fields{POS}];
+            my $s_chrom; 
             if (%contigs){
                 croak "Contig '$chrom' is not present in user provided ".
                     "contig order " if not exists $contigs{$chrom};
-            }elsif (not @dict){
-                $temp_dict{$chrom} = undef;
+                $s_chrom = pack("N", $contigs{$chrom}); 
+            }else{
+                $s_chrom = sprintf("%-25s", $chrom); 
+                if (not @dict){
+                    $temp_dict{$chrom} = undef;
+                }
             }
-            my $s_chrom = sprintf("%-25s", $chrom); 
             my $p_pos = pack("N", $pos); 
             push @feeds, "$s_chrom$p_pos$line";
             if (@feeds > 49999){
@@ -2296,7 +2292,11 @@ sub sortVcf{
         @head = _replaceHeaderContigs(\@head, \@dict) unless $do_not_replace_header;
         print $SORTOUT join("\n", @head) ."\n";
         while ( defined( $_ = $sortex->fetch ) ) {
-            print $SORTOUT  substr($_, 29);
+            if (%contigs){
+                print $SORTOUT  substr($_, 8);
+            }else{
+                print $SORTOUT  substr($_, 29);
+            }
             $n++;
             if (not $n % 50000){
                 print STDERR "Printed $n variants to output...\n";
