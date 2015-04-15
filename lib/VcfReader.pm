@@ -2238,18 +2238,22 @@ sub sortVcf{
         if (%contigs){
             $vcfsort = 
                 sub {
-                    my @a_split = split("\t", $Sort::External::a);
-                    my @b_split = split("\t", $Sort::External::b);
-                    $contigs{ $a_split[$vcf_fields{CHROM} ]} <=> $contigs{ $b_split[$vcf_fields{CHROM}] } || 
-                    $a_split[ $vcf_fields{POS} ] <=> $b_split[ $vcf_fields{POS} ]
+                    (my $a_chrom = substr($Sort::External::a, 0, 25)) =~ s/\s+$//;
+                    (my $b_chrom = substr($Sort::External::b, 0, 25)) =~ s/\s+$//;
+                    (my $a_pos = substr($Sort::External::a, 25, 4)) ;
+                    (my $b_pos = substr($Sort::External::b, 25, 4)) ;
+                    $contigs{$a_chrom} <=> $contigs{$b_chrom} ||
+                    $a_pos cmp $b_pos;
                 };
         }else{
             $vcfsort = 
                 sub {
-                    my @a_split = split("\t", $Sort::External::a);
-                    my @b_split = split("\t", $Sort::External::b);
-                    _byContigsManual($a_split[ $vcf_fields{CHROM} ] , $b_split [ $vcf_fields{CHROM} ] ) ||
-                    $a_split[ $vcf_fields{POS} ] <=> $b_split[ $vcf_fields{POS} ]
+                    (my $a_chrom = substr($Sort::External::a, 0, 25)) =~ s/\s+$//;
+                    (my $b_chrom = substr($Sort::External::b, 0, 25)) =~ s/\s+$//;
+                    (my $a_pos = substr($Sort::External::a, 25, 4)) ;
+                    (my $b_pos = substr($Sort::External::b, 25, 4)) ;
+                    _byContigsManual($a_chrom, $b_chrom) ||
+                    $a_pos cmp $b_pos;
                 };
 
         }
@@ -2270,8 +2274,10 @@ sub sortVcf{
             }elsif (not @dict){
                 $temp_dict{$chrom} = undef;
             }
-            push @feeds, $line;
-            if (@feeds > 99999){
+            my $s_chrom = sprintf("%-25s", $chrom); 
+            my $p_pos = pack("N", $pos); 
+            push @feeds, "$s_chrom$p_pos$line";
+            if (@feeds > 49999){
                 $sortex->feed(@feeds);
                 @feeds = ();
                 print STDERR "Fed $n variants to sort...\n";
@@ -2290,9 +2296,9 @@ sub sortVcf{
         @head = _replaceHeaderContigs(\@head, \@dict) unless $do_not_replace_header;
         print $SORTOUT join("\n", @head) ."\n";
         while ( defined( $_ = $sortex->fetch ) ) {
-            print $SORTOUT  $_;
+            print $SORTOUT  substr($_, 29);
             $n++;
-            if (not $n % 100000){
+            if (not $n % 50000){
                 print STDERR "Printed $n variants to output...\n";
             }
         }
