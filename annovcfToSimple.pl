@@ -211,7 +211,7 @@ GetOptions($config,
     'contains_variant' => \$summarise_samples_with_variants,
     'pedigree=s{,}' => \@peds,
     'manual' => \$man,
-    'help' => \$help) or die "Syntax error.\n";
+    'help' => \$help) or pod2usage(-exitval => 2, -message => "Syntax error.\n");
 pod2usage( -verbose => 2 ) if $man;
 pod2usage( -verbose => 1 ) if $help;
 pod2usage( -exitval => 2, -message => "--input is required" ) if (not $vcf);

@@ -13,7 +13,8 @@ my $quality;
 my $out;
 my $get_sample_names;
 my $exclude_non_variants;
-GetOptions("exclude_non_variants" => \$exclude_non_variants, "ouput=s" => \$out, "input=s" => \$vcf, "depth=i" => \$depth, "quality=i" => \$quality, "help" => \$help, "retrieve_samples" => \$get_sample_names);
+GetOptions("exclude_non_variants" => \$exclude_non_variants, "ouput=s" => \$out, "input=s" => \$vcf, "depth=i" => \$depth, "quality=i" => \$quality, "help" => \$help, "retrieve_samples" => \$get_sample_names)
+    or usage("Syntax error");
 usage($help) if ($help);
 usage() unless($vcf);
 open (my $IN, $vcf) || die "can't open $vcf:$!\n";
