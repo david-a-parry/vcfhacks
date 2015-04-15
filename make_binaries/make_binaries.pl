@@ -63,7 +63,11 @@ foreach my $f (@files){
             $pp_cmd .= " -M Tabix";
         }
         if (grep {$_ eq $f} @needs_sort_external){
-            $pp_cmd .= " -M Sort::External --lib /opt/local/lib/perl5/site_perl/5.16.3/darwin-thread-multi-2level/";
+            $pp_cmd .= " -M Sort::External";
+            if ($^O eq 'darwin'){
+                $pp_cmd .= " --lib /opt/local/lib/perl5/site_perl/5.16.3/darwin-thread-multi-2level/";
+            
+            }
         }
         print STDERR "Making binary with command: $pp_cmd\n";
         system($pp_cmd); 
