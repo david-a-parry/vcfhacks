@@ -90,9 +90,14 @@ foreach my $f (@files){
             remove_tree($f, {verbose => 1} );
         }else{
             if (-e $f){
+                next if ($f eq 'examples_bin.md' or $f eq 'readme_binaries.md');
                 print STDERR "Removing file $f.\n";
                 unlink $f or warn "ERROR removing $f: $!\n";
             }
         }
     }
+}
+if (-e 'examples_bin.md'){
+    rename 'examples_bin.md', 'examples.md';
+    rename 'readme_binaries.md', 'readme.md';
 }
