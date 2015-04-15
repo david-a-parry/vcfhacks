@@ -2238,14 +2238,18 @@ sub sortVcf{
         if (%contigs){
             $vcfsort = 
                 sub {
-                    $contigs{ $Sort::External::a->[$vcf_fields{CHROM}]} <=> $contigs{ $Sort::External::b->[$vcf_fields{CHROM}]} || 
-                    $Sort::External::a->[$vcf_fields{POS}] <=> $Sort::External::b->[$vcf_fields{POS}]
+                    my @a_split = split("\t", $Sort::External::a);
+                    my @b_split = split("\t", $Sort::External::b);
+                    $contigs{ $a_split[$vcf_fields{CHROM} ]} <=> $contigs{ $b_split[$vcf_fields{CHROM}] } || 
+                    $a_split[ $vcf_fields{POS} ] <=> $b_split[ $vcf_fields{POS} ]
                 };
         }else{
             $vcfsort = 
                 sub {
-                    _byContigsManual($Sort::External::a->[$vcf_fields{CHROM}],  $Sort::External::b->[$vcf_fields{CHROM}]) || 
-                    $Sort::External::a->[$vcf_fields{POS}] <=> $Sort::External::b->[$vcf_fields{POS}]
+                    my @a_split = split("\t", $Sort::External::a);
+                    my @b_split = split("\t", $Sort::External::b);
+                    _byContigsManual($a_split[ $vcf_fields{CHROM} ] , $b_split [ $vcf_fields{CHROM} ] ) ||
+                    $a_split[ $vcf_fields{POS} ] <=> $b_split[ $vcf_fields{POS} ]
                 };
 
         }
@@ -2259,13 +2263,14 @@ sub sortVcf{
             $n++;
             my @split = split("\t", $line);
             my $chrom = $split[$vcf_fields{CHROM}];
+            my $pos = $split[$vcf_fields{POS}];
             if (%contigs){
                 croak "Contig '$chrom' is not present in user provided ".
                     "contig order " if not exists $contigs{$chrom};
             }elsif (not @dict){
                 $temp_dict{$chrom} = undef;
             }
-            push @feeds, \@split;
+            push @feeds, $line;
             if (@feeds > 99999){
                 $sortex->feed(@feeds);
                 @feeds = ();
@@ -2285,7 +2290,7 @@ sub sortVcf{
         @head = _replaceHeaderContigs(\@head, \@dict) unless $do_not_replace_header;
         print $SORTOUT join("\n", @head) ."\n";
         while ( defined( $_ = $sortex->fetch ) ) {
-            print $SORTOUT join("\t", @$_);
+            print $SORTOUT  $_;
             $n++;
             if (not $n % 100000){
                 print STDERR "Printed $n variants to output...\n";
