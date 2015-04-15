@@ -39,7 +39,7 @@ pod2usage(-message => "--filter argument cannot be less than 0", exitval => 2) i
 
 my $sortex;
 if (not $opts{do_not_rank}){
-    if (-s $opts{input} > (50 * 1024)){#use Sort::External if file size bigger than 50 MB
+    if (-s $opts{input} > (1024**2 * 50)){#use Sort::External if file size bigger than 50 MB
         eval "use Sort::External; 1" or print STDERR "Sort::External module was not found - ".
             "will attempt to sort in memory. For huge files it is recommended to install Sort::External.\n";
         if (not $@){
