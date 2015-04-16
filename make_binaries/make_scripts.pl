@@ -43,7 +43,7 @@ foreach my $f (@files){
 }
 #we only make binaries now because we need to be sure that 
 #the libs folder has already been copied
-chddir("par") or die "$!";
+chdir("par") or die "$!";
 my $pp = "pp";
 if ($^O eq 'darwin'){
     $pp = "pp5.16";
@@ -71,7 +71,7 @@ chdir($out_dir);
 foreach my $f (@files){
     next if $f =~ /^\./;
     if ($f !~ /\.pl$/){
-        if ( -d $f and $f ne 'par'){
+        if ( -d $f and $f ne 'par' and $f ne 'vep_plugins'){
             print STDERR "Recursively removing directory $f.\n";
             remove_tree($f, {verbose => 1} );
         }else{

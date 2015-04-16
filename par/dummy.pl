@@ -20,15 +20,15 @@ use POSIX;
 use Parallel::ForkManager;
 use Pod::Usage;
 use Scalar::Util;
-use SortGenomicCoordinates;
 use Sys::CPU;
 use Tabix;
 use Term::ProgressBar;
-use lib 'lib';
+use lib '../lib';
 use TextToExcel;
 use VcfReader;
 use ParsePedfile;
 use ParseVCF;
 use DbnsfpVcfFilter;
+use SortGenomicCoordinates;
 
 print "All modules loaded successfully\n";

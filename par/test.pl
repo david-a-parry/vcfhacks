@@ -1,3 +1,5 @@
+use PAR;
+use lib 'vcfhacks_lib.par';
 use Bio::SeqIO::entrezgene; 
 use Sort::External; 
 use Config;
