@@ -767,7 +767,7 @@ In its simplest form this program will print specific variant classes from a VCF
                 regulatory_region_ablation
                 regulatory_region_amplification
 
-You can add extra classes using the --add option or specify a totally different set of classes using the --classes option. Options are also available to additionally filter on Polyphen/SIFT/Condel prediction scores, GMAF, canonical transcripts or gene lists as detailed above.  This program currently relies on an up to date version of my perl module ParseVCF.pm being present in the same directory as the script (you may prefer to add ParseVCF.pm to your perl library in which case you may remove the 'use FindBin;' and 'use lib "$FindBin::Bin/lib";' lines from the beginning of this script). 
+You can add extra classes using the --add option or specify a totally different set of classes using the --classes option. Options are also available to additionally filter on Polyphen/SIFT/Condel prediction scores, GMAF, canonical transcripts or gene lists as detailed above.  
 
 =head1 AUTHOR
 

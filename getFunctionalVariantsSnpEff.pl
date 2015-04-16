@@ -907,8 +907,6 @@ Options are also available to additionally filter on dbNSFP fields as detailed a
                 transcriptid: dbNSFP_Ensembl_transcriptid
 
 
-This program relies on an up to date version of my ParseVCF.pm and DbnsfpVcfFilter.pm perl modules being present in the same directory as the script. 
-
 =head1 AUTHOR
 
 David A. Parry
