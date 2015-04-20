@@ -308,10 +308,8 @@ LINE: while (my $line = $vcf_obj->readLine){
     my %vep_alleles = ();#hash of VEP alleles to VCF's ALT alleles
     my @alts = $vcf_obj->readAlleles(alt_alleles => 1);
     my $ref = $vcf_obj->getVariantField("REF");
-    foreach my $alt ( @alts ){
-        my $allele = $vcf_obj->altsToVepAllele(alt => $alt);
-        $vep_alleles{$allele} = $alt; #$vep{$allele} now corresponds to GT value 
-    }
+    my @v_all = $vcf_obj->altsToVepAllele( ref => $ref, alt => \@alts); 
+    @vep_alleles{ @v_all } = @alts;#$vep{$allele} now corresponds to GT value 
 
     #START FILTERING on CSQ fields
     #check whether canonical transcript

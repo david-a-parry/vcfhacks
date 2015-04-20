@@ -334,6 +334,7 @@ sub sortVariants{
     carp "sortVariants method called in void context ";
 }
 
+#returns a list of VEP style alleles in same order as alts passed to it
 sub altsToVepAllele{
     my ($self, %args) = @_;
     my @vep_alleles = ();
@@ -343,36 +344,54 @@ sub altsToVepAllele{
     }else{
         $ref = $self->getVariantField('REF');
     }
+    my @alts = ();
     if (not $args{alt}){
-        foreach my $alt ($self->readAlleles(alt_alleles => 1)){
-            push @vep_alleles, _altToVep($alt, $ref);
-        }
+        @alts = $self->readAlleles(alt_alleles => 1);
     }else{
         if (ref $args{alt} eq 'ARRAY'){
-            foreach my $alt (@{$args{allele}}){
-                push @vep_alleles, _altToVep($alt, $ref);
-            }
+            @alts = @{$args{alt}};
         }else{
-            return _altToVep($args{alt}, $ref) if defined wantarray;
+            push @alts, split(",", $args{alt}); 
         }
     }
+    @vep_alleles = _altToVep(\@alts, $ref);
     return @vep_alleles if defined wantarray;
     carp "altsToVepAllele called in void context. ";
 }
                 
 sub _altToVep{
-    my ($alt, $ref) = @_;
-    if (length($alt) == length($ref)){
-        return $alt;
-    }elsif(length($alt) > length($ref)){#insertion - VEP trims first base
-       return substr($alt, 1);
-    }else{#deletion - VEP trims first base or gives '-' if ALT is only 1 nt long
-        if (length($alt) > 1){
-            return substr($alt, 1);
+    my ($alt_array, $ref) = @_;
+    my @vep_alleles = ();
+    my $is_snv_or_mnv = 0;
+    my $is_indel = 0; 
+    foreach my $alt (@$alt_array){
+        if (length($alt) == length($ref)){
+            $is_snv_or_mnv++;
         }else{
-            return '-';
+            $is_indel++;
         }
     }
+    if ($is_snv_or_mnv and $is_indel){
+        #in this situation VEP does not trim any variant alleles
+        foreach my $alt (@$alt_array){
+            push @vep_alleles, $alt;
+        }
+    }else{
+        foreach my $alt (@$alt_array){
+            if (length($alt) == length($ref)){
+                push @vep_alleles,  $alt;
+            }elsif(length($alt) > length($ref)){#insertion - VEP trims first base
+                push @vep_alleles,  substr($alt, 1);
+            }else{#deletion - VEP trims first base or gives '-' if ALT is only 1 nt long
+                if (length($alt) > 1){
+                    push @vep_alleles,  substr($alt, 1);
+                }else{
+                    push @vep_alleles,  '-';
+                }
+            }
+        }
+    }
+    return @vep_alleles;
 }
 
 sub readVepHeader{

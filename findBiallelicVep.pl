@@ -1294,42 +1294,36 @@ sub create_var_hash {
 
     #(Allele Gene Feature Feature_type Consequence HGNC);
     my $i = 0;   #count alleles as 1-based list to correspond to GT field in VCF
+    my @v_all = $vcf_obj->altsToVepAllele( ref => $ref, alt => \@alts );
+    my %vep_alleles = ();
+    @vep_alleles{@alts} = @v_all; 
     foreach my $alt (@alts) {
         $i++;
-        my $vep_allele = $vcf_obj->altsToVepAllele( alt => $alt );
-        if ( uc($vep_allele) eq uc( $annotation->{allele} ) ) {
+        if ( uc($vep_alleles{$alt}) eq uc( $annotation->{allele} ) ) {
             $var_hash{"$coord-$i"}->{mutation} = $annotation;
             $var_hash{"$coord-$i"}->{vcf_line} = $vcf_obj->get_currentLine;
-        }elsif($annotation->{allele} eq 'insertion' and (length($alt) > length($ref))){
-            $var_hash{"$coord-$i"}->{mutation} = $annotation;
-            $var_hash{"$coord-$i"}->{vcf_line} = $vcf_obj->get_currentLine;
-        }elsif($annotation->{allele} eq 'deletion' and (length($alt) < length($ref))){
-            $var_hash{"$coord-$i"}->{mutation} = $annotation;
-            $var_hash{"$coord-$i"}->{vcf_line} = $vcf_obj->get_currentLine;
-        }else {
-            next;
-        }
-        foreach my $s (@$aff){
-            addSampleToVarHash
-            (
-                $s, 
-                $coord, 
-                $i,
-                $aff_genotype_quality,
-                \%var_hash,
-                $vcf_obj,
-            );
-        }
-        foreach my $s (@$un) {
-            addSampleToVarHash
-            (
-                $s, 
-                $coord, 
-                $i,
-                $unaff_genotype_quality,
-                \%var_hash,
-                $vcf_obj,
-            );
+            foreach my $s (@$aff){
+                addSampleToVarHash
+                (
+                    $s, 
+                    $coord, 
+                    $i,
+                    $aff_genotype_quality,
+                    \%var_hash,
+                    $vcf_obj,
+                );
+            }
+            foreach my $s (@$un) {
+                addSampleToVarHash
+                (
+                    $s, 
+                    $coord, 
+                    $i,
+                    $unaff_genotype_quality,
+                    \%var_hash,
+                    $vcf_obj,
+                );
+            }
         }
     }
     return %var_hash;

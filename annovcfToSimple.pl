@@ -726,10 +726,8 @@ sub get_vep_fields{
     my @vep_values = ();
     if ($config->{samples}){
         my @sample_alleles = $vcf_obj->getSampleActualGenotypes(multiple => $config->{samples}, return_alleles_only => 1);
-        foreach my $allele (@sample_alleles){
-            my $v_allele = $vcf_obj->altsToVepAllele(alt => $allele);
-            $vep_allele{$v_allele} = $allele;
-        }
+        my @v_alleles = $vcf_obj->altsToVepAllele(alt => \@sample_alleles);
+        @vep_allele{@v_alleles} = @sample_alleles;
      }
 ANNOT:  foreach my $annot (@csq){
         my @csq_values = ();
