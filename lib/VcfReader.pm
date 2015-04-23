@@ -2186,7 +2186,8 @@ sub sortVcf{
         }
     }
 
-    my @head = getHeader($args{vcf});
+    my @head = getMetaHeader($args{vcf});
+    my $column_header = VcfReader::getColumnHeader($args{vcf});
     my $SORTOUT;
     if (exists $args{output}){
         open ($SORTOUT,  ">$args{output}") or croak "Can't open file $args{output} for output of sortVcf: $! ";
@@ -2203,13 +2204,20 @@ sub sortVcf{
             next if $line =~ /^#/;
             my @split = split("\t", $line);
             my $chrom = $split[$vcf_fields{CHROM}];
+            my $pos = $split[$vcf_fields{POS}];
+            my $s_chrom; 
             if (%contigs){
                 croak "Contig '$chrom' is not present in user provided ".
                     "contig order " if not exists $contigs{$chrom};
-            }elsif (not @dict){
-                $temp_dict{$chrom} = undef;
+                $s_chrom = pack("N", $contigs{$chrom}); 
+            }else{
+                $s_chrom = sprintf("%-25s", $chrom); 
+                if (not @dict){
+                    $temp_dict{$chrom} = undef;
+                }
             }
-            push @sort, \@split;
+            my $p_pos = pack("N", $pos); 
+            push @sort, "$s_chrom$p_pos$line";
         }
         close $FH;
         if (not @dict){
@@ -2219,19 +2227,27 @@ sub sortVcf{
         print STDERR "Performing sort...\n";
 
         if (%contigs){
-            @sort = sort {$contigs{$a->[$vcf_fields{CHROM}]} <=> $contigs{$b->[$vcf_fields{CHROM}]} || 
-                        $a->[$vcf_fields{POS}] <=> $b->[$vcf_fields{POS}]
-                    } @sort;
+            @sort = sort @sort;
         }else{
-            @sort = sort { _byContigsManual($a->[$vcf_fields{CHROM}], $b->[$vcf_fields{CHROM}]) || 
-                           $a->[$vcf_fields{POS}] <=> $b->[$vcf_fields{POS}]
-                        } @sort;
+            @sort = sort {
+                (my $a_chrom = substr($a, 0, 25)) =~ s/\s+$//;
+                (my $b_chrom = substr($b, 0, 25)) =~ s/\s+$//;
+                (my $a_pos = substr($a, 25, 4)) ;
+                (my $b_pos = substr($b, 25, 4)) ;
+                _byContigsManual($a_chrom, $b_chrom) ||
+                $a_pos cmp $b_pos;
+            } @sort;
         }
         print STDERR "Printing output...";
         
         print $SORTOUT join("\n", @head) ."\n";
+        print $SORTOUT "$column_header\n";
         foreach my $s (@sort){
-            print $SORTOUT join("\t", @$s) ;
+            if (%contigs){
+                print $SORTOUT  substr($s, 8);
+            }else{
+                print $SORTOUT  substr($s, 29);
+            }
         }
     }else{
         my $sortex;
@@ -2286,11 +2302,12 @@ sub sortVcf{
         $sortex->feed(@feeds) if @feeds;
         print STDERR "Fed $n variants to sort...\n";
         my $total = $n;
-        print STDERR "Sorting and writing output...\n";
+        print STDERR "Finishing sort and writing output...\n";
         $sortex->finish; 
         $n = 0;
         @head = _replaceHeaderContigs(\@head, \@dict) unless $do_not_replace_header;
         print $SORTOUT join("\n", @head) ."\n";
+        print $SORTOUT "$column_header\n";
         while ( defined( $_ = $sortex->fetch ) ) {
             if (%contigs){
                 print $SORTOUT  substr($_, 8);
@@ -2306,7 +2323,7 @@ sub sortVcf{
     if (exists $args{output}){
         close $SORTOUT or croak "Couldn't finish writing to sort output file $args{output}: $!\n" ;
     }
-    print STDERR " Done.\n";
+    print STDERR "Done.\n";
     return $args{output} if defined wantarray
 }
 
