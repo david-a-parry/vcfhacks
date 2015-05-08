@@ -12,6 +12,17 @@ These programs are all command line utilities. To run these programs you simply 
 
 __UPDATE__
 
+_VERSION 0.1.17:_
+
+08/05/14
+
+-fixed bug with handling of VEP output where indels alleles are called at the same site as SNV/MNV alleles. 
+
+-improved efficiency of sorting operations and fixed bug with Sort::External methods
+
+-fixed an error with the --gene_id_mode option in getFunctionalVariantsSnpEff.pl
+
+
 _VERSION 0.1.16:_
 
 31/03/15
