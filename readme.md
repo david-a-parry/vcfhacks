@@ -345,10 +345,6 @@ _VERSION 0.1.3:_
 -Updated location of HMD_human5.rpt reference file for ensemblGeneAnnotator.pl.  Bio::SeqIO::entrezgene no longer parses all entrez gene asn.1 records correctly for creating the database - bug reported but an acceptable workaround needed so it is recommended to only use existing databases at this time.
 
 
-__CODE__
-
-These scripts were written __David A. Parry__, a geneticist/molecular biologist at the University of Leeds.  These were written and modified over a period of self-tutelage in which my programming styles/skills have been changeable so anyone browsing code may see varying states of readability and documentation. This is an issue I hope to tidy up over time. 
-
 __CREDIT__
 
 These scripts were written __David A. Parry__, a geneticist/molecular biologist at the University of Leeds.
