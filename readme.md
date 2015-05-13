@@ -359,4 +359,3 @@ These programs are free software: you can redistribute them and/or modify them u
 
 
 
-__Thanks!__
