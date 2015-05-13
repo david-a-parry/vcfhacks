@@ -353,7 +353,7 @@ __CREDIT__
 
 These scripts were written __David A. Parry__, a geneticist/molecular biologist at the University of Leeds.
 
-__If you find these programs useful and use them for a paper__ ***please cite the URL <https://sourceforge.net/projects/vcfhacks/> *** 
+__If you find these programs useful and use them for a paper__ ***please cite the URL <https://github.com/gantzgraf/vcfhacks> *** 
 
 __COPYRIGHT AND LICENSE__
 
