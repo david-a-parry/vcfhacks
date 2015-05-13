@@ -335,6 +335,9 @@ if (defined $config->{vep}){
         @{$config->{fields}} = grep {! /^default$/i } @{$config->{fields}};
         unshift @{$config->{fields}}, getDefaultVepFields($vep_header);
     }
+    if (not grep {/consequence/i} @{$config->{fields}} ){
+        push @{$config->{fields}}, 'consequence';
+    }
     @fields = map { lc($_) } @{$config->{fields}} if defined $config->{fields};
     my %seen = ();
     @fields = grep {! $seen{$_}++ } @fields;
