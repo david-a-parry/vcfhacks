@@ -305,11 +305,6 @@ if ($splice_consensus) {
 
 print STDERR "Initializing VCF input ($vcf)...\n";
 my $vcf_obj = ParseVCF->new( file => $vcf );
-print STDERR "Checking VCF is sorted...\n";
-if ( not $vcf_obj->checkCoordinateSorted() ) {
-    die
-"Vcf input is not sorted in coordinate order - please sort your input and try again.\n";
-}
 
 #CHECK VEP ARGUMENTS AGAINST VCF
 my $vep_header     = $vcf_obj->readVepHeader();
@@ -554,6 +549,7 @@ if ($progress) {
 }
 my $next_update = 0;
 
+my %contigs = (); 
 #START PROCESSING OUR VARIANTS
 LINE: while ( my $line = $vcf_obj->readLine ) {
     $line_count++;
@@ -562,6 +558,14 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
           if $line_count >= $next_update;
     }
     my $chrom = $vcf_obj->getVariantField("CHROM");
+    if (exists $contigs{$chrom}){
+        if ($contigs{$chrom} != scalar(keys %contigs) - 1){
+            die
+"Encountered a variant for contig $chrom with at least one variant for a different contig inbetween. Your VCF input must be sorted such that all contigs are kept together - please sort your input and try again.\n";
+        }
+    }else{
+        $contigs{$chrom} = scalar(keys%contigs);
+    }
     if ( $prev_chrom && $chrom ne $prev_chrom ) {
 
         #print biallelic mutations for previous chromosome here...
