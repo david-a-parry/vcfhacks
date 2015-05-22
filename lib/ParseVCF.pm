@@ -1600,7 +1600,8 @@ sub getSampleCall{
                         $calls{$sample} = './.';
                         next;
                     }
-                    if ($self->getSampleGenotypeField(sample=>$sample, field=>'GQ') < $args{minGQ}){
+                    my $gq = $self->getSampleGenotypeField(sample=>$sample, field=>'GQ');
+                    if ($gq eq '.' || $gq < $args{minGQ}){
                         $calls{$sample} = './.';
                         next;
                     }
@@ -1632,7 +1633,8 @@ sub getSampleCall{
                         return './.';
                     }
                 }
-                if ($self->getSampleGenotypeField(sample=>$args{sample}, field=>'GQ') < $args{minGQ}){
+                my $gq = $self->getSampleGenotypeField(sample=>$args{sample}, field=>'GQ');
+                if ($gq eq '.' || $gq < $args{minGQ}){
                     if ($args{return_alleles_only}){
                         return '.';
                     }else{
@@ -1656,7 +1658,8 @@ sub getSampleCall{
                     return './.' if defined wantarray;
                 }
             }    
-            if ($self->getSampleGenotypeField( field=>'GQ') < $args{minGQ}){
+            my $gq =  $self->getSampleGenotypeField(field=>'GQ');
+            if ($gq eq '.' || $gq < $args{minGQ}){
                 if ($args{return_alleles_only}){
                     return '.' if defined wantarray;
                 }else{
