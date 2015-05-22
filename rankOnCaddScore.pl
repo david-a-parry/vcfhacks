@@ -29,7 +29,7 @@ GetOptions(
         "progress",
         "help",
         "manual",
-        );
+        ) or pod2usage(-message => "Syntax Error.", exitval => 2);
 
 pod2usage(-verbose => 2) if $opts{manual};
 pod2usage(-verbose => 1) if $opts{help};
