@@ -523,7 +523,7 @@ sub getLineCount{
 
 Takes a VCF filename as the only argument and returns the number of variants in the file. This method simply counts the total lines in the VCF by the most efficient means available and subtracts from this the number of header lines.
 
- VcfReader::countVariants();
+ my $n = VcfReader::countVariants($vcf);
 
 =cut
 
@@ -1467,7 +1467,7 @@ Behaves exactly as the getSampleCall function but returns genotypes using the ac
  my $gt         = VcfReader::getSampleActualGenotypes
                   (
                       line => \@line, 
-                      sample => 9
+                      column => 9
                   );
 
  my $gt         = VcfReader::getSampleActualGenotypes
@@ -1504,18 +1504,9 @@ Behaves exactly as the getSampleCall function but returns genotypes using the ac
                       sample_to_columns => \%samples_to_columns
                   );
 
- my %samp_to_gt = VcfReader::getSampleActualGenotypes
-                  (
-                      line => \@line, 
-                      minGQ => 30,
-                      all => 1,
-                      sample_to_columns => \%samples_to_columns
-                  );
-
  my @alleles    = VcfReader::getSampleActualGenotypes
                   (
                       line => \@line, 
-                      minGQ => 30,
                       all => 1,
                       return_alleles_only => 1
                   );
@@ -1626,6 +1617,8 @@ sub getSampleActualGenotypes{
         if ($args{sample}){
             if (defined $args{sample_to_columns}){
                 $col = $args{sample_to_columns}->{$args{sample}};
+            }else{
+                $col = $args{sample};
             }
         }elsif ($args{column}){
             $col = $args{column};
