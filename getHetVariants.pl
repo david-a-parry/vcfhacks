@@ -10,43 +10,52 @@ use Getopt::Long;
 my $vcf;
 my $out;
 my @samples = ();
-my $min_gq = 0;
+my $min_gq  = 0;
 my $hom;
 my $help;
 my $man;
-GetOptions ("input=s" => \$vcf, "output=s" => \$out, "reverse" => \$hom, "samples=s{,}" => \@samples, "gq=f" => \$min_gq,  "help|?" => \$help, "manual" => \$man) or pod2usage(-exitval => 2, -message => "Syntax error") ;
-pod2usage (-verbose => 2) if $man;
-pod2usage (-verbose => 1) if $help;
-pod2usage(-exitval => 2, -message => "Syntax error") if not $vcf ;
+GetOptions(
+    "input=s"      => \$vcf,
+    "output=s"     => \$out,
+    "reverse"      => \$hom,
+    "samples=s{,}" => \@samples,
+    "gq=f"         => \$min_gq,
+    "help|?"       => \$help,
+    "manual"       => \$man
+) or pod2usage( -exitval => 2, -message => "Syntax error" );
+pod2usage( -verbose => 2 ) if $man;
+pod2usage( -verbose => 1 ) if $help;
+pod2usage( -exitval => 2, -message => "Syntax error" ) if not $vcf;
 
 my $OUT;
 
-if ($out){
-    open ($OUT, ">$out") || die "Can't open $out for writing: $!\n";
-}else{
+if ($out) {
+    open( $OUT, ">$out" ) || die "Can't open $out for writing: $!\n";
+}
+else {
     $OUT = \*STDOUT;
 }
 
-my $obj = ParseVCF->new( file=> $vcf);
+my $obj = ParseVCF->new( file => $vcf );
 
-if (not @samples){
+if ( not @samples ) {
     @samples = $obj->getSampleNames;
 }
 
-print $OUT join("", @{$obj->get_metaHeader});
-print  $OUT $obj->get_header ."\n";
-while (my $line = $obj->readLine){
-    if ($hom){
-        my $hom = $obj->sampleIsHomozygous(multiple => \@samples, minGQ => $min_gq);
+print $OUT join( "", @{ $obj->get_metaHeader } );
+print $OUT $obj->get_header . "\n";
+while ( my $line = $obj->readLine ) {
+    if ($hom) {
+        my $hom =
+          $obj->sampleIsHomozygous( multiple => \@samples, minGQ => $min_gq );
         print $OUT "$line\n" if $hom;
-    }else{
-        my $het = $obj->sampleIsHeterozygous(multiple => \@samples, minGQ => $min_gq);
+    }
+    else {
+        my $het =
+          $obj->sampleIsHeterozygous( multiple => \@samples, minGQ => $min_gq );
         print $OUT "$line\n" if $het;
     }
 }
-
-
-
 
 =head1 NAME
 
