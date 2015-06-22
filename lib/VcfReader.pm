@@ -270,7 +270,7 @@ filename of VCF file to check.
 
 =item header
 
-Header string or an array of header lines in the same order they appear in a file. Ignored if using 'vcf' argument.
+Header string or a reference to an array of header lines in the same order they appear in a file. Ignored if using 'vcf' argument.
 
 =back
 
@@ -2540,7 +2540,7 @@ sub getTabixIterator{
     return Tabix->new(-data =>  $vcf, -index => $index) ;
 }
 
-=item getSearchArguments
+=item B<getSearchArguments>
 
 Returns a hash of arguments that can be used in searchByRegion or searchForPosition methods. Provides the file arguments so that only the arguments relating to the coordinates need to also be provided to those methods. 
 
@@ -3153,6 +3153,253 @@ sub _readLinesByOffset{
 }
 
 =back
+
+
+=head2 VEP Utilities
+
+=item B<readVepHeader>
+
+Reads the header of a VCF and returns a hash of VEP consequence fields to their index in output.
+
+Arguments
+
+=over 16
+
+=item vcf
+
+File name of VCF file to search. This argument or 'header' argument is required.
+
+=item header
+
+Header string or an array of header lines in the same order they appear in a file. Ignored if using 'vcf' argument.
+
+=back 
+
+
+ my %vep_header = VcfReader::readVepHeader(vcf => 'file.vcf');
+ 
+ my %vep_header = VcfReader::readVepHeader(header => \@header);
+
+=cut
+
+sub readVepHeader{
+    my (%args) = @_;
+    croak "Invalid header " if not checkHeader(%args);
+    my %vep_fields = ();
+    my @header = ();
+    if ($args{vcf}){
+        @header = getHeader($args{vcf});
+    }elsif($args{header}){
+        if (ref $args{header} eq 'ARRAY'){
+            @header = @{$args{header}};
+        }else{
+            @header = split("\n", $args{header});
+        }
+    }
+    my @info = grep{/^##INFO=<ID=CSQ/} @header;
+    if (not @info){
+        croak "Method 'readVepHeader' requires CSQ INFO field in meta header (e.g. '##INFO=<ID=CSQ,Number...') but no matching lines found ";
+    }
+    carp "Warning - multiple CSQ fields found, ignoring all but the most recent field " if @info > 1;
+   my $csq_line = $info[-1] ;#assume last applied VEP consequences are what we are looking for 
+   my @csq_fields = ();    
+   if ($csq_line =~ /Format:\s(\S+\|\S+)">/){
+       @csq_fields = split(/\|/, $1);
+   }else{
+       croak "Method 'readVepHeader' couldn't properly read the CSQ format from the corresponding INFO line: $csq_line ";
+   }
+   if (not @csq_fields){
+       croak "Method 'readVepHeader' didn't find any VEP fields from the corresponding CSQ INFO line: $csq_line ";
+   }
+   for (my $i = 0; $i < @csq_fields; $i++){
+       $vep_fields{lc($csq_fields[$i])} = $i;
+   }
+    return %vep_fields;
+}
+
+=item B<getVepFields>
+
+Reads a VEP annotated VCF record and returns the annotations corresponding to either a single or multiple fields as an array or array of hashes respectively. 
+
+Arguments
+
+=over 16
+
+=item line
+
+Array reference to a split line to be passed as the first argument. Required.
+
+=item vep_header
+
+Reference to a hash of CSQ fields to their index in the output as retrieved using the 'readVepHeader' method. Required.
+
+=item field
+
+Name of a CSQ field to retrieve or an array reference to the names of several CSQ fields to retrieve. Can also use 'all' to retrieve all CSQ fields. Required.
+
+
+=back 
+
+
+ my %vep_header = VcfReader::readVepHeader(header => \@header);
+ my @all_genes  = VcfReader::getVepFields
+ (
+    line       => \@split_line,
+    vep_header => \%vep_header,
+    field      => 'gene',
+ );
+    
+ my @gene_cons_pph  = VcfReader::getVepFields
+ (
+    line       => \@split_line,
+    vep_header => \%vep_header,
+    field      => [gene, consequence, polyphen],
+ );
+
+ my @all_vep = VcfReader::getVepFields
+ (
+    line       => \@split_line,
+    vep_header => \%vep_header,
+    field      => 'all',
+ );
+
+=cut
+
+sub getVepFields{
+    my (%args) = @_;
+    foreach my $ar ( / line vep_header field / ){
+        croak "Argument $ar is required for getVepFields method.\n";
+    }
+    croak "line argument must be an array reference " if ref $args{line} ne 'ARRAY';
+    croak "vep_header argument must be a hash reference " if ref $args{vep_header} ne 'HASH';
+    my @return;
+    my @fields = ();
+    my $inf_csq = getVariantInfoField($args{line}, 'CSQ');
+    croak "No CSQ field found in INFO field for line " . join("\t", @{$args{line}}) . "\n";
+    my @csqs = split(",", $inf_csq);
+    foreach my $c (@csqs){#foreach feature (e.g. transcript) 
+        my %t_csq = ();
+        my @v = split(/[\|]/, $c);
+        if (ref $args{field} eq 'ARRAY'){
+            @fields =  @{$args{field}};
+        }elsif (lc($args{field}) eq 'all'){
+            @fields = keys %{$args{vep_header}};
+        }else{#if a single field we return an array of values, not hash refs
+            if (not exists $args{vep_header} -> {lc($args{field})}){
+                carp "$args{field} feature does not exist in CSQ field ";
+            }else{
+                 push @return, $v[ $args{vep_header} -> {lc($args{field})} ];
+                 next;
+            }
+        }
+        foreach my $f (@fields){#for multiple fields we return an array of hash refs
+            if (not exists $args{vep_header} -> {lc($f)}){
+                carp "$f feature does not exist in CSQ field ";
+                next;
+            }
+            $t_csq{lc$f} = $v[ $args{vep_header} -> {lc($f)} ];
+        }
+        push @return, \%t_csq;
+    }
+    return @return;
+}
+ 
+=item B<altsToVepAllele>
+
+Returns a list of VEP style alleles in the same order as alt alleles passed to it. Pass either a VCF record in the form of a split line or all ALTs and the REF allele for a given record in order to convert the alleles appropriately for a VCF line.
+
+Arguments
+
+=over 16
+
+=item line
+
+Array reference to a split line to be passed as the first argument. Required unless using 'ref' and 'alt' arguments.
+
+=item ref
+
+String representing the REF allele for all ALT alleles specified by 'alts' argument. Required unless using 'line' argument. 
+
+=item alts
+
+Referemce to an array of ALT alleles to convert. Required unless using 'line' argument.
+
+=back 
+
+
+ my @vep_alts = VcfReader::altsToVepAllele
+ (
+    line => \@split_line,
+ );
+
+ my @vep_alts = VcfReader::altsToVepAllele
+ (
+    ref  => 'A',
+    alts => ['AA', 'C', 'T'],
+ );
+    
+=cut
+
+sub altsToVepAllele{
+    my (%args) = @_;
+    my $ref;
+    my @alts = ();
+    if (exists $args{line}){
+        croak "line argument must be an array reference " if ref $args{line} ne 'ARRAY';
+        $ref  = getVariantField($args{line}, 'REF');
+        @alts = getVariantField($args{line}, 'ALT');
+    }else{
+        croak "'ref' or 'line' argument is required for altsToVepAllele " 
+            if not exists $args{ref};
+        croak "'alts' or 'line' argument is required for altsToVepAllele " 
+            if not exists $args{alts};
+        croak "alts argument must be an array reference " if ref $args{alts} ne 'ARRAY';
+        $ref = $args{ref};
+        @alts = @{$args{alts}};
+    }
+    return _altToVep(\@alts, $ref);
+}
+
+
+#convert alts to VEP style alleles   
+sub _altToVep{
+    my ($alt_array, $ref) = @_;
+    my @vep_alleles = ();
+    my $is_snv_or_mnv = 0;
+    my $is_indel = 0; 
+    foreach my $alt (@$alt_array){
+        if (length($alt) == length($ref)){
+            $is_snv_or_mnv++;
+        }else{
+            $is_indel++;
+        }
+    }
+    if ($is_snv_or_mnv and $is_indel){
+        #in this situation VEP does not trim any variant alleles
+        foreach my $alt (@$alt_array){
+            push @vep_alleles, $alt;
+        }
+    }else{
+        foreach my $alt (@$alt_array){
+            if (length($alt) == length($ref)){
+                push @vep_alleles,  $alt;
+            }elsif(length($alt) > length($ref)){#insertion - VEP trims first base
+                push @vep_alleles,  substr($alt, 1);
+            }else{#deletion - VEP trims first base or gives '-' if ALT is only 1 nt long
+                if (length($alt) > 1){
+                    push @vep_alleles,  substr($alt, 1);
+                }else{
+                    push @vep_alleles,  '-';
+                }
+            }
+        }
+    }
+    return @vep_alleles;
+}
+
+
+=cut
+
 
 =head1 AUTHOR
 
