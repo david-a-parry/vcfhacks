@@ -2007,7 +2007,8 @@ sub minimizeAlleles{
             ALT             => $alt,
             ORIGINAL_POS    => getVariantField($line, "POS"),
             ORIGINAL_REF    => getVariantField($line, "REF"),
-            ORIGINAL_ALT    => getVariantField($line, "ALT"),
+            ORIGINAL_ALT    => $al[$i],
+            ALT_INDEX        => $i,
         };
     }
     return %min_alleles if defined wantarray;
@@ -3267,15 +3268,15 @@ Name of a CSQ field to retrieve or an array reference to the names of several CS
 
 sub getVepFields{
     my (%args) = @_;
-    foreach my $ar ( / line vep_header field / ){
-        croak "Argument $ar is required for getVepFields method.\n";
+    foreach my $ar (qw / line vep_header field / ){
+        croak "Argument $ar is required for getVepFields method.\n" if not exists $args{$ar};
     }
     croak "line argument must be an array reference " if ref $args{line} ne 'ARRAY';
     croak "vep_header argument must be a hash reference " if ref $args{vep_header} ne 'HASH';
     my @return;
     my @fields = ();
     my $inf_csq = getVariantInfoField($args{line}, 'CSQ');
-    croak "No CSQ field found in INFO field for line " . join("\t", @{$args{line}}) . "\n";
+    croak "No CSQ field found in INFO field for line " . join("\t", @{$args{line}}) . "\n" if not $inf_csq;
     my @csqs = split(",", $inf_csq);
     foreach my $c (@csqs){#foreach feature (e.g. transcript) 
         my %t_csq = ();
