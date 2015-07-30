@@ -66,11 +66,19 @@ Samples from filter VCF files to ignore.  If specified variant alleles from all 
 
 =item B<-w    --info_filter>
 
-Use this flag to use metrics written to the INFO field of your filter VCFs for filtering on frequency, homozygosity or threshold counts rather than checking sample genotypes. This requires your input VCF to have been processed with the sampleCallsToInfo.pl script to reduce genotype information to AF, PGTS and GTC fields. Converting your filter VCFs with sampleCallsToInfo.pl for use with this option will speed up your analyses by many orders of magnitude. 
+Use this flag to use metrics written to the INFO field of your filter VCFs for filtering on frequency, homozygosity or threshold counts rather than checking sample genotypes. Filtering on allele frequency (see --allele_frequency_filter option below) can be performed as long as your VCF contains allele frequency (AF) INFO tags and optionally population specific allele count (AC) and allele number (AN) tags (see --population_ids option below). This option is particularly useful for filtering against VCFs from ExAC using global and population allele frequencies. Alternatively, you can pre-process your own filter VCFs with the sampleCallsToInfo.pl script to reduce genotype information to AF, PGTS and GTC fields. Converting filter VCFs containing many hundreds/thousands of samples  with sampleCallsToInfo.pl for use with this option will speed up your analyses by many orders of magnitude.
 
 =item B<-y    --allele_frequency_filter>
 
 Reject variants if the allele frequency in all --filter VCFs is equal to or greater than this value. All samples will be used to calculate allele frequency regardless of --reject or --not_samples settings, although variants will only be counted if the genotype quality is greater than the value given for --un_quality. The value must be a float between 0 and 1. 
+
+=item B<--population_ids>
+
+If using the --info_filter option, --allele_frequency_filter option and only one filter VCF, by default the filter VCF will be scanned for allele counts (e.g. AFR_AC) and allele number (e.g. AFR_AN) INFO tags for the population codes as used by EXAC (AFR, AMR, EAS, FIN, NFE, SAS). An alternative list of population IDs to search can be entered here. To disable this feature use this option specifying 'disable' as an argument.
+    
+=item B<--minimum_allele_number>
+
+If filtering using population allele counts (see --population_ids above) use this value to specify a minimum number of alleles to be called for a population in order to filter a variant on that population's allele frequency. Default = 100.
 
 =item B<-l    --threshold>
 
@@ -124,9 +132,21 @@ Show manual page.
 
 =head1 DESCRIPTION
 
-Filter variants from a VCF using one or more other VCFs.  You may specify samples or a number of samples with matching variants to filter with.  You can also use minimum genotype or variant qualities to filter with. 
+Filter variants from a VCF using one or more other VCFs.  You may specify samples or a number of samples with matching variants to filter with.  You can also use minimum genotype or variant qualities to filter with. Alternatively, filtering can be performed on certain annotations in the INFO field of each variant using the --info_filter option.
 
-Each variant from the given --input file will be assessed and if all alternative/variant alleles for a given variant are represented in the --filter VCFs provided, the variant will be filtered. You may use --reject or --not_samples arguments to only filter variant alleles if present in specific samples in the --filter VCFs. You may also use the --samples argument to only compare variants from specific samples in your --input VCF and filter any variants that do not have alleles represented by these samples. See above for details of all available options. 
+By default, each variant from the given --input file will be assessed and if all alternative/variant alleles for a given variant are represented in the --filter VCFs provided, the variant will be filtered. You may use --reject or --not_samples arguments to only filter variant alleles if present in specific samples in the --filter VCFs. You may also use the --samples argument to only compare variants from specific samples in your --input VCF and filter any variants that do not have alleles represented by these samples. See above for details of all available options. 
+
+=head1 EXAMPLES
+
+    filterVcfOnVcf.pl -i input.vcf -f controls.vcf -o filtered.vcf
+    (filter variants in input.vcf if present in controls.vcf)
+    
+    filterVcfOnVcf.pl -i input.vcf -f controls.vcf -o filtered.vcf -y 0.01
+    (filter variants in input.vcf if present at an allele frequency of 1% or higher in controls.vcf)
+
+    filterVcfOnVcf.pl -i input.vcf -f ExAC.r0.3.sites.vep.vcf.gz -o filtered.vcf -y 0.01  -w 
+    (filter variants in input.vcf if present at an allele frequency of 1% or higher in ExAC using INFO fields for filtering)
+
 
 =head1 AUTHOR
 
@@ -168,31 +188,40 @@ my $help;
 my $man;
 my $progress;
 my $regex;            #match this regex if looking in dir
+my @pop_acs = ();
+    #if we have only one vcf and find population allele counts and allele numbers
+    #we'll use those to calculate population specific frequencies and filter on MAF 
+    #if --allele_frequency_filter argument is specified
+my $MIN_AN = 100; 
+    # min number of alleles required before @pop_acs values are used for filtering
+my @pop_ids =  ();
+    # population IDs to look for for @pop_acs
 my $forks = 0;
 my $buffer_size;
 my %opts = (
-    'not_samples'             => \@ignore_samples,
-    'expression'              => \$regex,
-    'input'                   => \$vcf,
-    'output'                  => \$out,
-    'filter'                  => \@filter_vcfs,
-    'directories'             => \@dirs,
-    'samples'                 => \@samples,
-    'reject'                  => \@reject,
-    'info_filter'             => \$filter_with_info,
-    'allele_frequency_filter' => \$maf,
-    'threshold'               => \$threshold,
-    'filter_homozygotes'      => \$filter_homozygotes,
-    'quality'                 => \$min_qual,
-    'genotype_quality'        => \$minGQ,
-    'aff_quality'             => \$aff_quality,
-    'un_quality'              => \$unaff_quality,
-    'progress'                => \$progress,
-    cache                     => \$buffer_size,
-    forks                     => \$forks,
-    'help'                    => \$help,
-    'manual'                  => \$man,
-    'print_matching'          => \$print_matching
+    not_samples             => \@ignore_samples,
+    expression              => \$regex,
+    input                   => \$vcf,
+    output                  => \$out,
+    filter                  => \@filter_vcfs,
+    directories             => \@dirs,
+    samples                 => \@samples,
+    reject                  => \@reject,
+    info_filter             => \$filter_with_info,
+    allele_frequency_filter => \$maf,
+    threshold               => \$threshold,
+    filter_homozygotes      => \$filter_homozygotes,
+    quality                 => \$min_qual,
+    genotype_quality        => \$minGQ,
+    aff_quality             => \$aff_quality,
+    un_quality              => \$unaff_quality,
+    progress                => \$progress,
+    population_ids          => \@pop_ids,
+    cache                   => \$buffer_size,
+    forks                   => \$forks,
+    help                    => \$help,
+    manual                  => \$man,
+    print_matching          => \$print_matching
 );
 
 GetOptions(
@@ -213,11 +242,13 @@ GetOptions(
     'genotype_quality=f'          => \$minGQ,
     'a|aff_quality=i'             => \$aff_quality,
     'un_quality=i'                => \$unaff_quality,
+    'population_ids=s{,}'         => \@pop_ids,
+    'minimum_allele_number=i'     => \$MIN_AN,
     'bar|progress'                => \$progress,
     "t|forks=i"                   => \$forks,
     "cache=i"                     => \$buffer_size,
     'help'                        => \$help,
-    'manual'                      => \$man,
+    'm|manual'                    => \$man,
     'p|print_matching'            => \$print_matching
   )
   or pod2usage(
@@ -273,6 +304,13 @@ if ( defined $unaff_quality ) {
 else {
     $unaff_quality = $minGQ;
 }
+if (not @pop_ids){
+    @pop_ids =  qw / AFR AMR EAS FIN NFE SAS / ; #default is ExAC pop codes
+} 
+elsif ( grep{ /^disable$/i } @pop_ids ){
+    @pop_ids = ();
+    print STDERR "[INFO] Filtering on population allele count / allele number disabled.\n";
+}
 
 my $cpus = Sys::CPU::cpu_count();
 if ( $forks < 2 ) {
@@ -325,7 +363,8 @@ print STDERR "\n[$time] Finished initializing input VCF\n";
 my %filter_vcf_to_index = ();
 my %filter_vcf_samples  = ();
 my %filter_vcf_info     = ();
-my $dbpm                = Parallel::ForkManager->new($forks);
+
+my $dbpm = Parallel::ForkManager->new($forks);
 for ( my $i = 0 ; $i < @filter_vcfs ; $i++ ) {
     $dbpm->run_on_finish(    # called BEFORE the first call to start()
         sub {
@@ -747,7 +786,7 @@ sub filter_on_info_fields {
                         next ALT
                           if $min_vars{$allele}->{CHROM} ne
                           $filter_min{$alt}->{CHROM};
-
+                        #filter ALT matches input allele
                         if (    $filter_homozygotes
                             and not $threshold
                             and not $maf )
@@ -794,6 +833,10 @@ sub filter_on_info_fields {
                             my $freq = $afs[ $filter_match - 1 ];
                             if ( $freq >= $maf ) {
                                 $alleles_over_maf{$allele}++;
+                            }elsif(@pop_acs){
+                                if ( pop_freq_over_maf(\@snp_split, $filter_match) ) {
+                                    $alleles_over_maf{$allele}++;
+                                }
                             }
                         }
                         else {
@@ -899,6 +942,22 @@ sub filter_on_info_fields {
     }
 }
 #################################################
+sub pop_freq_over_maf{
+    my ($split, $allele_code) = @_;
+    # calculate AF for each @pops pop 
+    # and return 1 if > $maf
+    foreach my $pop (@pop_acs){
+        my $an = VcfReader::getVariantInfoField($split, "AN_$pop");
+        next if not $an;
+        next if $an < $MIN_AN;
+        my $acs = VcfReader::getVariantInfoField($split, "AC_$pop");
+        my $count = (split ",", $acs)[$allele_code -1];
+        if ( $count / $an > $maf){
+            return 1;
+        }
+    }
+    return 0;
+}
 ################################################
 sub filter_on_vcf {
     my ( $vcf_line, $search_args ) = @_;
@@ -1178,10 +1237,33 @@ sub check_filter_vcf_info_fields {
             if ( not exists $filter_vcf_info{$f}->{AF} ) {
                 check_pgts_gtc($f);
             }
+            @pop_acs = check_pop_ac_info($f);
+            if (@pop_acs){
+                print STDERR "[INFO] Found " . scalar(@pop_acs) . " population " . 
+                    "allele counts in VCF INFO fields. These will be used for per ".
+                    "population allele-frequency filtering. To disable use " .
+                    "'--population_ids disable' when running this program.\n";
+            }
         }
     }
 }
 
+#################################################
+sub check_pop_ac_info{
+    my $f = shift;
+    my @pop_codes = ();
+    foreach my $pop ( @pop_ids ){
+        if (exists $filter_vcf_info{$f}->{"AC_$pop"} and 
+            exists $filter_vcf_info{$f}->{"AN_$pop"}){
+            next if ($filter_vcf_info{$f}->{"AC_$pop"}->{Number} ne 'A');
+            next if ($filter_vcf_info{$f}->{"AC_$pop"}->{Type} ne 'Integer');
+            next if ($filter_vcf_info{$f}->{"AN_$pop"}->{Number} ne '1');
+            next if ($filter_vcf_info{$f}->{"AN_$pop"}->{Type} ne 'Integer');
+            push @pop_codes, $pop;
+        }
+    }
+    return @pop_codes;
+}
 #################################################
 sub check_pgts_gtc {
     my $f = shift;
