@@ -559,8 +559,6 @@ This program will filter a VCF file to remove variants matching variants in VCF 
 
 David A. Parry
 
-University of Leeds
-
 =head1 COPYRIGHT AND LICENSE
 
 Copyright 2013,2014  David A. Parry

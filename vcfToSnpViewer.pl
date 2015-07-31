@@ -258,8 +258,6 @@ Reads a VCF file and outputs variants in a format readable by my autozygosity ma
 
 David A. Parry
 
-University of Leeds
-
 =head1 COPYRIGHT AND LICENSE
 
 Copyright 2013  David A. Parry

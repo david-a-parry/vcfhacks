@@ -125,8 +125,6 @@ The motivation for this was due to a bug in the variant_effect_predictor.pl (pre
 
 David A. Parry
 
-University of Leeds
-
 =head1 COPYRIGHT AND LICENSE
 
 Copyright 2013, 2014  David A. Parry

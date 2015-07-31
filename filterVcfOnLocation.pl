@@ -97,8 +97,6 @@ Takes a bed file or a list of regions and filters variants from a vcf file that 
 
 David A. Parry
 
-University of Leeds
-
 
 =head1 COPYRIGHT AND LICENSE
 
