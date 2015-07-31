@@ -306,6 +306,118 @@ sub writeHeaders{
         }
     }
 }
-        
 
+##########################################################
+       
+=head1 NAME
+
+checkInheritance.pl - output simple stats about variants and expected inheritance patterns
+
+=head1 SYNOPSIS
+
+    checkInheritance.pl -i <variants.vcf> -f family.ped [options]
+    checkInheritance.pl --help (show help message)
+    checkInheritance.pl --manual (show manual page)
+
+=cut 
+
+=head1 ARGUMENTS
+
+=over 8 
+
+=item B<-i    --input>
+
+VCF file input.
+
+=item B<-o    --output>
+
+Prefix for output files. By default the following output files are produced for each child identified in the ped file:
+
+    <family_id>-<child_id>-mendelian.txt
+    <family_id>-<child_id>-non-mendelian.txt
     
+A single summary file (summary.txt) is also produced. If a prefix is specified here, it will be prepended to each of these output files.
+
+=item B<-f    --family>
+
+A PED file (format described below) containing information about samples in the VCF. At least one parent-child relationship must be included. All parent child relationships identified in the file will be examined to assess expected inheritance patterns.
+
+PED format - from the PLINK documentation:
+
+       The PED file is a white-space (space or tab) delimited file: the first six columns are mandatory:
+
+            Family ID
+            Individual ID
+            Paternal ID
+            Maternal ID
+            Sex (1=male; 2=female; other=unknown)
+            Phenotype
+
+       Affection status, by default, should be coded:
+
+           -9 missing
+            0 missing
+            1 unaffected
+            2 affected
+
+
+=item B<-p    --pass_filters>
+
+Only count variants with a value of PASS in its FILTER field.
+
+=item B<-q    --quality>
+
+Minimum variant quality score to consider. Variants with QUAL scores below this value will be skipped.
+
+=item B<-g    --genotype_quality>
+
+Minimum genotype quality score to consider. Variants will be skipped if any of the parent-child trios/duos have a genotype quality score below this value.
+
+=item B<-b    --progress>
+
+Show a progress bar while running.
+
+=item B<-h    ---help>
+
+Show the program's help message.
+
+=item B<--manual>
+
+Show the program's manual page.
+
+=back
+
+=cut
+
+=head1 DESCRIPTION
+ 
+This program reads a VCF file and associated PED file in order to assess the amount of variants following expected inheritance patterns between parents and children. For each parent-child relationship identified the following files are produced:
+  
+    <family_id>-<child_id>-mendelian.txt
+    <family_id>-<child_id>-non-mendelian.txt
+    
+These files each produce a tab delimited file with the following columns:
+    
+    Chr Pos Ref Alt Qual Child-GQ Mat-GQ Pat-GQ Child-GT Mat-GT Pat-GT
+
+Each row gives details for a variant following either expected Mendelian inheritance patterns or not following expected inheritance patterns for the respective files. This may be useful to identify sample mixups in conjunction with tools such as the relatedness tools available from vcftools (https://vcftools.github.io/examples.html).
+
+A summary file (summary.txt) is also produced which summarises for each child the number of Mendelian inherited variants, the number of non-mendelian inherited variants, number of informative variants and number of uninformative variants.
+
+ 
+=cut
+
+=head1 AUTHOR
+
+David A. Parry
+
+University of Leeds
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2015  David A. Parry
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+=cut
+
