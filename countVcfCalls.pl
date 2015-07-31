@@ -217,7 +217,24 @@ sub get_possible_genotypes{
 sub usage{
 my $help = @_;
 if ($help){
-    print "Reads VCF files and reports the number of observed genotypes for each variant.\n Arguments:\n\t--input <vcf file>\n\t--depth <minimum depth of reads in order to count variant - optional>\n\t--quality <minimum phred quality score for genotype - optional>\n\t--exclude_non_variants <only include lines with at least one sample with a variant call>\n\t--retrieve_samples <print columns with sample names per genotype>\n\n";
+    print <<EOT
+
+    Reads VCF files and reports the number of observed genotypes for each variant.
+    
+    Usage:
+
+    $0 -i input.vcf [options]
+
+    Options:
+
+    -i,--input                [vcf file]
+    -d,--depth                [minimum depth of reads in order to count variant - optional]
+    -q,--quality              [minimum phred quality score for genotype - optional]
+    -e,--exclude_non_variants [only include lines with at least one sample with a variant call]
+    --r,--retrieve_samples    [print columns with sample names per genotype]
+
+EOT
+;
     exit;
 }
 else{
