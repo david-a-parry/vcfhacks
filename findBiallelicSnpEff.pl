@@ -186,6 +186,10 @@ if ($pedigree) {
 #die "Pedigree file must contain at least one affected member!\n" if not $ped->getAllAffecteds();
 }
 
+print STDERR "[INFO] This program only works with classic SnpEff annotations ".
+  "which are accessible by running snpEff using '-formatEff' and '-classic' flags. ".
+  "This program will not check for this format and use of this script with the newer ".
+  "SnpEff formatting will likely result in no variant output from this program!\n";
 my @csq_fields = qw (
   Effect
   Effect_Impact
@@ -1323,7 +1327,6 @@ sub sort_vcf_lines {
 ###########
 sub checkAndParseClasses {
     my ( $classes, $additional ) = @_;
-
     my @valid = qw (INTERGENIC
       UPSTREAM
       UTR_5_PRIME
@@ -1391,7 +1394,7 @@ sub checkAndParseClasses {
 
 =head1 NAME
 
-findBiallelicSnpEff.pl - identify variants that make up potential biallelic variation of a gene using snpEff annotations.
+findBiallelicSnpEff.pl - identify variants that make up potential biallelic variation of a gene using snpEff annotations (classic format only!).
 
 =head1 SYNOPSIS
 
@@ -1407,7 +1410,7 @@ findBiallelicSnpEff.pl - identify variants that make up potential biallelic vari
 
 =item B<-i    --input>
 
-VCF file with functional annotations from SnpEff.jar.  
+VCF file with functional annotations from SnpEff.jar. For recent versions of SnpEff you must specify '-classic' and '-formatEff' flags when running SnpEff.  
 
 =item B<-o    --output>
 
@@ -1727,10 +1730,7 @@ Genes are considered to contain potential biallelic variation if they either con
 
 While related samples will be most useful in filtering using the --reject argument, data from any unaffected sample can be used to remove apparently non-pathogenic biallelic variation. Furthermore, while unrelated affected individuals can be used to identify shared genes containing apparent biallelic variation (when you believe the disorder to be caused by variation in the same gene), if using several related affected individuals you may use the --equal_genotypes flag to tell the program to only look for variants that are shared among all affected individuals AND potentially biallelic.
 
-Note that this program only considers autosomal recessive disease, it ignores X, Y and mitochondrial chromosomes.
-
-This program relies on an up to date version of my ParseVCF.pm and DbnsfpVcfFilter.pm perl modules being present in the same directory as the script. 
-
+NOTE - this program currently only supports VCFs annotated with snpEff in using -classic and -formatEff flags!
 
 =cut
 
