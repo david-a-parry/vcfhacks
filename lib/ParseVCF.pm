@@ -1839,6 +1839,22 @@ sub getSampleActualGenotypes{
     }
 }
 
+sub sampleHasVariant{
+    my ($self, $sample) = @_;
+    croak "Can't invoke sampleIsHomozygous method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
+    $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
+    if (defined $self->{_currentVar}){
+        my $var = $self->getSampleVariant($sample);
+        my $call = (split ":", $var)[0];
+        if ($call =~ /(\d+)[\/\|](\d+)/){
+            return 0 if ($1 == 0 and $2 == 0);
+            return 1;
+        }
+        return 0;#presumably a no call
+    }
+    return 0;#no variant?
+}
+
 sub sampleIsHomozygous{
 # use minGQ => 30 to count any sample with less than GQ = 30 as a no call
 # use variants => 1 to only include homozygous variants, not homozygous variants
@@ -1926,8 +1942,34 @@ sub sampleIsHomozygous{
     }
 }
 
+sub getAlleleBalance{
+    my ($self, $sample, $allele) = @_;
+    croak "Can't invoke checkAlleleBalance method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
+   my @ads = split(",", 
+        $self->getSampleGenotypeField
+            (
+            sample=>$sample, 
+            field=>'AD'
+            )
+    );
+    if (@ads == 1){
+        return 0 if $ads[0] eq '.';
+        if ($allele == 0){
+            return 1;
+        }else{  
+            return 0;
+        }
+    }
+    return 0 if @ads <= $allele;  
+    my $dp = sum(@ads);
+    return 0 if $dp == 0;
+    return $ads[$allele] / $dp; 
+}
+
+
 sub sampleIsHeterozygous{
 # use minGQ => 30 to count any sample with less than GQ = 30 as a no call
+# use allele_balance => [0.1, 0.9] to only consider hets with a ratio between 0.1 and 0.9
 #returns 1 if all samples are heterozygous or a mix of hets and no calls
 #returns 0 if any sample is homozygous or all are no calls - we should improve this for multiple samples.
     my ($self, %args) = @_;
@@ -1935,21 +1977,41 @@ sub sampleIsHeterozygous{
     $self->{_currentLine} ||= $self->readLine; #get line if we haven't already
     carp "WARNING Both multiple and sample arguments supplied to sampleIsHomozygous method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
     if (defined $self->{_currentVar}){
-        my $var;
         if ($args{all}){
             my $no_call = 0;
-            foreach my $sample (keys %{$self->{_samples}}){
+SAMPLE:            foreach my $sample (keys %{$self->{_samples}}){
                 if ($args{minGQ}){
                     my $gq = $self->getSampleGenotypeField(sample=>$sample, field=>'GQ');
                     if (defined $gq && $gq < $args{minGQ}){
                         $no_call++;
-                        next;
+                        next SAMPLE;
                     }
                 }
-                $var = $self->getSampleVariant($sample);
+                
+                my  $var = $self->getSampleVariant($sample);
                 my $call = (split ":", $var)[0];
                 if ($call =~ /(\d+)[\/\|](\d+)/){
                     return 0 if $1 == $2;
+                    if ($args{allele_balance}){
+                        my $balance_ok = 0;
+                        foreach my $al ($1, $2){
+                            next if $al == 0;
+                            my $ab = $self->getAlleleBalance($sample, $al); 
+                            if ($args{allele_balance}->[0] > $ab){
+                                next;
+                            }elsif(scalar @{$args{allele_balance}} > 1){
+                                if ($args{allele_balance}->[1] < $ab){
+                                    next;
+                                }
+                            }
+                            $balance_ok++;
+                            last;
+                        }
+                        if (not $balance_ok){
+                            $no_call++;
+                            next SAMPLE;
+                        }
+                    }
                 }else{
                     $no_call++;
                 }
@@ -1959,49 +2021,85 @@ sub sampleIsHeterozygous{
         }elsif(defined $args{multiple}){
             my $no_call = 0;
             croak "multiple argument must be an array reference " if ref $args{multiple} ne 'ARRAY';
-            foreach my $sample (@{$args{multiple}}){
+SAMPLE:     foreach my $sample (@{$args{multiple}}){
                 if ($args{minGQ}){
                     my $gq = $self->getSampleGenotypeField(sample=>$sample, field=>'GQ');
                     if (defined $gq && $gq < $args{minGQ}){
                         $no_call++;
-                        next;
+                        next SAMPLE;
                     }
                 }
-                $var = $self->getSampleVariant($sample);
+                my $var = $self->getSampleVariant($sample);
                 my $call = (split ":", $var)[0];
                 if ($call =~ /(\d+)[\/\|](\d+)/){
                     return 0 if $1 == $2;
+                    if ($args{allele_balance}){
+                        my $balance_ok = 0;
+                        foreach my $al ($1, $2){
+                            next if $al == 0;
+                            my $ab = $self->getAlleleBalance($sample, $al); 
+                            if ($args{allele_balance}->[0] > $ab){
+                                next;
+                            }elsif(scalar @{$args{allele_balance}} > 1){
+                                if ($args{allele_balance}->[1] < $ab){
+                                    next;
+                                }
+                            }
+                            $balance_ok++;
+                            last;
+                        }
+                        if (not $balance_ok){
+                            $no_call++;
+                            next SAMPLE;
+                        }
+                    }
                 }else{
                     $no_call++;
                 }
             }
             return 0 if $no_call == @{$args{multiple}};#i.e. return 0 if all our samples are no calls
             return 1;#otherwise return 1
-        }elsif (defined $args{sample}){
+        }else{
+            my $sample = undef;
+            if (defined $args{sample}){
+                $sample = $args{sample}
+            }
             if ($args{minGQ}){
-                my $gq = $self->getSampleGenotypeField(sample=>$args{sample}, field=>'GQ');
+                my $gq = $self->getSampleGenotypeField(sample=>$sample, field=>'GQ');
                 if (defined $gq && $gq < $args{minGQ}){
                     return 0;
                 }
             }
-            $var = $self->getSampleVariant($args{sample});
-        }else{    
-            if ($args{minGQ}){
-                my $gq = $self->getSampleGenotypeField(field=>'GQ');
-                if (defined $gq && $gq < $args{minGQ}){
-                    return 0;
+            my $var = $self->getSampleVariant($sample);
+            my $call = (split ":", $var)[0];
+            if ($call =~ /(\d+)[\/\|](\d+)/){
+                return 0 if $1 == $2;
+                if ($args{allele_balance}){
+                    my $balance_ok = 0;
+                    foreach my $al ($1, $2){
+                        next if $al == 0;
+                        my $ab = $self->getAlleleBalance($sample, $al); 
+                        if ($args{allele_balance}->[0] > $ab){
+                            next;
+                        }elsif(scalar @{$args{allele_balance}} > 1){
+                            if ($args{allele_balance}->[1] < $ab){
+                                next;
+                            }
+                        }
+                        $balance_ok++;
+                        last;
+                    }
+                    if (not $balance_ok){
+                        return 0;
+                    }
                 }
-            } 
-            $var = $self->getSampleVariant();
-        }
-        my $call = (split ":", $var)[0];
-        if ($call =~ /(\d+)[\/\|](\d+)/){
-            return 1 if $1 != $2;
-            return 0;
+                return 0;
+            }
         }
         return 0;
     }
 }
+
 sub countAlleles{
     #%allele_counts = $obj->countGenotypes(); 
     #returns count for all samples and all genotypes
