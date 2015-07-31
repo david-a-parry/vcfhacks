@@ -331,12 +331,17 @@ if (defined $config->{vep}){
     my $vep_header = $vcf_obj->readVepHeader();
     if (not @{$config->{fields}} and not $config->{all}){
         unshift @{$config->{fields}}, getDefaultVepFields($vep_header);
+    }elsif($config->{all}){
+         push @{$config->{fields}},  sort {$vep_header->{$a} <=> $vep_header->{$b}} keys %{$vep_header};
     }elsif(grep { /default/i } @{$config->{fields}}){
         @{$config->{fields}} = grep {! /^default$/i } @{$config->{fields}};
         unshift @{$config->{fields}}, getDefaultVepFields($vep_header);
     }
     if (not grep {/consequence/i} @{$config->{fields}} ){
         push @{$config->{fields}}, 'consequence';
+    }
+    if (not grep {/allele/i} @{$config->{fields}} ){
+        push @{$config->{fields}}, 'allele';
     }
     @fields = map { lc($_) } @{$config->{fields}} if defined $config->{fields};
     my %seen = ();
@@ -407,9 +412,6 @@ if (not @samples){
 
 my $OUT;
 my $xl_obj;
-#old way
-#my ($header, $gene_anno_cols) = get_header();
-#new way
 my @header = get_header();
 if (defined $config->{text_output}){
     if ($output){
@@ -424,6 +426,10 @@ if (defined $config->{text_output}){
 }else{
     $xl_obj = TextToExcel->new( file=> $output);
     $header_formatting = $xl_obj->createFormat(bold => 1);
+    $url_format = $xl_obj->createFormat(
+        color     => 'blue',
+        underline => 1,
+    );
     $xl_obj->writeLine(line => \@header, format => $header_formatting);
 }
 
@@ -519,11 +525,11 @@ LINE: while (my $vcf_line = $vcf_obj->readLine){
             print $OUT "\n";
         }
     }else{
-        $xl_obj->writeLine(
-                line => \@line, 
-                preceding => \@preceding, 
-                succeeding => \@following, 
-                );
+        my $row = $xl_obj->writeLine(
+                    line => \@line, 
+                    preceding => \@preceding, 
+                    succeeding => \@following, 
+                    );
     }
 }
 if ($xl_obj){
@@ -739,21 +745,7 @@ ANNOT:  foreach my $annot (@csq){
         }
         $canonical_found++;
         if ($config->{functional}){
-            my $match = 0;
-CLASS:      foreach my $class (@vep_classes){
-                my @anno_csq = split(/\&/, $annot->{consequence});
-                if (grep {/NMD_transcript_variant/i} @anno_csq){
-                    next ANNOT;
-                }else{
-                    foreach my $ac (@anno_csq){
-                        if (lc$ac eq lc$class){
-                            $match++;
-                            last CLASS;
-                        }
-                    }
-                }
-            }
-            next ANNOT if not $match;
+            next ANNOT if not check_functional($annot);
         }
         $functional_found++;
         if ($config->{samples}){
@@ -771,6 +763,24 @@ CLASS:      foreach my $class (@vep_classes){
         push @vep_values, \@csq_values;
     }   
     return (\@vep_values, $canonical_found, $functional_found, $sample_found);
+}
+
+####################################################################
+sub check_functional{
+    my $annot = shift;
+    foreach my $class (@vep_classes){
+        my @anno_csq = split(/\&/, $annot->{consequence});
+        if (grep {/NMD_transcript_variant/i} @anno_csq){
+            return 0;
+        }else{
+            foreach my $ac (@anno_csq){
+                if (lc$ac eq lc$class){
+                    return 1;
+                }
+            }
+        }
+    }
+    return 0;
 }
 ####################################################################
 sub get_header{
