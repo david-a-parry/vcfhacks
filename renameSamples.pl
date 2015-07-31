@@ -114,10 +114,11 @@ sub usage{
     -i,--input       [vcf input]
     -o,--output      [optional output file]
     -s,--sample_file [text file with one column for old names and another for new names]
-    -d,--delimiter   [string separator for columns in --sample_file. Default is any whitespace.]
+    -d,--delimiter   [string separator for columns in --sample_file. Default is any whitespace]
     -h,-?,--help     [show this help message and exit]
 
     Sample mapping file must contain two columns separated by whitespace or a delimiter as specified by the --delimiter option. The first column must be the old sample name and the second the new sample name. Lines beginning with # will be ignored. Extra columns will also be ignored. Any samples in the VCF not present in the sample file will remain unchanged. 
+
 EOT
 ;
     exit 1 if $error;
