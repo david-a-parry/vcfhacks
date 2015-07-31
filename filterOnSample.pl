@@ -41,6 +41,8 @@ my $unaff_genotype_quality
 my $confirm_missing
   ; #only consider variants where there is sufficient genotype information from all --reject samples to exclude
 my $num_matching;
+my $min_depth
+  ; # skip genotype calls when sample/reject sample has depth below this value
 my $help;
 my $manual;
 my $progress;
@@ -58,7 +60,8 @@ my %opts = (
     'quality'             => \$quality,
     'aff_quality'         => \$aff_genotype_quality,
     'un_quality'          => \$unaff_genotype_quality,
-    'depth_allele_cutoff' => \$allele_depth_cutoff,
+    'depth_sample'        => \$min_depth, 
+    'depth_allele_cutoff' => \$allele_depth_cutoff, 
     'allele_ratio_cutoff' => \$allele_ratio_cutoff,
     'num_matching'        => \$num_matching,
     'help'                => \$help,
@@ -83,6 +86,7 @@ GetOptions(
     'quality=i'                => \$quality,
     'a|aff_quality=i'         => \$aff_genotype_quality,
     'un_quality=i'            => \$unaff_genotype_quality,
+    'depth_sample=i'          => \$min_depth,
     'depth_allele_cutoff=f'   => \$allele_depth_cutoff,
     'z|allele_ratio_cutoff=f' => \$allele_ratio_cutoff,
     'num_matching=i'          => \$num_matching,
@@ -471,6 +475,17 @@ sub filter_on_sample {
    #samples only get added to %alleles hash if they are called and not reference
    #because we compare the samples in %alleles hash only this allows variants
    #with no call to go through
+                    if ($min_depth){
+                        my $dp = get_depth_for_sample($sample, $vcf_line);
+                        if ($dp < $min_depth){
+                            if ( $check_presence_only or $num_matching ) {
+                                next SAMPLE;
+                            }
+                            else {
+                                return
+                            }
+                        }
+                    }
                     push( @{ $alleles{$sample} }, $1, $2 );
 
                     if ($allele_ratio_cutoff)
@@ -523,6 +538,21 @@ sub filter_on_sample {
     my $total_reject = 0;
     if (@reject) {
         foreach my $reject (@reject) {
+            if ($min_depth){
+                my $dp = get_depth_for_sample($reject, $vcf_line);
+                if ($dp < $min_depth){
+                    if ( $confirm_missing) {
+                        return;
+                    }
+                    else {
+                        next;
+                    }
+                }
+            }
+            my %called_alleles = ()
+              ;#keep track of called alleles so we don't count an allele twice because
+                #it matches other criteria (e.g. $allele_depth_cutoff)
+            
             my $call = VcfReader::getSampleCall(
                 column => $sample_to_col{$reject},
                 minGQ  => $unaff_genotype_quality,
@@ -531,7 +561,11 @@ sub filter_on_sample {
             if ( $call =~ /(\d+)[\/\|](\d+)/ ) {
                 $reject_alleles{$1}++
                   ; #store alleles from rejection samples as keys of %reject_alleles
-                $reject_alleles{$2}++;
+                $called_alleles{$1}++
+                  ;#keep track of called alleles so we don't count an allele twice because
+                #it matches other criteria (e.g. $allele_depth_cutoff)
+                $reject_alleles{$2}++;  
+                $called_alleles{$2}++;
                 $total_reject += 2;
             }
             elsif ($confirm_missing) {
@@ -552,6 +586,7 @@ sub filter_on_sample {
                     my $dp = sum(@ads);
                     if ($dp) {
                         for ( my $i = 0 ; $i < @ads ; $i++ ) {
+                            next if exists $called_alleles{$i};
                             $reject_alleles{$i}++
                               if $ads[$i] / $dp >= $allele_depth_cutoff;
                         }
@@ -571,6 +606,7 @@ sub filter_on_sample {
                     my $dp = sum(@ads);
                     if ($dp) {
                         for ( my $i = 0 ; $i < @ads ; $i++ ) {
+                            next if exists $called_alleles{$i};
                             my $ratio = $ads[$i] / $dp;
                             if ( exists $min_allele_ratios{$i} ) {
 
@@ -696,6 +732,31 @@ sub filter_on_sample {
 }
 
 #################################################
+sub get_depth_for_sample{
+    my $sample = shift;
+    my $vcf_line = shift;
+    my $dp = VcfReader::getSampleGenotypeField(
+        column => $sample_to_col{$sample},
+        field  => 'DP',
+        line   => $vcf_line,
+    );
+    if (not $dp){
+        my $ad = VcfReader::getSampleGenotypeField(
+            column => $sample_to_col{$sample},
+            field  => 'AD',
+            line   => $vcf_line,
+        ); 
+        if ($ad) {
+            my @ads = split( ",", $ad );
+            @ads = grep { !/\./ }
+              @ads
+              ;   #sometimes with no reads an AD of '.' is given
+            $dp = sum(@ads);
+        }
+    }
+    return $dp;
+}
+#################################################
 sub check_samples {
     my ($sample_ref) = @_;
     my @found;
@@ -767,7 +828,11 @@ Reject variants present in more than this number of samples in the VCF. Counts a
 
 Use this flag to look only for variants that are present only in --samples and are confirmed absent from all --reject samples. This means that as well as filtering variants with alleles present in --reject samples, variants that contain no calls (or genotype qualities below the --un_quality threshold) in --reject samples will also be filtered. In this way you may identify likely de novo variants in a sample specified by --samples by specifying parental samples with the --reject option, thus avoiding variants where there is not sufficient information to confirm de novo inheritance.
 
-=item B<-d    --depth_allele_cutoff>
+=item B<--depth_sample>
+
+Minimum per sample depth for a genotype call to be considered. Variants will only be considered for --samples if they were covered by this many reads or more. Similarly, any calls for --reject samples will only be used to filter variants if that --reject sample was covered by this many reads or more.
+
+=item B<--depth_allele_cutoff>
 
 Fraction cut-off for allele depth. When specified, the allele depth will be assessed for all samples specified using the --reject argument and any allele with a proportion of reads greater than or equal to this value will be rejected even if the sample genotypes are not called by the genotyper. For example, a value of 0.1 would reject any allele making up 10 % of reads for a sample specified by --reject even if the sample is called as homozygous reference. Must be a value between 0.0 and 1.0. 
 
