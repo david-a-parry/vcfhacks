@@ -53,6 +53,7 @@ my $pedigree;
 my $min_matching_samples;
 my $min_matching_per_family;
 my $ignore_carrier_status;
+my $x_linked = 0;
 my %opts = (
     'input'                     => \$vcf,
     'output'                    => \$out,
@@ -74,17 +75,17 @@ my %opts = (
     'quality'                   => \$genotype_quality,
     'aff_quality'               => \$aff_genotype_quality,
     'un_quality'                => \$unaff_genotype_quality,
-
+    'x_linked'                  => \$x_linked,
     #'allow_missing_genotypes' => \$allow_missing,
-    'num_matching'            => \$min_matching_samples,
-    'num_matching_per_family' => \$min_matching_per_family,
-    'ignore_carrier_status'   => \$ignore_carrier_status,
-    'progress'                => \$progress,
-    'add_classes'             => \@add,
-    'homozygous_only'         => \$homozygous_only,
-    'consensus_splice_site'   => \$splice_consensus,
-    'help'                    => \$help,
-    'manual'                  => \$man
+    'num_matching'             => \$min_matching_samples,
+    'num_matching_per_family'  => \$min_matching_per_family,
+    'ignore_carrier_status'    => \$ignore_carrier_status,
+    'progress'                 => \$progress,
+    'add_classes'              => \@add,
+    'homozygous_only'          => \$homozygous_only,
+    'consensus_splice_site'    => \$splice_consensus,
+    'help'                     => \$help,
+    'manual'                   => \$man
 );
 GetOptions(
     \%opts,
@@ -103,6 +104,7 @@ GetOptions(
     'skip_unpredicted_missense',
     'gmaf=f',
     'maf=f',
+    'x_linked=i', #1 = look for x-linked recessive only, 2= look for x-linked recessive as well
     'check_all_samples',
     'equal_genotypes',
     'quality=i',
@@ -575,7 +577,7 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
 
             #CHECK SEGREGATION IF PEDIGREE
             if ($pedigree) {
-                 $found =  check_segregation( \%vcf_lines,  $ped, \%{ $allelic_genes{$gene} });
+                 $found =  check_segregation( \%vcf_lines,  $ped, \%{ $allelic_genes{$gene} }, $chrom);
             }
             else {
                 $found =
@@ -611,7 +613,15 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
     if ($pass_filters) {
         next if $vcf_obj->getVariantField("FILTER") ne 'PASS';
     }
-    next if not is_autosome($chrom);
+    if ($x_linked == 0){
+        next if not is_autosome($chrom);
+    }elsif ($x_linked == 1){
+        next if $chrom !~ /^(chr)*X$/i;
+    }elsif ($x_linked == 2){
+        if (not is_autosome($chrom)){
+            next if $chrom !~ /^(chr)*X$/i;
+        }
+    }
     my $have_variant = 0;
     foreach my $sample (@samples) {
         if (
@@ -745,7 +755,7 @@ foreach my $gene ( keys %allelic_genes ) {
 
     #CHECK SEGREGATION IF PEDIGREE
     if ($pedigree) {
-        $found = check_segregation( \%vcf_lines, $ped, \%{ $allelic_genes{$gene} }) ;
+        $found = check_segregation( \%vcf_lines, $ped, \%{ $allelic_genes{$gene} }, $prev_chrom) ;
     }
     else {
         $found = check_all_samples_biallelic(\%vcf_lines,  \%{ $allelic_genes{$gene} }) ;
@@ -1078,7 +1088,7 @@ sub check_segregation {
     #checks whether variants segregate appropriately per family
     #can check between multiple families using check_all_samples_biallelic
     #returns hash from $gene_counts with only correctly segregating alleles
-    my ( $vcf_lines, $p, $gene_counts ) = @_;
+    my ( $vcf_lines, $p, $gene_counts, $chrom ) = @_;
     my @keys      = ( keys %{$gene_counts} );    #keys are "chr:pos-allele"
     my %seg_count = ()
       ; #return version of %{$gene_counts} containing only alleles that appear to segregate correctly
@@ -1118,7 +1128,7 @@ sub check_segregation {
         }
 
 #we've already checked that these allele combinations are not present in unaffected members including parents.
-        if ( not $ignore_carrier_status ) {
+        if ( not $ignore_carrier_status and $chrom !~ /(chr)*X/i) {
 
 #check that parents (if available) contain one allele of a compound het (admittedly this does not allow for hemizygous variants in case of a deletion in one allele)
             my %unaffected =
@@ -1428,6 +1438,14 @@ ID of samples to exclude variants from. Biallelic variants identified in these s
 =item B<-x    --reject_all_except>
 
 Reject variants present in all samples except these. If used without an argument all samples in VCF that are not specified by --samples argument will be used to reject variants. If one or more samples are given as argument to this option then all samples in VCF that are not specified by --samples argument or this argument will be used to reject variants.
+
+=item B<--x_linked>
+
+By default this program only looks for potential biallelic variants on autosomes. This option takes a value between 0 and 2 to specify how to handle the X chromsome:
+
+    1 -  look for biallelic/hemizygous variants on the X chromosome only 
+    2 -  look for biallelic/hemizygous variants on the X chromosome in addition to autosomal biallelic variants. 
+    0 -  look for biallelic variants on autosomes only (default)
 
 =item B<-f    --family>
 
