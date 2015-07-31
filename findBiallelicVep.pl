@@ -1660,9 +1660,6 @@ Genes are considered to contain potential biallelic variation if they either con
 
 While related samples will be most useful in filtering using the --reject argument, data from any unaffected sample can be used to remove apparently non-pathogenic biallelic variation. Furthermore, while unrelated affected individuals can be used to identify shared genes containing apparent biallelic variation (when you believe the disorder to be caused by variation in the same gene), if using several related affected individuals you may use the --equal_genotypes flag to tell the program to only look for variants that are shared among all affected individuals AND potentially biallelic.
 
-Note that this program only considers autosomal recessive disease, it ignores X, Y and mitochondrial chromosomes.
-
-
 
 =cut
 
