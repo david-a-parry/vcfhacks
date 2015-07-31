@@ -11,6 +11,7 @@ my $vcf;
 my $out;
 my @samples = ();
 my $min_gq  = 0;
+my @ab = ();
 my $hom;
 my $help;
 my $man;
@@ -20,12 +21,17 @@ GetOptions(
     "reverse"      => \$hom,
     "samples=s{,}" => \@samples,
     "gq=f"         => \$min_gq,
+    "ab=f{,}"      => \@ab,
     "help|?"       => \$help,
     "manual"       => \$man
 ) or pod2usage( -exitval => 2, -message => "Syntax error" );
 pod2usage( -verbose => 2 ) if $man;
 pod2usage( -verbose => 1 ) if $help;
 pod2usage( -exitval => 2, -message => "Syntax error" ) if not $vcf;
+
+foreach my $bal (@ab){
+    die "--ab argument must be between 0 and 1\n" if $bal > 1 or $bal < 0;
+}
 
 my $OUT;
 
@@ -51,8 +57,12 @@ while ( my $line = $obj->readLine ) {
         print $OUT "$line\n" if $hom;
     }
     else {
-        my $het =
-          $obj->sampleIsHeterozygous( multiple => \@samples, minGQ => $min_gq );
+        my $het;
+        if (@ab){
+            $het = $obj->sampleIsHeterozygous(allele_balance => \@ab, multiple => \@samples, minGQ => $min_gq );
+        }else{
+            $het = $obj->sampleIsHeterozygous(multiple => \@samples, minGQ => $min_gq );
+        }
         print $OUT "$line\n" if $het;
     }
 }
