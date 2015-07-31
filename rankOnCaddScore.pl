@@ -120,6 +120,7 @@ while (my $line = $vcf_obj->readLine){
         if ($opts{not_found}){
             my @alts = getAltsWithoutScore(\@cadd_scores, \%min_vars);
             foreach my $al (@alts){
+                next if $min_vars{$al}->{ALT} eq '*';
                 print $NOT_FOUND "$min_vars{$al}->{CHROM}\t$min_vars{$al}->{POS}".
                     "\t.\t$min_vars{$al}->{REF}\t$min_vars{$al}->{ALT}\n";
             }
