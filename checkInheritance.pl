@@ -411,8 +411,6 @@ A summary file (summary.txt) is also produced which summarises for each child th
 
 David A. Parry
 
-University of Leeds
-
 =head1 COPYRIGHT AND LICENSE
 
 Copyright 2015  David A. Parry
