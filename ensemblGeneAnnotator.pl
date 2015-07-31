@@ -1264,16 +1264,25 @@ sub extract_ncbi_summaries {
     eval "use Bio::SeqIO::entrezgene; 1" 
         or die "The Bio::SeqIO::entrezgene module must be installed in order ".
         "to extract NCBI gene summaries. Please install bioperl and try again\n";
+    my $time = strftime( "%H:%M:%S", localtime );
+    my $cmd = "$gene2xml -i $agsfile -b -x > $agsfile.asn.1";
+    print STDERR "[$time] Converting NCBI binary gene data to text from $agsfile using the following command:\n$cmd\n";
+    system($cmd); 
+    if ($? == -1) {
+        die "failed to execute conversion: $!\n";
+    }elsif ($?){
+        die "Conversion command failed: $?\n";
+    }
     my $io = Bio::SeqIO->new(
         -format => 'entrezgene',
-        -file   => "$gene2xml -i $agsfile -b -x |"
+        -file   => "$agsfile.asn.1"
     );
     open( my $ENSOUT, ">$ensToEntrezout" )
       or die "Can't open $ensToEntrezout for writing\n";
 
     open( my $SUMOUT, ">$sum_out" ) or die "Can't open $sum_out for writing\n";
 
-    my $time = strftime( "%H:%M:%S", localtime );
+    $time = strftime( "%H:%M:%S", localtime );
     print STDERR "[$time] Extracting NCBI gene data from $agsfile - this may take some time...\n";
     while ( my ( $gene, $genestructure, $uncaptured ) = $io->next_seq ) {
     
@@ -1348,6 +1357,7 @@ sub extract_ncbi_summaries {
     
     close $SUMOUT;
     close $ENSOUT;
+    unlink "$agsfile.asn.1" or warn "Error deleting $agsfile.asn.1 file - you may want to delete this manually.\n";
 }
 
 #####################################
