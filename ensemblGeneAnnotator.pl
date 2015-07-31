@@ -494,6 +494,7 @@ for my $k ( keys %database ) {
     close $database{$k}->{fh};
     close $database{$k}->{idx};
 }
+print STDERR "\nAnnotation finished.\n";
 $vcf_obj -> DESTROY();
 
 ########################################
