@@ -116,11 +116,11 @@ while (my $line = $vcf_obj->readLine){
     #get score for each allele or '-' if it can't be found
     my @cadd_scores = findCaddScore(\%min_vars, \%cadd_iters);
     if (grep {/^\.$/} @cadd_scores){
-        $not_found++;
         if ($opts{not_found}){
             my @alts = getAltsWithoutScore(\@cadd_scores, \%min_vars);
             foreach my $al (@alts){
                 next if $min_vars{$al}->{ALT} eq '*';
+                $not_found++;
                 print $NOT_FOUND "$min_vars{$al}->{CHROM}\t$min_vars{$al}->{POS}".
                     "\t.\t$min_vars{$al}->{REF}\t$min_vars{$al}->{ALT}\n";
             }
