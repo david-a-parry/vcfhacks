@@ -1,4 +1,4 @@
-#    Copyright 2014  David A. Parry
+#    Copyright 2014, 2015  David A. Parry
 #
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by

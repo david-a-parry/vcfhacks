@@ -498,8 +498,6 @@ my $is_carrier = $ped->isObligateCarrierRecessive($sample);
 =head1 AUTHOR
 
 David A. Parry
-University of Leeds
-
 
 =head1 COPYRIGHT AND LICENSE
 
