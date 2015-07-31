@@ -104,6 +104,10 @@ if ($matching_genes){
     "--find_shared_genes option requires at least one sample to be specified with the --samples argument.\n", 
     -exitval => 2) if not @samples;
 }
+print STDERR "[INFO] This program only works with classic SnpEff annotations ".
+  "which are accessible by running snpEff using '-formatEff' and '-classic' flags. ".
+  "This program will not check for this format and use of this script with the newer ".
+  "SnpEff formatting will likely result in no variant output from this program!\n";
 my @csq_fields = qw (
                 Effect
                 Effect_Impact
@@ -492,7 +496,7 @@ sub binsearch{
 ##################################################
 =head1 NAME
 
-getFunctionalVariantsSnpEff.pl  -  retrieve specific variant classes from a SnpEff annotated vcf file.
+getFunctionalVariantsSnpEff.pl  -  retrieve specific variant classes from a SnpEff annotated vcf file (classic format only!).
 
 =head1 SYNOPSIS
 
@@ -513,7 +517,7 @@ getFunctionalVariantsSnpEff.pl  -  retrieve specific variant classes from a SnpE
 
 =item B<-i    --input>
 
-VCF file with functional annotations from SnpEff.jar.  
+VCF file with functional annotations from SnpEff.jar. For recent versions of SnpEff you must specify '-classic' and '-formatEff' flags when running SnpEff.  
 
 =item B<-o    --output>
 
