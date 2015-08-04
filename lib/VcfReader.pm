@@ -440,7 +440,7 @@ sub getContigOrder{
         return %contigs if %contigs;
     }
     print STDERR "Failed to retrieve contigs from header - reading/creating index.\n";
-    if ($vcf =~ /\.gz$/){
+    if ($vcf =~ /\.(b){0,1}gz$/){
         eval "use Tabix; 1" 
             or croak "Tabix module is not installed and VCF file $vcf appears to be (b)gzip compressed.  ".
             "  Please install Tabix.pm in order to quickly extract contigs from bgzip compressed VCFs.\n";
@@ -504,7 +504,7 @@ sub getLineCount{
     croak "getLineCount method requires a file as an argument" if not $vcf;
     my $line_count = 0;
     my $FH = _openFileHandle($vcf);
-    if ($vcf =~ /\.gz$/){
+    if ($vcf =~ /\.(b){0,1}gz$/){
        # $line_count++ while (<$FH>);
         $line_count += tr/\n/\n/ while sysread($FH, $_, 2 ** 20);
     }else{
@@ -579,7 +579,7 @@ sub indexVcf{
     local $Data::Dumper::Terse = 1;
     local $Data::Dumper::Useqq = 1;
     my ($vcf) = @_;
-    if ($vcf =~ /\.gz$/){
+    if ($vcf =~ /\.(b){0,1}gz$/){
         chomp (my $tabix = `which tabix`);
         croak "Can't find tabix executable to index compressed VCF.  Please ensure it is ".
             "installed and in your PATH or index your VCF with tabix manually. "
@@ -720,7 +720,7 @@ Requires a VCF filename as the only argument.
 sub readIndex{
     my ($vcf) = @_;
     my %contigs = ();
-    if ($vcf =~/\.gz$/){
+    if ($vcf =~/\.(b){0,1}gz$/){
         #if compressed just create index if it doesn't exist and return
         my $index = "$vcf.tbi"; 
         if (not -e $index){
@@ -769,7 +769,7 @@ Requires a VCF filename as the only argument.
 =cut
 sub getFileLengthFromIndex{
     my $vcf = shift;
-    if ($vcf =~ /\.gz$/){
+    if ($vcf =~ /\.(b){0,1}gz$/){
         carp "Can't use getFileLengthFromIndex function on (b)gzip compressed VCFs.\n";
         return;
     }
@@ -782,7 +782,7 @@ sub _openFileHandle{
     my $vcf = shift;
     croak "_openFileHandle method requires a file as an argument" if not $vcf;
     my $FH; 
-    if ($vcf =~ /\.gz$/){
+    if ($vcf =~ /\.(b){0,1}gz$/){
         $FH = new IO::Uncompress::Gunzip $vcf, MultiStream => 1 or croak "IO::Uncompress::Gunzip failed while opening $vcf for reading: \n$GunzipError";
     }else{
         open ($FH, $vcf) or croak "Failed to open $vcf for reading: $! ";
@@ -2563,7 +2563,7 @@ sub getSearchArguments{
 #for uncompressed files
 #or tabix_iterator for bgzip compressed files
     my ($vcf, $contig_index) = @_;
-    if ($vcf =~ /\.gz$/){ 
+    if ($vcf =~ /\.(b){0,1}gz$/){ 
         eval "use Tabix; 1" 
             or croak "Tabix module is not installed and VCF file $vcf appears to be (b)gzip compressed.  ".
             "  Please install Tabix.pm in order to search bgzip compressed VCFs.\n";
@@ -2659,7 +2659,7 @@ sub searchByRegion{
     croak "start argument is required for searchForPosition method " if not exists $args{start};
     croak "end argument is required for searchForPosition method " if not exists $args{end};
     if (exists $args{vcf}){
-        if ($args{vcf} =~ /\.gz$/){
+        if ($args{vcf} =~ /\.(b){0,1}gz$/){
             return searchByRegionCompressed(%args);
         }else{
             return searchByRegionUncompressed(%args);
@@ -2950,7 +2950,7 @@ sub searchForPosition{
     croak "chrom argument is required for searchForPosition method " if not exists $args{chrom};
     croak "pos argument is required for searchForPosition method " if not exists $args{pos};
     if (exists $args{vcf}){
-        if ($args{vcf} =~ /\.gz$/){
+        if ($args{vcf} =~ /\.(b){0,1}gz$/){
             return searchForPositionCompressed(%args);
         }else{
             return searchForPositionUncompressed(%args);
