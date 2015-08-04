@@ -36,7 +36,7 @@ GetOptions(
     "f|freq=f"  => \$freq,
     "t|forks=i" => \$forks,
     "cache=i", "pathogenic", "quiet", "Progress",
-    "VERBOSE",
+    "VERBOSE", "use_common_tag",
 ) or pod2usage( -exitval => 2, -message => "Syntax error" );
 pod2usage( -verbose => 2 ) if $opts{manual};
 pod2usage( -verbose => 1 ) if $opts{help};
@@ -81,6 +81,10 @@ my $KNOWN;
 if ( $opts{known_snps} ) {
     open( $KNOWN, ">$opts{known_snps}" )
       || die "Can't open $opts{known_snps} for writing: $!";
+}
+
+if (not defined $opts{use_common_tag}){
+    $opts{use_common_tag} = 0;
 }
 my $progressbar;
 my $next_update      = 0;
@@ -779,7 +783,9 @@ sub evaluate_snp {
                 return ( 1, 0, %info_values ) if $info_values{G5A};
             }
         }
-        if ( $freq <= 0.01 ) {
+        if ( $freq <= 0.01 && $opts{use_common_tag}) {
+              #only use COMMON tag if user has specifically asked for it 
+              #as it seems to be quite inaccurate (small n?)
             if ( exists $info_values{COMMON} ) {
                 return ( 1, 0, %info_values ) if $info_values{COMMON};
             }
@@ -904,6 +910,10 @@ Percent SNP minor allele frequency to filter from. SNPs with minor alleles equal
 =item B<--pathogenic>
 
 When using --build or --freq filtering use this flag to print SNPs with "pathogenic" or "probably pathogenic" annotations (as indicated by SCS or CLNSIG flags in the dbSNP VCF) to your filtered output regardless of build or frequency settings.  If used on its own the program will only print SNPs with "pathogenic" or "probably pathogenic" annotations to your --known_out file (if specified).
+
+=item B<-u    --use_common_tag>
+
+If filtering on a minor allele frequency of 1 % or lower, use of this flag will employ the 'COMMON' tag to filter variants if present in your dbSNP file. The 'COMMON' tag in dbSNP denotes variants that have "at least one 1000Genomes population with a minor allele of frequency >= 1% and for which 2 or more founders contribute to that minor allele frequency". This tag is no longer used by annotateSnps.pl by default due to some noticeable inaccuracies compared to frequency data from larger sequencing studies that can end up filtering known, rare pathogenic variants. However, if you wish to filter on using very low allele frequencies you might want to use this option to enable use of this annotation.
 
 =item B<-s    --samples>
 
