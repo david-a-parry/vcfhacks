@@ -12,6 +12,7 @@ use Pod::Usage;
 use File::Basename;
 use FindBin;
 use Tabix; 
+use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use lib "$FindBin::Bin/lib";
 use VcfReader;
 use TextToExcel;
