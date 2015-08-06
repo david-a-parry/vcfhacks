@@ -29,10 +29,11 @@ our $AUTOLOAD;
     my $_count = 0;
     my %_attrs = (
         _file => ["", "read"],
-        _row => ["0", "read"],
-        _column => ["0", "read"],
-        _worksheet => ["", "read/write"],
+        _rows => [ [0] , "read"],
+        _columns => [ [0] , "read"],
+        _worksheets => [ []  , "read/write"],
         _workbook => ["", "read"],
+        _name => ["Sheet 1", "read"], # name of first worksheet
         _delimiter => ["\t", "read/write"],
     );
     sub _all_attrs{
@@ -59,7 +60,7 @@ our $AUTOLOAD;
 
 sub DESTROY{
         my ($self) = @_;
-        $self->{_workbook}->close;
+        $self->{_workbook}->close() if defined $self->{_workbook};
         $self -> _decr_count( );
 }
 
@@ -83,7 +84,7 @@ sub new {
     }elsif(not $self->{_workbook}){
         croak "Either file or workbook items must be passed to constructor ";
     }
-    $self->{_worksheet} = $self->{_workbook}->add_worksheet();
+    $self->{_worksheets}->[0] = $self->{_workbook}->add_worksheet($self->{_name});
     $self->{_std_format} = $self->{_workbook}->add_format();
     return $self;
 }
@@ -155,6 +156,17 @@ sub _checkWriteArguments{
     }
 }
 
+sub addWorksheet{
+#adds worksheet and returns its index from @{$self->{_worksheets}}
+    my ($self, $name) = @_;
+    my $sheet = $self->{_workbook}->add_worksheet($name);
+    push @{$self->{_worksheets}}, $sheet;
+    push @{$self->{_rows}}, 0;
+    push @{$self->{_columns}}, 0;
+    return @{$self->{_worksheets}} - 1;
+}
+
+
 sub createFormat{
     #creates a format for use with workbook
     #returns a format that can be passed to the writeLine 
@@ -165,9 +177,10 @@ sub createFormat{
 }
 
 sub writeLine{
+    #returns next row number of worksheet
     my ($self, %args) = @_;
     $self->_checkWriteArguments("writeLine", %args);
-    $self->{_row} = $self->_writeLineToExcel(%args);
+    return $self->_writeLineToExcel(%args);
 }
 
 sub _writeLineToExcel{
@@ -179,9 +192,13 @@ sub _writeLineToExcel{
     my $columns_before = 0;
     my $additional_rows = 0;
     my @fields = ();
-    my $worksheet = $self->{_worksheet};
-    my $row = $self->{_row};
-    my $column = $self->{_column};
+    my $sheet_index = 0;
+    if (defined $args{worksheet}){
+        $sheet_index = $args{worksheet};
+    }
+    my $worksheet = $self->{_worksheets}->[$sheet_index];
+    my $row = $self->{_rows}->[$sheet_index] ;
+    my $column = $self->{_columns}->[$sheet_index] ;
     my $format = $self->{_std_format};
     my $delimiter = $self->{_delimiter};
 
@@ -198,13 +215,8 @@ sub _writeLineToExcel{
     }
         
     if (defined $args{delimiter}){
-        $delimiter = $args{worksheet};
+        $delimiter = $args{delimiter};
     }
-        
-    if (defined $args{worksheet}){
-        $worksheet = $args{worksheet};
-    }
-        
 
     if (ref $args{line} eq 'ARRAY'){
         @fields = @{$args{line}};
@@ -353,6 +365,8 @@ sub _writeLineToExcel{
             $worksheet->write($row, $temp_column++, $f, $format);
         }
     }
+    $self->{_rows}->[$sheet_index] = $row + $additional_rows + 1;
+    $self->{_columns}->[$sheet_index]  = 0;
     return $row + $additional_rows + 1;
 }
 
