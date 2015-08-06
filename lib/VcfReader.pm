@@ -2527,7 +2527,7 @@ sub by_first_last_line{
 
 For a given VCF returns a tabix iterator object generated using Tabix.pm. The first argument must be the filename of a VCF and the optional second argument may be the name of the index if not the same as the VCF filename plus '.tbi'.
 
- my $iter = VcfReader::getTabixIterator('file.vcf');
+ my $iter = VcfReader::getTabixIterator('file.vcf.gz');
  my $i = $tabixIterator->query('chr1',  10001, 10002);
  while (my $line =  $iter->read($i)){
     #do something with line...
