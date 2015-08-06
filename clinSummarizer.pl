@@ -36,7 +36,7 @@ GetOptions(
 
 pod2usage( -verbose => 1 ) if $opts{h};
 pod2usage( -exitval => 2, -message => "-i/--input is required" ) if (not $opts{i});
-pod2usage( -exitval => 2, -message => "-d/--hgmd is required" ) if (not $opts{m});
+pod2usage( -exitval => 2, -message => "-m/--hgmd is required" ) if (not $opts{m});
 
 #open VCF, get samples and get VEP annotations
 
@@ -50,7 +50,8 @@ my $FH                 = VcfReader::_openFileHandle($opts{i});
 
 my %search_args = getSearchArgs();
 
-#check ClinVar VCF and retrieve search arguments (if supplied)
+# check ClinVar TSV file (https://github.com/macarthur-lab/clinvar) 
+# if supplied and retrieve search arguments 
 
 my %clinvar_sargs = getClinVarSearchArgs();
 my %clnsig_codes = getClnSigCodes();
@@ -125,22 +126,27 @@ sub writeSampleSummary{
 sub getClinVarSearchArgs{
     return if not $opts{c};
     #use bgzip compressed version of clinvar file from https://github.com/macarthur-lab/clinvar
-    checkClinvarFile($opts{c});
-    return VcfReader::getSearchArguments($opts{c});
-
+    my ($bgz, $clinVarCols) = checkClinvarFile($opts{c});
+    my $index = "$bgz.tbi";
+    my $iterator = Tabix->new(-data =>  $bgz, -index => $index) ;
+    my %sargs = ( tabix_iterator => $iterator, columns => $clinVarCols ); 
+    return %sargs;
 }
 ###########################################################
 sub checkClinvarFile{
+#returns columns hash of col name to col number
     my $cv = shift;
     if ($cv !~ /\.(b)*gz$/){
         print STDERR "ClinVar file ($cv) is missing a .gz extension - " .
             "attempting to compress with bgzip.\n";
-        compressClinVarTsv($cv); 
-    }elsif( not -e "$cv.tbi"){
-        print STDERR "No index found for ClinVar file ($cv). Attempting to index with tabix...\n";
-        indexClinVar($cv);
+        return compressClinVarTsv($cv); 
+#    }elsif( not -e "$cv.tbi"){
+#        print STDERR "No index found for ClinVar file ($cv). Attempting to index with tabix...\n";
+#        return indexClinVar($cv);
+    }else{
+        my %col = getClinVarColumns($cv);
+        return $cv, \%col;
     }
-
 }
 ###########################################################
 sub compressClinVarTsv{
@@ -156,7 +162,8 @@ sub compressClinVarTsv{
     system("bgzip $cv"); 
     checkExit($?);
     $cv = "$cv.gz";
-    indexClinVar($cv, \%columns); 
+#    indexClinVar($cv, \%columns); 
+    return ($cv, \%columns);
 }
 ###########################################################
 sub indexClinVar{
@@ -169,6 +176,7 @@ sub indexClinVar{
     }
     system("tabix -s $columns{chrom} -b $columns{pos} -e $columns{pos} $cv"); 
     checkExit($?);
+    return %columns;
 }
 ###########################################################
 sub checkExit{
@@ -198,15 +206,22 @@ sub getClinVarColumns{
     my @header = split("\t", <$CVAR>); 
     my $n = 0;
     my %columns = map { lc($_) => $n++} @header;
-    for my $c ( qw / chrom  pos ref alt mut clinical_significance pathogenic / ) { 
+    for my $c ( qw / 
+                    chrom
+                    pos
+                    ref
+                    alt
+                    mut
+                    clinical_significance
+                    pathogenic
+                    all_traits
+                    all_pmids
+                / ) { 
         if (not exists $columns{$c}){
             die "Required column ($c) not found in ClinVar file ($cv) header.\n";
         }
     }
     return %columns;
-}
-###########################################################
-sub indexClinVarTsv{
 }
 ###########################################################
 sub getSearchArgs{
@@ -278,8 +293,12 @@ sub writeToSheet{
         }
     }
     #collect ClinVar database annotations if found
-    my $clnSigCode = getClinVarCode($clinvar_matches, $var); 
-    push @row, $clnSigCode; 
+    my ($clnSig, $clnTraits, $cvarPathognic, $cvarConflicted) 
+                         = getClinSig($clinvar_matches, $var);
+    push @row, $clnSig, $clnTraits; 
+    if ($cvarPathognic){
+        push @row, $cvarConflicted;
+    }
     
     #add standard VCF fields
     foreach my $f ( qw / CHROM ORIGINAL_POS ORIGINAL_REF ORIGINAL_ALT / ){
@@ -345,7 +364,7 @@ sub writeToSheet{
     /;
     if (@$matches){
         $s_name = "HGMD";
-    }elsif($clnSigCode && $clnSigCode =~ /pathogenic/i){
+    }elsif($cvarPathognic){
         $s_name = "ClinVarPathogenic";
     }elsif (exists $lofs{$most_damaging_csq}){
         $s_name = "LOF";
@@ -442,7 +461,8 @@ sub writeToSheet{
     );
 }
 ###########################################################
-sub getClinVarCode{
+#kept for legacy in case need to switch back to ClinVar VCF
+sub getClinVarCodeVcf{
     my ($clinvars, $var) = @_;
     #array ref of clinvar VCF lines and a minimized variant hash from input
     my @annots = ();
@@ -466,13 +486,31 @@ sub getClinVarCode{
     }
     return join(", ", @annots); 
 }
+
+###########################################################
+sub getClinSig{
+    my ($clinvars, $var) = @_;
+    #array ref of clinvar lines and a minimized variant hash from input
+    my @clnsig = ();
+    my @trait  = ();
+    my $isPathogenic = 0;
+    foreach my $cl (@$clinvars){
+        my @match = split("\t", $cl);
+        push @clnsig, $match[$clinvar_sargs{columns}->{clinical_significance}] ;
+        push @trait, $match[$clinvar_sargs{columns}->{all_traits}] ;
+        $isPathogenic +=  $match[$clinvar_sargs{columns}->{pathogenic}] ;
+    }
+    return join(", ", @clnsig), join(", ", @trait), $isPathogenic; 
+}
     
 ###########################################################
-sub searchClinVar{
+#kept for legacy in case need to switch back to ClinVar VCF
+sub searchClinVarVcf{
     return if not $opts{c};
     my $var = shift;#$var is a ref to a single entrey from minimized alleles hash
     #simplify alleles and check if there's a match in HGMD file
     my @matches = ();
+    #below is a hack because ClinVar file should be tsv.gz not VCF
     my @hits = VcfReader::searchByRegion(
         %clinvar_sargs,
         chrom => $var->{CHROM},
@@ -480,7 +518,29 @@ sub searchClinVar{
         end   => $var->{POS} + length($var->{REF}) - 1,
     );
     foreach my $h (@hits){
-        if (alleleMatches($var, $h)){
+        if (alleleMatchesClinVar($var, $h)){
+            push @matches, $h;
+        }
+    }
+    return @matches;
+}
+
+###########################################################
+
+sub searchClinVar{
+    return if not $opts{c};
+    my $var = shift;#$var is a ref to a single entrey from minimized alleles hash
+    #simplify alleles and check if there's a match in HGMD file
+    my @matches = ();
+    #below is a hack because ClinVar file should be tsv.gz not VCF
+    my @hits = VcfReader::searchByRegion(
+        %clinvar_sargs,
+        chrom => $var->{CHROM},
+        start => $var->{POS},
+        end   => $var->{POS} + length($var->{REF}) - 1,
+    );
+    foreach my $h (@hits){
+        if (alleleMatchesClinVar($var, $h)){
             push @matches, $h;
         }
     }
@@ -525,6 +585,24 @@ sub alleleMatches{
     }
     return 0;
 }
+##########################################################
+sub alleleMatchesClinVar{
+    my ($var, $line) = @_;
+    #$var is a ref to a single entrey from minimized alleles hash
+    #$line is a clinvar entry
+    #returns 1 if it matches
+    my @split = split ("\t", $line);
+    my $chrom = $split[$clinvar_sargs{columns}->{chrom}] ;
+    next if $chrom ne $var->{CHROM}; 
+    my $pos = $split[$clinvar_sargs{columns}->{pos}] ;
+    #alleles should already be minimized
+    my $ref = $split[$clinvar_sargs{columns}->{ref}] ;
+    my $alt = $split[$clinvar_sargs{columns}->{alt}] ;
+    return 0 if $pos != $var->{POS};
+    return 0 if $ref ne $var->{REF};
+    return 0 if $alt ne $var->{ALT};
+    return 1;
+}
 ###########################################################
 sub setupOutput{
     my @suffixes = (".vcf", ".txt");
@@ -543,7 +621,7 @@ sub setupOutput{
     );  
     writeHeader($sheets{HGMD}, $headers{HGMD});
 
-    $sheets{ClinVarPathogenic} = addSheet("ClinVarPathogenic", $headers{missense});
+    $sheets{ClinVarPathogenic} = addSheet("ClinVarPathogenic", $headers{clinvar});
 
     $sheets{LOF} = addSheet("LOF", $headers{LOF});
     
@@ -567,7 +645,8 @@ sub getHeaders{
             Disease
             HGMD_Symbol
             HGVS
-            ClinVar
+            ClinVarSig
+			ClinVarTrait
             Chrom
             Pos
             Ref
@@ -590,7 +669,8 @@ sub getHeaders{
     @{$h{LOF}} =  ( 
         qw / 
             index
-            ClinVar
+            ClinVarSig
+			ClinVarTrait
             Chrom
             Pos
             Ref
@@ -609,10 +689,39 @@ sub getHeaders{
             GQ
      /);
     
+    @{$h{clinvar}} =  ( 
+        qw / 
+            index
+            ClinVarSig
+			ClinVarTrait
+            Conflicted
+            Chrom
+            Pos
+            Ref
+            Alt
+            Symbol
+            Feature 
+            Consequence 
+            HGVSc 
+            HGVSp 
+            GERP
+            Polyphen
+            SIFT
+            CADD
+            Sample
+            GT
+            AD
+            AB
+            GQ
+     /);
+
+
+
     @{$h{missense}} =  ( 
         qw / 
             index
-            ClinVar
+            ClinVarSig
+			ClinVarTrait
             Chrom
             Pos
             Ref
