@@ -42,7 +42,7 @@ foreach my $s (@samples){
 checkDuplicates(\@new_samples);
 
 
-print STDERR "Renamed $changed samples out of " . scalar@samples . " Writing output.\n";
+print STDERR "Renamed $changed samples out of " . scalar@samples . "\nWriting output.\n";
 my $OUT = \*STDOUT;
 if ($opts{o}){
     open ($OUT, ">$opts{o}") or die "Couldn't open $opts{o} for writing: $!\n";
@@ -60,7 +60,7 @@ while (my $line = <$IN>){
 close $IN;
 close $OUT;
 
-print STDERR "Finished - renamed $changed samples out of " . scalar@samples .".\n";
+print STDERR "Finished renaming samples.\n";
 
 
 #################################################
@@ -74,7 +74,8 @@ sub readSampleFile{
         next if $line =~ /^#/;
         my @s = split(/$delimiter/, $line);
         if (@s < 2){
-            die "Not enough columns for line:\n$line\n";
+            die "\nSample file error - not enough columns for line:\n\n$line\n" .
+                "Do you Need to specify your delimiter?\nExiting\n";
         }
         if (exists $samps{$s[0]}){
             die "ERROR: Sample $s[0] appears more than once in $f!\n";
@@ -91,7 +92,7 @@ sub checkDuplicates{
     my %seen = ();
     my @dups = grep { $seen{$_}++ } @$ar;
     if (@dups){
-        die "ERROR: Detected duplicate samples after conversion:\n" . join("\n", @dups) . "\n";
+        die "ERROR: Detected duplicate samples after conversion:\n" . join("\n", @dups) . "\nExiting\n";
     }
 }
 
