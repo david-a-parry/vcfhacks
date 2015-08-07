@@ -556,7 +556,7 @@ sub searchClinVar{
 
 ###########################################################
 sub searchHgmd{
-    my $var = shift;#$var is a ref to a single entrey from minimized alleles hash
+    my $var = shift;#$var is a ref to a single entry from minimized alleles hash
     #simplify alleles and check if there's a match in HGMD file
     my @matches = ();
     my @hits = VcfReader::searchByRegion(
