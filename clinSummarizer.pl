@@ -140,9 +140,12 @@ sub checkClinvarFile{
         print STDERR "ClinVar file ($cv) is missing a .gz extension - " .
             "attempting to compress with bgzip.\n";
         return compressClinVarTsv($cv); 
-#    }elsif( not -e "$cv.tbi"){
-#        print STDERR "No index found for ClinVar file ($cv). Attempting to index with tabix...\n";
-#        return indexClinVar($cv);
+    }elsif( not -e "$cv.tbi"){
+        print STDERR "No index found for ClinVar file ($cv). Attempting to index with tabix...\n";
+        return indexClinVar($cv);
+    }elsif( -M "$cv.tbi" > -M $cv){
+        print STDERR "Tabix index is older than ClinVar file ($cv). Attempting to re-index with tabix...\n";
+        return indexClinVar($cv);
     }else{
         my %col = getClinVarColumns($cv);
         return $cv, \%col;
@@ -159,10 +162,10 @@ sub compressClinVarTsv{
     my @header = split("\t", <$CVAR>); 
     my %columns = getClinVarColumns($cv);
     print STDERR "Compressing $cv with bgzip...\n";
-    system("bgzip $cv"); 
+    system("bgzip -c $cv > $cv.gz"); 
     checkExit($?);
     $cv = "$cv.gz";
-#    indexClinVar($cv, \%columns); 
+    indexClinVar($cv, \%columns); 
     return ($cv, \%columns);
 }
 ###########################################################
@@ -174,7 +177,9 @@ sub indexClinVar{
     }else{
         %columns = getClinVarColumns($cv);
     }
-    system("tabix -s $columns{chrom} -b $columns{pos} -e $columns{pos} $cv"); 
+    my $seqcol = $columns{chrom} + 1;
+    my $poscol = $columns{pos}   + 1;
+    system("tabix -S 1 -s $seqcol -b $poscol -e $poscol $cv"); 
     checkExit($?);
     return %columns;
 }
@@ -203,7 +208,7 @@ sub getClinVarColumns{
     }else{
         open ($CVAR, $cv) or die "Can't open $cv for reading header: $!\n";
     }
-    my @header = split("\t", <$CVAR>); 
+    chomp (my @header = split("\t", <$CVAR>)); 
     my $n = 0;
     my %columns = map { lc($_) => $n++} @header;
     for my $c ( qw / 
@@ -296,7 +301,7 @@ sub writeToSheet{
     my ($clnSig, $clnTraits, $cvarPathognic, $cvarConflicted) 
                          = getClinSig($clinvar_matches, $var);
     push @row, $clnSig, $clnTraits; 
-    if ($cvarPathognic){
+    if ($cvarPathognic and not @$matches){
         push @row, $cvarConflicted;
     }
     
@@ -494,13 +499,15 @@ sub getClinSig{
     my @clnsig = ();
     my @trait  = ();
     my $isPathogenic = 0;
+    my $conflicted   = 0;
     foreach my $cl (@$clinvars){
         my @match = split("\t", $cl);
         push @clnsig, $match[$clinvar_sargs{columns}->{clinical_significance}] ;
         push @trait, $match[$clinvar_sargs{columns}->{all_traits}] ;
         $isPathogenic +=  $match[$clinvar_sargs{columns}->{pathogenic}] ;
+        $conflicted   +=  $match[$clinvar_sargs{columns}->{conflicted}] ;
     }
-    return join(", ", @clnsig), join(", ", @trait), $isPathogenic; 
+    return join(", ", @clnsig), join(", ", @trait), $isPathogenic, $conflicted; 
 }
     
 ###########################################################
