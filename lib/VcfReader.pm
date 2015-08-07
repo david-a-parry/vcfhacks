@@ -585,7 +585,13 @@ sub indexVcf{
             "installed and in your PATH or index your VCF with tabix manually. "
             if not $tabix; 
         my $er = `$tabix -p vcf $vcf 2>&1`;
-        croak "Tabix indexing failed, code $?: $er\n" if $?;
+        if ($?){
+            if ($? == -1){
+                croak "Tabix indexing failed - tabix command failed to execute.\n";
+            }
+            my $exit = $? >> 8;
+            croak "Tabix indexing failed, code $exit: $er\n" ;
+        }
         return;
     }
     my $index = "$vcf.vridx";
