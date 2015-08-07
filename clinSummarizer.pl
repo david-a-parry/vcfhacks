@@ -646,7 +646,7 @@ sub getHeaders{
             HGMD_Symbol
             HGVS
             ClinVarSig
-			ClinVarTrait
+            ClinVarTrait
             Chrom
             Pos
             Ref
@@ -670,7 +670,7 @@ sub getHeaders{
         qw / 
             index
             ClinVarSig
-			ClinVarTrait
+            ClinVarTrait
             Chrom
             Pos
             Ref
@@ -693,7 +693,7 @@ sub getHeaders{
         qw / 
             index
             ClinVarSig
-			ClinVarTrait
+            ClinVarTrait
             Conflicted
             Chrom
             Pos
@@ -721,7 +721,7 @@ sub getHeaders{
         qw / 
             index
             ClinVarSig
-			ClinVarTrait
+            ClinVarTrait
             Chrom
             Pos
             Ref
