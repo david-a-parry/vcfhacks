@@ -30,6 +30,7 @@ GetOptions(
     'b|allele_balance=f{,}', #min and optional max alt allele ratio per sample call
     'd|depth=i',         #optional min depth for sample call
     'a|allele_cutoff=f', #remove if allele is present in this proportion or more calls
+    'f|filter_output=s', #optional output file for calls filtered on allele_cutoff
     'g|gq=f',            #min GQ quality for calls
     'h|?|help',
 ) or pod2usage(-exitval => 2, -message => "Syntax error.\n"); 
@@ -76,6 +77,8 @@ my $header_formatting;
 my $std_formatting;     
 my $url_format;
 my $xl_obj;
+#filehandle for --allele_cutoff filtered variants
+my $FILTER_OUT;
 setupOutput();
 
 #set up counts for variant indexes of each sheet
@@ -90,6 +93,9 @@ while (my $l = <$FH>){
     assessAndWriteVariant($l);
 }
 close $FH;
+if ($FILTER_OUT){
+    close $FILTER_OUT;
+}
 print STDERR "Done writing variant sheets - writing sample summary...\n"; 
 writeSampleSummary();
 print STDERR "Done.\n";
@@ -270,7 +276,10 @@ sub writeToSheet{
         foreach my $k (keys %allele_counts){
             $total_allele_count += $allele_counts{$k}; 
         }
-        return if $allele_counts{$var->{ALT_INDEX}}/$total_allele_count >= $opts{a};
+        if ($allele_counts{$var->{ALT_INDEX}}/$total_allele_count >= $opts{a}){
+            print $FILTER_OUT join("\t", @$l) . "\n" if $opts{f};
+            return;
+        }
     }
     my @row = (); #values to write out to excel sheet
     my @split_cells = (); #values to write in split cells spanning row
@@ -305,10 +314,12 @@ sub writeToSheet{
         push @row, $cvarConflicted;
     }
     
-    #add standard VCF fields
+    #add standard VCF fields from this allele only
     foreach my $f ( qw / CHROM ORIGINAL_POS ORIGINAL_REF ORIGINAL_ALT / ){
         push @row, $var->{$f};
     }
+    push @row, VcfReader::getVariantField($l, 'QUAL');
+    push @row, VcfReader::getVariantField($l, 'FILTER');
     #deal with VEP annotations
     my @get_vep =  qw /Symbol Consequence Allele feature canonical hgvsc hgvsp polyphen sift GERP++_RS/ ; 
     my @vep_csq = VcfReader::getVepFields
@@ -639,6 +650,11 @@ sub setupOutput{
     $sheets{Other} = addSheet("Other", $headers{LOF});
     
     $sheets{SampleSummary} = addSheet("Sample Summary", $headers{sample});
+    
+    if ($opts{f}){
+        open ($FILTER_OUT, ">$opts{f}") or die "Could not create filter output file \"$opts{f}\": $!\n";
+        print $FILTER_OUT join("\n", @vhead) . "\n";
+    }
 }
 
 ###########################################################
@@ -658,6 +674,8 @@ sub getHeaders{
             Pos
             Ref
             Alt
+            Qual
+            Filter
             Symbol
             Feature
             Consequence 
@@ -682,6 +700,8 @@ sub getHeaders{
             Pos
             Ref
             Alt
+            Qual
+            Filter
             Symbol
             Feature 
             Consequence 
@@ -706,6 +726,8 @@ sub getHeaders{
             Pos
             Ref
             Alt
+            Qual
+            Filter
             Symbol
             Feature 
             Consequence 
@@ -733,6 +755,8 @@ sub getHeaders{
             Pos
             Ref
             Alt
+            Qual
+            Filter
             Symbol
             Feature 
             Consequence 
