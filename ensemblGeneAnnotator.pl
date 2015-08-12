@@ -707,6 +707,7 @@ sub checkAndParseVepClasses{
     inframe_insertion
     inframe_deletion
     missense_variant
+    protein_altering_variant
     transcript_amplification
     splice_region_variant
     incomplete_terminal_codon_variant
@@ -744,6 +745,7 @@ sub checkAndParseVepClasses{
         inframe_insertion
         inframe_deletion
         missense_variant
+        protein_altering_variant
         transcript_amplification
         TFBS_ablation
         TFBS_amplification
@@ -1548,7 +1550,7 @@ Use SnpEff annotations instead of VEP annotations to identify genes. You must ha
 
 =item B<-f    --functional>
 
-Use this flag to only annotate standard 'functional' variant classes (transcript_ablation, splice_donor_variant, splice_acceptor_variant, splice_region_variant, stop_gained, frameshift_variant, stop_lost, initiator_codon_variant, inframe_insertion, inframe_deletion, missense_variant, transcript_amplification, TFBS_ablation, TFBS_amplification, regulatory_region_ablation, regulatory_region_amplification). Prevents annotation of gene information for genes/transcripts that overlap a variant but are not affected in a way defined by one of these variant classes.
+Use this flag to only annotate standard 'functional' variant classes (transcript_ablation, splice_donor_variant, splice_acceptor_variant, splice_region_variant, stop_gained, frameshift_variant, stop_lost, initiator_codon_variant, inframe_insertion, inframe_deletion, missense_variant, protein_altering_variant, transcript_amplification, TFBS_ablation, TFBS_amplification, regulatory_region_ablation, regulatory_region_amplification). Prevents annotation of gene information for genes/transcripts that overlap a variant but are not affected in a way defined by one of these variant classes.
 
 =item B<-c    --classes>
 

@@ -72,7 +72,7 @@ Use this flag to only print consequences from canonical transcripts when using -
 
 =item B<--functional>
 
-Use this flag to only annotate standard 'functional' variant classes (transcript_ablation, splice_donor_variant, splice_acceptor_variant, splice_region_variant, stop_gained, frameshift_variant, stop_lost, initiator_codon_variant, inframe_insertion, inframe_deletion, missense_variant, transcript_amplification, TFBS_ablation, TFBS_amplification, regulatory_region_ablation, regulatory_region_amplification).
+Use this flag to only annotate standard 'functional' variant classes (transcript_ablation, splice_donor_variant, splice_acceptor_variant, splice_region_variant, stop_gained, frameshift_variant, stop_lost, initiator_codon_variant, inframe_insertion, inframe_deletion, missense_variant, protein_altering_variant, transcript_amplification, TFBS_ablation, TFBS_amplification, regulatory_region_ablation, regulatory_region_amplification).
 
 =item B<-c    --classes>
 
@@ -230,6 +230,7 @@ my @vep_valid = qw (transcript_ablation
                 inframe_insertion
                 inframe_deletion
                 missense_variant
+                protein_altering_variant
                 transcript_amplification
                 splice_region_variant
                 incomplete_terminal_codon_variant
@@ -267,6 +268,7 @@ if (not @vep_classes){
                 inframe_insertion
                 inframe_deletion
                 missense_variant
+                protein_altering_variant
                 transcript_amplification
                 TFBS_ablation
                 TFBS_amplification

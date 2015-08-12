@@ -102,6 +102,7 @@ my @valid = qw (transcript_ablation
                 inframe_insertion
                 inframe_deletion
                 missense_variant
+                protein_altering_variant
                 transcript_amplification
                 splice_region_variant
                 incomplete_terminal_codon_variant
@@ -139,6 +140,7 @@ if (not @classes){
                 inframe_insertion
                 inframe_deletion
                 missense_variant
+                protein_altering_variant
                 transcript_amplification
                 TFBS_ablation
                 TFBS_amplification
@@ -581,6 +583,7 @@ Default classes are:
                 inframe_insertion
                 inframe_deletion
                 missense_variant
+                protein_altering_variant
                 transcript_amplification
                 TFBS_ablation
                 TFBS_amplification
@@ -599,6 +602,7 @@ The user can specify one or more of the following classes instead:
                 inframe_insertion
                 inframe_deletion
                 missense_variant
+                protein_altering_variant
                 transcript_amplification
                 splice_region_variant
                 incomplete_terminal_codon_variant
@@ -759,6 +763,7 @@ In its simplest form this program will print specific variant classes from a VCF
                 inframe_insertion
                 inframe_deletion
                 missense_variant
+                protein_altering_variant
                 transcript_amplification
                 TFBS_ablation
                 TFBS_amplification
