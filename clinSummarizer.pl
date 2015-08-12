@@ -355,6 +355,7 @@ sub writeToSheet{
     my $most_damaging_csq = getMostDamagingConsequence($csq_to_report);
     if (@$matches or 
         $most_damaging_csq eq 'missense_variant' or  
+        $most_damaging_csq eq 'protein_altering_variant' or  
         $most_damaging_csq =~  /^inframe_(inser|dele)tion$/
     ){
         push @vep_fields, qw /polyphen sift/;
@@ -394,7 +395,9 @@ sub writeToSheet{
         }else{
             $s_name = "BenignMissense";
         }
-    }elsif($most_damaging_csq =~  /^inframe_(inser|dele)tion$/){
+    }elsif( $most_damaging_csq =~  /^inframe_(inser|dele)tion$/ or 
+            $most_damaging_csq eq 'protein_altering_variant' 
+        ){
         if ($allele_cadd >= 10){
             $s_name = "DamagingMissense";
         }else{
