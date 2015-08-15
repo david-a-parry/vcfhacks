@@ -4,6 +4,7 @@ use warnings;
 use Getopt::Long;
 use Bio::DB::Sam;
 use Data::Dumper;
+use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use File::Temp qw/ tempfile /;
 use FindBin;
 use lib "$FindBin::Bin/lib";
@@ -27,7 +28,7 @@ usage("-f/--fasta is required" ) if (not $opts{f});
 #OPEN AND CHECK HGMD INPUT
 my $FH;
 if ($opts{i} =~ /\.gz$/){
-    open ($FH, "gzip -dc $opts{i} |") or die "Can't open $opts{i} via gzip: $!\n";
+    $FH = new IO::Uncompress::Gunzip $opts{i} or die "IO::Uncompress::Gunzip failed while opening $opts{i} for reading:\n$GunzipError";
 }else{
     open ($FH, $opts{i} ) or die "Can't open $opts{i} for reading: $!\n";
 }
