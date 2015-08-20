@@ -168,5 +168,16 @@ For data from a VCF with many hundreds to thousands of samples, using a summaris
 
     perl filterVcfOnVcf.pl -i input.vcf  -f summarised.vcf  -o filtered.vcf -y 0.01 --info_filter
 
+Sometimes you may want to take a look at the genotype calls for a select few samples from a multisample VCF without having to count across many 10s-100s of columns to find the relevant calls - selectSampleCalls.pl will only output the calls from chosen samples without altering INFO fields such as AD, AF and AC fields. 
+
+    perl selectSampleCalls.pl -i small.vcf -s sample1 sample2 | grep rs137853041
+
+checkInheritance.pl can count the number of variants in a VCF conforming to expected inhertiance patterns when provided with a PED file with at least one parent-child relationship
+
+    perl checkInheritance.pl -i input.vcf -f family.ped
+
+Renaming of samples within a VCF can be acheived using a file containing lines with the current sample names to change and the new sample names.
+
+    perl renameSamples.pl -i input.vcf -s sample_mapping.txt
 
 

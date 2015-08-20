@@ -12,6 +12,35 @@ These programs are all command line utilities. To run these programs you simply 
 
 __UPDATE__
 
+_VERSION 0.1.18:_
+
+16/08/15
+
+-VEP's (rather vague) 'protein_altering_variant' class is now included by default as a 'functional' variant in relevant scripts.
+
+-findBiallelic scripts now feature the option to look at variants compatible with X-linked recessive inheritance as well/instead of autosomal recessive inheritance.
+
+-filterVcfOnVcf can now filter using population specific allele frequency fields, particularly in the case of ExAC VCFs.
+
+-filterOnSample now features the option to only consider samples with a minimum read depth at a variant site.
+
+-rankOnCaddScore can now take a directory as an argument in order to find any .(b)gz files contained to use for CADD annotations.
+
+-rankOnCaddScore ignores the new '*' allele codes in VCFs.
+
+-getHetVariants features the option to specify minimum and maximum allele balances for a call to be considered heterozygous.
+
+-added checkInheritance script.
+
+-added renameSamples script.
+
+-in the interest of speed, findBiallelic scripts check that input is sorted on-the-fly rather than doing a pass of the whole file before running.
+
+-fixed 'not numeric value' errors from no-calls when processing genotype qualities.
+
+-fixed an issue when using a custom set of VEP fields in annovcfToSimple where the consequence or allele fields would not be retrieved.
+
+
 _VERSION 0.1.17:_
 
 08/05/14

@@ -271,10 +271,10 @@ sub checkInheritance{
         my @pat = keys %pat_alleles;
         for (my $i = 0; $i < @pat; $i++){
             for (my $j = 0; $j < @mat; $j++){
-                if ($gt =~ /^\Q$pat[$i]\E[\/\|]$mat[$j]$/){
+                if ($gt =~ /^\Q$pat[$i]\E[\/\|]\Q$mat[$j]\E$/){
                     return 1;
                 }        
-                if ($gt =~ /^\Q$mat[$j]\E[\/\|]$pat[$i]$/){
+                if ($gt =~ /^\Q$mat[$j]\E[\/\|]\Q$pat[$i]\E$/){
                     return 1;
                 }
             }
