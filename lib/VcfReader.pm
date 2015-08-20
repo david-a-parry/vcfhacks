@@ -2105,6 +2105,52 @@ sub variantsHaveMatchingAlleles{
     return 0;
 }
 
+=item B<convertTextForInfo>
+
+Takes a string it's only argument and returns a new string with characters not compatible with VCF format converted to characters that will not break VCF format. Specifically, the following characters are replaced as indicated:
+
+    '|' with '::'
+    ';' with '^'
+    ',' with '`'
+    any whitespace with '_'
+
+ $compatible_string = VcfReader::convertTextForInfo($some_string); 
+ my $modified_line = VcfReader::addVariantInfoField
+    (
+        line  =>\@line, 
+        id    => 'SOME_FIELD', 
+        value => $compatible_string, 
+    );
+
+=cut 
+
+sub convertTextForInfo{
+    #replace characters not compatible with VCF
+    #format for annotations
+    my ($string) = @_;
+    $string =~ s/\|/::/g;
+    $string =~ tr/;, \t\n\r/^`____/;
+    return $string;
+}
+
+
+=item B<reconvertTextForInfo>
+
+Takes a string it's only argument and returns a new string reversing the substitutions made by the 'convertTextForInfo' method. One unfortunate shortcoming is that underscores will be converted to spaces regardless of whether that is desired or not.
+
+ my $string = VcfReader::getVariantInfoField(\@line, 'SOME_FIELD');
+ $conv_string = VcfReader::reconvertTextForInfo($string); 
+
+=cut 
+
+sub reconvertTextForInfo{
+    #replace characters not compatible with VCF
+    #format for annotations
+    my ($string) = @_;
+    $string =~ tr/^`_/;, /;
+    $string =~ s/::/\|/g;
+    return $string;
+}
 
 =back 
 
