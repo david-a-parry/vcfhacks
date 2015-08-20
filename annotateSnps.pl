@@ -2,7 +2,7 @@
 use warnings;
 use strict;
 use Parallel::ForkManager;
-use Getopt::Long;
+use Getopt::Long qw(:config no_ignore_case);
 use Sys::CPU;
 use Pod::Usage;
 use Term::ProgressBar;
@@ -11,8 +11,11 @@ use POSIX qw/strftime/;
 use FindBin;
 use lib "$FindBin::Bin/lib";
 use VcfReader;
+use ClinVarReader;
+
 my @samples;
 my @dbsnp ;
+my $cvar;
 my $freq;
 my $quiet;
 my $strict;
@@ -20,7 +23,7 @@ my $cpus = Sys::CPU::cpu_count();
 my $forks = 0;
 my $buffer_size;
 my %opts = (
-    cache      => \$buffer_size,
+    CACHE      => \$buffer_size,
     forks      => \$forks,
     samples    => \@samples,
     dbsnp_file => \@dbsnp,
@@ -30,13 +33,13 @@ my %opts = (
 );
 
 GetOptions(
-    \%opts,    "output=s",     "input=s",         "known_snps=s",
-    "replace", "samples=s{,}", "dbsnp_file=s{,}", "help",
-    "manual",  "build=i",
+    \%opts,    "output|o=s",     "input|i=s",         "known_snps|k=s",
+    "replace|r", "samples|s=s{,}", "dbsnp_file|d=s{,}", "help|h|?",
+    "manual",  "build|b=i", "clinvar_file|c=s",
     "f|freq=f"  => \$freq,
     "t|forks=i" => \$forks,
-    "cache=i", "pathogenic", "quiet", "Progress",
-    "VERBOSE", "no_common_tag",
+    "CACHE|C=i", "pathogenic", "quiet|q", "progress",
+    "VERBOSE|V", "no_common_tag|n",
 ) or pod2usage( -exitval => 2, -message => "Syntax error" );
 pod2usage( -verbose => 2 ) if $opts{manual};
 pod2usage( -verbose => 1 ) if $opts{help};
@@ -69,6 +72,10 @@ pod2usage(
     -message => "value for --build argument must be equal to or greater than 0"
 ) if defined $opts{build} && $opts{build} < 0;
 
+if ($opts{clinvar_file}){
+   ClinVarReader::checkClinVarFile($opts{clinvar_file});
+}
+
 my $OUT;
 if ( $opts{output} ) {
     open( $OUT, ">$opts{output}" )
@@ -99,7 +106,7 @@ print STDERR "[$time] Initializing input VCF... ";
 
 die "Header not ok for input ($opts{input}) "
     if not VcfReader::checkHeader( vcf => $opts{input} );
-if ( defined $opts{Progress} ) {
+if ( defined $opts{progress} ) {
     $total_vcf = VcfReader::countVariants( $opts{input} );
     print STDERR "$opts{input} has $total_vcf variants. ";
 }
@@ -162,7 +169,7 @@ my @add_head = ();
 if ( $opts{pathogenic} ) {
     push @add_head, grep { /##INFO=<ID=CLNSIG,/ } @snp_headers;
     push @add_head, grep { /##INFO=<ID=SCS,/ } @snp_headers;
-    if ( not @add_head ) {
+    if ( not @add_head and not $opts{clinvar_file}) {
         print STDERR
 "WARNING - can't find CLNSIG or SCS fields in dbSNP file headers, your SNP reference files probably don't have pathogenic annotations.\n";
     }
@@ -192,6 +199,7 @@ if ( $opts{freq} ) {
 my $meta_head = VcfReader::getMetaHeader( $opts{input} );
 print $OUT "$meta_head\n";
 print $KNOWN "$meta_head\n" if $KNOWN;
+my $headstring = '';
 if (@add_head) {
     my %seen = ();
     @add_head = grep { !$seen{$_}++ } @add_head;
@@ -200,12 +208,24 @@ if (@add_head) {
         $add =~ s/^##INFO=<//;
         $add =~ s/\>$//;
     }
-    my $headstring =
+    $headstring .=
 "##INFO=<ID=SnpAnnotation,Number=A,Type=String,Description=\"Collection of SNP annotations per allele from dbSNP VCF files: ". 
     join(", ", @dbsnp) .".\">\n";
+}
+if ($opts{clinvar_file}){
+    $headstring .= <<EOT
+##INFO=<ID=ClinVarPathogenic,Number=A,Type=Integer,Description="For each allele, a value of 1 is given if the variant has ever been asserted "Pathogenic" or "Likely pathogenic" by any submitter for any phenotype, and 0 if present in ClinVar but does not meet this criteria">
+##INFO=<ID=ClinVarConflicted,Number=A,Type=Integer,Description="For each allele, a value of 1 is given if the variant has ever been asserted "Pathogenic" or "Likely pathogenic" by any submitter for any phenotype, and has also been asserted "Benign" or "Likely benign" by any submitter for any phenotype, and 0 if present in ClinVar but does not meet this criteria">
+##INFO=<ID=ClinVarTraits,Number=A,Type=String,Description="Any traits associated with this allele in ClinVar">
+##INFO=<ID=ClinVarClinicalSignificance,Number=A,Type=String,Description="Clinical significance terms for this allele given in ClinVar">
+EOT
+    ;
+}
+if ($headstring){
     print $OUT $headstring;
     print $KNOWN $headstring if $KNOWN;
 }
+
 print $OUT "##annotateSnps.pl=\"";
 print $KNOWN "##annotateSnps.pl=\"" if $KNOWN;
 
@@ -263,7 +283,7 @@ elsif ( $opts{pathogenic} ) {
     }
 }
 my $prog_total;
-if ( defined $opts{Progress} and $total_vcf ) {
+if ( defined $opts{progress} and $total_vcf ) {
     my $x_prog = 3;
     $x_prog = 4 if $KNOWN;
     $prog_total = $total_vcf * $x_prog;
@@ -292,10 +312,15 @@ my $n                = 0;
 my @lines_to_process = ();
 my $VCF              = VcfReader::_openFileHandle( $opts{input} );
 my %no_fork_args = ();
+my %no_fork_cvar_args    = ();
+
 if ($forks < 2){
     foreach my $d (@dbsnp) {
         my %s = VcfReader::getSearchArguments( $d, $dbsnp_to_index{$d} );
         $no_fork_args{$d} = \%s;
+    }
+    if ($opts{clinvar_file}){
+        %no_fork_cvar_args = ClinVarReader::getClinVarSearchArgs($opts{clinvar_file});
     }
 }
 VAR: while ( my $line = <$VCF> ) {
@@ -314,7 +339,7 @@ VAR: while ( my $line = <$VCF> ) {
         chomp $line;
         #our VcfReader methods should be more efficient on pre-split lines
         my @split_line = split( "\t", $line );
-        my %res = filterSnps( \@split_line, \%no_fork_args);
+        my %res = filterSnps( \@split_line, \%no_fork_args, \%no_fork_cvar_args);
         if ($res{keep}){
             print $OUT join("\t", @{$res{keep}}) ."\n"; 
             $kept++;
@@ -339,7 +364,7 @@ close $VCF;
 process_buffer() if $forks > 1;
 close $OUT;
 close $KNOWN if $KNOWN;
-if ( defined $opts{Progress} ) {
+if ( defined $opts{progress} ) {
     $progressbar->update($prog_total) if $prog_total >= $next_update;
 }
 $time = strftime( "%H:%M:%S", localtime );
@@ -499,6 +524,7 @@ sub process_batch {
     my ($batch) = @_;
     my %results = ( batch_size => scalar(@$batch) );
     my %sargs;
+    my %cvargs;
     foreach my $d (@dbsnp) {
 
         #WE'VE FORKED AND COULD HAVE A RACE CONDITION HERE -
@@ -507,11 +533,14 @@ sub process_batch {
         my %s = VcfReader::getSearchArguments( $d, $dbsnp_to_index{$d} );
         $sargs{$d} = \%s;
     }
+    if ($opts{clinvar_file}){
+        %cvargs = ClinVarReader::getClinVarSearchArgs($opts{clinvar_file});
+    }
     foreach my $line ( @{$batch} ) {
         chomp $line;
         #our VcfReader methods should be more efficient on pre-split lines
         my @split_line = split( "\t", $line );
-        my %res = filterSnps( \@split_line, \%sargs );
+        my %res = filterSnps( \@split_line, \%sargs, \%cvargs );
         push @{ $results{keep} },   $res{keep}   if $res{keep};
         $results{filter}++  if $res{filter};
         push @{ $results{known} },  $res{known}  if $res{known};
@@ -528,7 +557,7 @@ sub process_batch {
 
 ################################################
 sub filterSnps {
-    my ( $vcf_line, $search_args ) = @_;
+    my ( $vcf_line, $search_args, $cvar_args ) = @_;
     my ( $keep, $filter, $known, $pathogenic );
     my $line_should_not_be_filtered = 0
       ; #flag in case pathogenic flag is set or something and we don't want to filter this snp no matter what
@@ -557,8 +586,6 @@ sub filterSnps {
             next if not exists $sample_alleles{$allele};
         }
         foreach my $k ( keys %{$search_args} ) {
-
-            #foreach my $s (@dbsnp) {
             if (
                 my @snp_hits = VcfReader::searchForPosition(
                     %{ $search_args->{$k} },
@@ -617,22 +644,19 @@ sub filterSnps {
 
                         #get snp info and perform 
                         #filtering if fiters are set
-                        my ( $filter_snp, $dont_filter, %add_info ) =
-                          evaluate_snp( $min_vars{$allele}, $opts{build},
-                            $opts{pathogenic}, $freq, \@snp_split );
-                        $min_vars{$allele}->{filter_snp} += $filter_snp;
-                        $line_should_not_be_filtered += $dont_filter;
-                        foreach my $k ( keys(%add_info) ) {
-                            push @{ $min_vars{$allele}->{snp_info}->{$k} },
-                              $add_info{$k};
-                        }
+                        $line_should_not_be_filtered += 
+                          evaluate_snp( $min_vars{$allele},  \@snp_split );
                     }
                 }
             }
         }
+        if ($cvar_args){#perform ClinVar filtering with ClinVar.tsv file
+            $line_should_not_be_filtered += evaluate_clinvar( $min_vars{$allele}, $cvar_args );
+        }
     }
     my $filter_count = 0;
-    my @snp_info           = ();
+    my @snp_info = ();
+    my %clinvar_info = ();
     foreach my $allele ( sort { $a <=> $b } keys %min_vars ) {
         my @al_inf = ();
         if ( keys %{ $min_vars{$allele}->{snp_info} } ) {
@@ -651,6 +675,9 @@ sub filterSnps {
             push @al_inf, '.';
         }
         push @snp_info, join( "|", @al_inf );
+        foreach my $k ( keys %{ $min_vars{$allele}->{cvar_info} } ) {
+            push @{$clinvar_info{$k}}, $min_vars{$allele}->{cvar_info}->{$k};
+        }
     }
     my $annot = "[" . join( ",", @snp_info ) . "]";
     $vcf_line = VcfReader::addVariantInfoField
@@ -659,6 +686,14 @@ sub filterSnps {
             id => "SnpAnnotation",
             value => $annot,
         );
+    foreach my $k ( sort keys %clinvar_info ) {
+        $vcf_line = VcfReader::addVariantInfoField 
+            (
+                line => $vcf_line,
+                id   => $k,
+                value => join(",", @{ $clinvar_info{$k} } ), 
+            );
+    }
     foreach my $allele ( keys %min_vars ) {
         $filter_count++ if ( $min_vars{$allele}->{filter_snp} );
     }
@@ -707,37 +742,67 @@ sub initializeDbsnpVcfs {
 }
 
 #################################################
+sub evaluate_clinvar {
+    my $min_allele = shift;
+    my $cvar_args = shift;
+    my @matches = ClinVarReader::searchForMatchingVariant
+    (
+        %$cvar_args,
+        chrom => $min_allele->{CHROM},
+        pos   => $min_allele->{POS},
+        ref   => $min_allele->{REF},
+        alt   => $min_allele->{ALT},
+    );
+    my $isPathogenic = 0;
+    my $isConflicted = 0;
+    my @traits = ();
+    my @sig = ();
+    my @path = ();
+    my @conf = ();
+    foreach my $m (@matches){
+        push @traits, ClinVarReader::getColumnValue($m, 'all_traits', $cvar_args->{col_hash});
+        push @sig, ClinVarReader::getColumnValue($m, 'clinical_significance', $cvar_args->{col_hash});
+        my $c =  ClinVarReader::getColumnValue($m, 'conflicted', $cvar_args->{col_hash});
+        my $p = ClinVarReader::getColumnValue($m, 'pathogenic', $cvar_args->{col_hash});
+        push @path, $p;
+        push @conf, $c;
+        $isPathogenic += $p;
+        $isConflicted += $c;
+    }
+    $min_allele->{cvar_info}->{ClinVarPathogenic} = $isPathogenic ? 1 : 0;
+    $min_allele->{cvar_info}->{ClinVarConflicted} = $isConflicted ? 1 : 0;
+    if (@traits){
+        @traits = map { VcfReader::convertTextForInfo($_) } @traits;
+        $min_allele->{cvar_info}->{ClinVarTraits} = join("/", @traits);
+    }
+    if (@sig){
+        @sig = map { VcfReader::convertTextForInfo($_) } @sig;
+        $min_allele->{cvar_info}->{ClinVarClinicalSignificance} = join("/", @sig);
+    }
+    return $isPathogenic;
+}
+#################################################
 sub evaluate_snp {
 
-#returns two values - first is 1 if snp should be filtered and 0 if not,
-#the second is 1 if shouldn't be filtered under any circumstance (at the moment only if
-#pathogenic flag is set and snp has a SCS or CLNSIG value of 4 or 5
-    my ( $min_allele, $build, $path, $freq, $snp_line, $snp_file ) = @_;
-
-    #my %info_fields = VcfReader::getInfoFields(vcf => $snp_file);
+#returns 1 if shouldn't be filtered under any circumstance (at the moment only if
+#pathogenic flag is set and snp is clinically associated) and 0 otherwise
+    my ( $min_allele, $snp_line ) = @_;
     my %info_values = ();
     foreach my $f (qw (SCS CLNSIG dbSNPBuildID G5 G5A GMAF CAF AF COMMON)) {
         my $value = VcfReader::getVariantInfoField( $snp_line, $f );
         if ( defined $value ) {
-
-         #  if ( exists $info_fields{$f} && $info_fields{$f}->{Type} eq 'Flag' )
-         #  {
-         #      $info_values{$f} = 1;
-         #  }
-         #  else {
+            push @{ $min_allele->{snp_info}->{$f} }, $value;
             $info_values{$f} = $value;
-
-            #  }
         }
     }
-    if ($path) {
+    if ($opts{pathogenic}) {
         if ( exists $info_values{SCS} ) {
             my @scs = split( /[\,\|]/, $info_values{SCS} );
             foreach my $s (@scs) {
 
 #SCS=4 indicates probable-pathogenic, SCS=5 indicates pathogenic, print regardless of freq or build if --pathogenic option in use
                 if ( $s eq '4' or $s eq '5' ) {
-                    return ( 0, 1, %info_values );
+                    return 1;
                 }
             }
         }
@@ -751,15 +816,16 @@ sub evaluate_snp {
 
 #SCS=4 indicates probable-pathogenic, SCS=5 indicates pathogenic, print regardless of freq or build if --pathogenic option in use
                 if ( $s eq '4' or $s eq '5' ) {
-                    return ( 0, 1, %info_values );
+                    return 1;
                 }
             }
         }
     }
-    if ($build) {
+    if ($opts{build}) {
         if ( exists $info_values{dbSNPBuildID} ) {
-            if ( $build >= $info_values{dbSNPBuildID} ) {
-                return ( 1, 0, %info_values );
+            if ( $opts{build} >= $info_values{dbSNPBuildID} ) {
+                $min_allele->{filter_snp}++;
+                return 0 ;
             }
         }
         else {
@@ -776,23 +842,27 @@ sub evaluate_snp {
 
             #G5 = minor allele freq > 5 % in at least 1 pop
             #G5A = minor allele freq > 5 % in all pops
-            if ( exists $info_values{G5} ) {
-                return ( 1, 0, %info_values ) if $info_values{G5};
+            if ( $info_values{G5} ) {
+                $min_allele->{filter_snp}++;
+                return 0;
             }
-            if ( exists $info_values{G5A} ) {
-                return ( 1, 0, %info_values ) if $info_values{G5A};
+            if ( $info_values{G5A} ) {
+                $min_allele->{filter_snp}++;
+                return 0;
             }
         }
         if ( $freq <= 0.01 && not $opts{no_common_tag}) {
               #only use COMMON tag if user has specifically asked for it 
               #as it seems to be quite inaccurate (small n?)
-            if ( exists $info_values{COMMON} ) {
-                return ( 1, 0, %info_values ) if $info_values{COMMON};
+            if ( $info_values{COMMON} ) {
+                $min_allele->{filter_snp}++;
+                return 0;
             }
         }
         if ( exists $info_values{GMAF} ) {
             if ( $freq <= $info_values{GMAF} ) {
-                return ( 1, 0, %info_values );
+                $min_allele->{filter_snp}++;
+                return 0;
             }
         }
         if ( exists $info_values{CAF} ) {
@@ -812,7 +882,8 @@ sub evaluate_snp {
                   if ( @caf <= $al );
                 next if $caf[$al] eq '.';
                 if ( $freq <= $caf[$al] ) {
-                    return ( 1, 0, %info_values );
+                    $min_allele->{filter_snp}++;
+                    return 0;
                 }
             }
         }
@@ -833,12 +904,13 @@ sub evaluate_snp {
                   if ( @af < $al );
                 next if $af[ $al - 1 ] eq '.';
                 if ( $freq <= $af[ $al - 1 ] ) {
-                    return ( 1, 0, %info_values );
+                    $min_allele->{filter_snp}++;
+                    return 0;
                 }
             }
         }
     }
-    return ( 0, 0, %info_values );
+    return 0;
 }
 #################################################
 sub checkVarMatches {
@@ -893,7 +965,31 @@ SNP reference VCF file(s). IDs from these files will be used to annotate/filter 
 
 SNP vcf files for use can be downloaded from the NCBI FTP site (ftp://ftp.ncbi.nih.gov/snp/) or from the Broad Institutes FTP site (e.g. ftp://ftp.broadinstitute.org/bundle/1.5/b37/). Clinically annotated VCFs are available from the NCBI FTP site.
 
-Your are STRONGLY advised to use bgzip compressed and tabix indexed files as your SNP reference VCFs.
+Your are advised to use bgzip compressed and tabix indexed files as your SNP reference VCFs.
+
+=item B<-c    --clinvar_file>
+
+Optional ClinVar TSV file from to identify pathogenic variants as obtained from https://github.com/macarthur-lab/clinvar. If used the following INFO fields will be added:
+
+=over 8
+    
+=item ClinVarPathogenic 
+
+For each allele, a value of 1 is given if the variant has ever been asserted "Pathogenic" or "Likely pathogenic" by any submitter for any phenotype, and 0 if present in ClinVar but does not meet this criteria
+
+=item ClinVarConflicted 
+
+For each allele, a value of 1 is given if the variant has ever been asserted "Pathogenic" or "Likely pathogenic" by any submitter for any phenotype, and has also been asserted "Benign" or "Likely benign" by any submitter for any phenotype, and 0 if present in ClinVar but does not meet this criteria
+
+=item ClinVarTraits 
+
+Any traits associated with an allele in ClinVar
+
+=item ClinVarClinicalSignificance
+
+Clinical significance terms for alleles given in ClinVar
+
+=back
 
 =item B<-r    --replace>
 
@@ -923,7 +1019,7 @@ One or more samples to check variants for.  Default is to check all variants spe
 
 Number of forks to create for parallelising your analysis. By default no forking is done. To speed up your analysis you may specify the number of parallel processes to use here. (N.B. forking only occurs if a value of 2 or more is given here as creating 1 fork only results in increased overhead with no performance benefit).
 
-=item B<-c    --cache>
+=item B<-C    --CACHE>
 
 Cache size. Variants are processed in batches to allow for efficient parallelisation. When forks are used the default is to process up to 10,000 variants at once or 1,000 x no. forks if more than 10 forks are used. If you find this program comsumes too much memory when forking you may want to set a lower number here. When using forks you may get improved performance by specifying a higher cache size, however the increase in memory usage is proportional to your cache size multiplied by the number of forks.
 
