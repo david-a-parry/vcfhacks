@@ -391,7 +391,7 @@ Show the program's manual page.
 
 =head1 DESCRIPTION
  
-This program reads a VCF file and associated PED file in order to assess the amount of variants following expected inheritance patterns between parents and children. For each parent-child relationship identified the following files are produced:
+This program reads a VCF file and associated PED file in order to assess the number of SNVs following expected inheritance patterns between parents and children. For each parent-child relationship identified the following files are produced:
   
     <family_id>-<child_id>-mendelian.txt
     <family_id>-<child_id>-non-mendelian.txt
