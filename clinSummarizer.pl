@@ -407,8 +407,6 @@ sub writeToSheet{
     }else{
         $s_name = "Other";
     }
-    $variant_counts{$s_name}++;
-    unshift @row, $variant_counts{$s_name};
     
     #add sample info to new array of array refs to be written 
     # in split cells alongside global variant fields
@@ -478,6 +476,8 @@ sub writeToSheet{
         }
     }
     if (not $opts{n} or $variant_has_valid_sample){
+        $variant_counts{$s_name}++;
+        unshift @row, $variant_counts{$s_name};
         $xl_obj->writeLine
         (
             line       => \@row, 
