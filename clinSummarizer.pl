@@ -24,6 +24,7 @@ GetOptions(
     \%opts,
     'i|input=s',        #vcf input
     'o|output=s',       #xlsx output
+    'n|no_blanks',      #no blank samples
     'm|hgmd=s',         #vcf of HGMD variations converted with hgmd_to_vcf.pl
     't|transcripts=s',  #optional tsv list of transcript IDs in order of priority
     'c|clinvar=s',      #optional ClinVar VCF to add ClinVar CLINSIG annotations
@@ -435,6 +436,7 @@ sub writeToSheet{
               minGQ => $min_gq,
         );
     
+    my $variant_has_valid_sample = 0;
     foreach my $s (
             sort {$samples_to_columns{$a} <=> $samples_to_columns{$b}} 
             keys %samples_to_columns
@@ -446,7 +448,9 @@ sub writeToSheet{
             if ($opts{d}){
                 next if $opts{d} > $depth;
             }   
-            
+            if ($opts{g}){
+                eval "$opts{g} > $samp_gqs{$s}" or next;
+            }
             my $ab = 0;
             if ( $depth > 0){
                 $ab = $ads[$var->{ALT_INDEX}]/$depth;
@@ -457,6 +461,7 @@ sub writeToSheet{
                     next if $ab > $opts{b}->[1];
                 }
             }
+            $variant_has_valid_sample++;
             push @split_cells, [$s, $samp_gts{$s}, $samp_ads{$s}, $ab, $samp_gqs{$s}];
             my $var_class = $s_name; 
             if ($s_name eq 'HGMD'){
@@ -472,12 +477,14 @@ sub writeToSheet{
             }
         }
     }
-    $xl_obj->writeLine
-    (
-        line       => \@row, 
-        worksheet  => $sheets{$s_name},
-        succeeding => \@split_cells,
-    );
+    if (not $opts{n} or $variant_has_valid_sample){
+        $xl_obj->writeLine
+        (
+            line       => \@row, 
+            worksheet  => $sheets{$s_name},
+            succeeding => \@split_cells,
+        );
+    }
 }
 ###########################################################
 #kept for legacy in case need to switch back to ClinVar VCF
