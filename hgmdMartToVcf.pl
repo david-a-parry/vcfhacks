@@ -107,7 +107,7 @@ sub initializeOutput{
     print $OUT "##fileformat=VCFv4.2\n";
     foreach my $f (@hgmd_fields){
         (my $tag = $f) =~ s/\s/_/g; 
-        print $OUT "##INFO=<ID=$tag,Number=1,Type=String,Description=\"$f field from HGMD mart download\",Source=\"$opts{i}\">\n"
+        print $OUT "##INFO=<ID=$tag,Number=1,Type=String,Description=\"$f field from HGMD mart download, source: \"$opts{i}\">\n"
     }
     print $OUT '#' . join("\t",  ( qw / CHROM POS ID REF ALT QUAL FILTER INFO / ) ) . "\n";
 
