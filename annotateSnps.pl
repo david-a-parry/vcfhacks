@@ -650,7 +650,7 @@ sub filterSnps {
                 }
             }
         }
-        if ($cvar_args){#perform ClinVar filtering with ClinVar.tsv file
+        if (%$cvar_args){#perform ClinVar filtering with ClinVar.tsv file
             $line_should_not_be_filtered += evaluate_clinvar( $min_vars{$allele}, $cvar_args );
         }
     }
