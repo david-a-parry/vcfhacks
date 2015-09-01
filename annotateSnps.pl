@@ -52,13 +52,13 @@ if ( $forks < 2 ) {
 }
 else {
     if ($forks > $cpus){
-        print STDERR "[Warning]: Number of forks ($forks) exceeds number of CPUs on this machine ($cpus)\n";
+        print STDERR "Warning - Number of forks ($forks) exceeds number of CPUs on this machine ($cpus)\n";
     }
     if ( not $buffer_size ) {
         $buffer_size = 10000 > $forks * 1000 ? 10000 : $forks * 1000;
     }
     print STDERR
-"[INFO] Processing in batches of $buffer_size variants split among $forks forks.\n";
+"INFO - Processing in batches of $buffer_size variants split among $forks forks.\n";
 }
 if ( defined $freq ) {
     pod2usage(
@@ -71,10 +71,6 @@ pod2usage(
     -exitval => 2,
     -message => "value for --build argument must be equal to or greater than 0"
 ) if defined $opts{build} && $opts{build} < 0;
-
-if ($opts{clinvar_file}){
-   ClinVarReader::checkClinVarFile($opts{clinvar_file});
-}
 
 my $OUT;
 if ( $opts{output} ) {
@@ -102,13 +98,13 @@ my $found            = 0;    #variants that match a known SNP
 my $printed_to_known = 0;
 my $total_vcf        = 0;
 my $time = strftime( "%H:%M:%S", localtime );
-print STDERR "[$time] Initializing input VCF... ";
+print STDERR "[$time] INFO - Initializing input VCF... ";
 
 die "Header not ok for input ($opts{input}) "
     if not VcfReader::checkHeader( vcf => $opts{input} );
 if ( defined $opts{progress} ) {
     $total_vcf = VcfReader::countVariants( $opts{input} );
-    print STDERR "$opts{input} has $total_vcf variants. ";
+    print STDERR " INFO - $opts{input} has $total_vcf variants. ";
 }
 my %contigs = ();
 if ($forks){
@@ -123,7 +119,16 @@ if (@samples) {
 }
 
 $time = strftime( "%H:%M:%S", localtime );
-print STDERR "\n[$time] Finished initializing input VCF\n";
+print STDERR "\n[$time] INFO - Finished initializing input VCF\n";
+
+if ($opts{clinvar_file}){
+    $time = strftime( "%H:%M:%S", localtime );
+    print STDERR "[$time] INFO - Checking ClinVar file, $opts{clinvar_file}...\n";
+    my ( $cv, $col ) = ClinVarReader::checkClinVarFile($opts{clinvar_file});
+    $opts{clinvar_file} = $cv;
+    $time = strftime( "%H:%M:%S", localtime );
+    print STDERR "[$time] INFO - ClinVar file is OK.\n";
+}
 
 if (@dbsnp > 1){
     $time = strftime( "%H:%M:%S", localtime );
@@ -160,7 +165,7 @@ for ( my $i = 0 ; $i < @dbsnp ; $i++ ) {
         }
     );
     $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "[$time] Initializing $dbsnp[$i] dbSNP reference VCF "
+    print STDERR "[$time] INFO -  Initializing $dbsnp[$i] dbSNP reference VCF "
       . ( $i + 1 ) . " of "
       . scalar(@dbsnp) . "\n";
     $dbpm->start() and next;
@@ -168,10 +173,10 @@ for ( my $i = 0 ; $i < @dbsnp ; $i++ ) {
     push @info_and_index, $dbsnp[$i];
     $time = strftime( "%H:%M:%S", localtime );
     print STDERR
-      "[$time] Finished initializing $dbsnp[$i] dbSNP reference VCF.\n";
+      "[$time] INFO - Finished initializing $dbsnp[$i] dbSNP reference VCF.\n";
     $dbpm->finish( 0, \@info_and_index );
 }
-print STDERR "Waiting for children...\n" if $opts{VERBOSE};
+print STDERR "INFO - Waiting for children...\n" if $opts{VERBOSE};
 $dbpm->wait_all_children;
 my @add_head = ();
 if ( $opts{pathogenic} ) {
@@ -262,11 +267,11 @@ print $KNOWN join( " ", @opt_string ) . "\"\n" . $col_header . "\n"
   if $KNOWN;
 
 $time = strftime( "%H:%M:%S", localtime );
-print STDERR "[$time] SNP annotation starting\n";
+print STDERR "[$time] INFO - SNP annotation starting\n";
 
 $freq /= 100 if ($freq);
 if ( $opts{build} || $freq ) {
-    print STDERR "Filtering variants on following criteria:\n";
+    print STDERR "INFO - Filtering variants on following criteria:\n";
     print STDERR ">in dbSNP$opts{build} or previous\n"
       if defined $opts{build} && $opts{build};
     print STDERR
@@ -280,7 +285,7 @@ if ( $opts{build} || $freq ) {
 elsif ( $opts{pathogenic} ) {
     if ($KNOWN) {
         print STDERR
-"Annotating output and printing variants with \"pathogenic\" or \"probably pathogenic\" annotations to $opts{known_snps}\n";
+"INFO - Annotating output and printing variants with \"pathogenic\" or \"probably pathogenic\" annotations to $opts{known_snps}\n";
     }
     else {
         print STDERR
