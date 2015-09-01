@@ -116,6 +116,7 @@ sub _compressClinVarTsv{
     system("bgzip -c $cv > $cv.gz"); 
     _checkExit($?);
     $cv = "$cv.gz";
+    print STDERR "Attempting to index with tabix...\n";
     indexClinVar($cv, \%columns); 
     return ($cv, \%columns);
 }
