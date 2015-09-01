@@ -124,7 +124,15 @@ if (@samples) {
 
 $time = strftime( "%H:%M:%S", localtime );
 print STDERR "\n[$time] Finished initializing input VCF\n";
-my @snp_headers;
+
+if (@dbsnp > 1){
+    $time = strftime( "%H:%M:%S", localtime );
+    print STDERR "[$time] INFO - Multiple dbSNP files in use - "
+      . "annotations will be added in following order of precedence: "
+      . join (" > ", @dbsnp) . "\n";
+}
+
+my %dbsnp_to_info;#key is file, value is ref to hash of info fields
 my %dbsnp_to_index = ();
 my $dbpm           = Parallel::ForkManager->new($forks);
 for ( my $i = 0 ; $i < @dbsnp ; $i++ ) {
@@ -136,7 +144,7 @@ for ( my $i = 0 ; $i < @dbsnp ; $i++ ) {
 
             if ( defined($data_structure_reference) ){
                 if ( ref $data_structure_reference eq 'ARRAY' ) {
-                    push @snp_headers, @{ $data_structure_reference->[0] };
+                    $dbsnp_to_info{$data_structure_reference->[2]} = $data_structure_reference->[0];
                     $dbsnp_to_index{ $data_structure_reference->[2] } =
                       $data_structure_reference->[1];
                 }
@@ -156,19 +164,21 @@ for ( my $i = 0 ; $i < @dbsnp ; $i++ ) {
       . ( $i + 1 ) . " of "
       . scalar(@dbsnp) . "\n";
     $dbpm->start() and next;
-    my @head_and_index = initializeDbsnpVcfs( $dbsnp[$i] );
-    push @head_and_index, $dbsnp[$i];
+    my @info_and_index = initializeDbsnpVcfs( $dbsnp[$i] );
+    push @info_and_index, $dbsnp[$i];
     $time = strftime( "%H:%M:%S", localtime );
     print STDERR
       "[$time] Finished initializing $dbsnp[$i] dbSNP reference VCF.\n";
-    $dbpm->finish( 0, \@head_and_index );
+    $dbpm->finish( 0, \@info_and_index );
 }
 print STDERR "Waiting for children...\n" if $opts{VERBOSE};
 $dbpm->wait_all_children;
 my @add_head = ();
 if ( $opts{pathogenic} ) {
-    push @add_head, grep { /##INFO=<ID=CLNSIG,/ } @snp_headers;
-    push @add_head, grep { /##INFO=<ID=SCS,/ } @snp_headers;
+    my $inf = checkAndAddHeaders("CLNSIG");
+    push @add_head, $inf if $inf;
+    $inf = checkAndAddHeaders("SCS");
+    push @add_head, $inf if $inf;
     if ( not @add_head and not $opts{clinvar_file}) {
         print STDERR
 "WARNING - can't find CLNSIG or SCS fields in dbSNP file headers, your SNP reference files probably don't have pathogenic annotations.\n";
@@ -176,17 +186,21 @@ if ( $opts{pathogenic} ) {
 }
 
 if ( $opts{build} ) {
-    my @build_head = grep { /##INFO=<ID=dbSNPBuildID,/ } @snp_headers;
-    if ( not @build_head ) {
+    my $inf = checkAndAddHeaders("dbSNPBuildID");
+    if ( not $inf ) {
         print STDERR
 "WARNING - can't find dbSNPBuildID fields in dbSNP file headers, your SNP reference files probably don't have readable dbSNP build annotations.\n";
     }
     else {
-        push @add_head, @build_head;
+        push @add_head, $inf;
     }
 }
 if ( $opts{freq} ) {
-    my @freq_head = grep { /##INFO=<ID=(GMAF|CAF|G5A|G5|AF|COMMON),/ } @snp_headers;
+    my @freq_head;
+    foreach my $f ( qw / AF CAF G5A G5 COMMON / ) { 
+        my $inf = checkAndAddHeaders("$f");
+        push @freq_head, $inf if $inf;
+    }
     if ( not @freq_head ) {
         print STDERR
 "WARNING - can't find allele frequency fields (GMAF, CAF, AF, G5A, G5 or COMMON) in dbSNP file headers, your SNP reference files probably don't have readable frequency data.\n";
@@ -201,16 +215,7 @@ print $OUT "$meta_head\n";
 print $KNOWN "$meta_head\n" if $KNOWN;
 my $headstring = '';
 if (@add_head) {
-    my %seen = ();
-    @add_head = grep { !$seen{$_}++ } @add_head;
-    foreach my $add (@add_head) {
-        chomp $add;
-        $add =~ s/^##INFO=<//;
-        $add =~ s/\>$//;
-    }
-    $headstring .=
-"##INFO=<ID=SnpAnnotation,Number=A,Type=String,Description=\"Collection of SNP annotations per allele from dbSNP VCF files: ". 
-    join(", ", @dbsnp) .".\">\n";
+    $headstring .= join("\n", @add_head) . "\n";
 }
 if ($opts{clinvar_file}){
     $headstring .= <<EOT
@@ -585,7 +590,8 @@ sub filterSnps {
             #doesn't exist in any sample...
             next if not exists $sample_alleles{$allele};
         }
-        foreach my $k ( keys %{$search_args} ) {
+        foreach my $k ( @dbsnp ) {#do each file in order so that annotations from file 1 take precedence over others
+        #foreach my $k ( keys %{$search_args} ) {
             if (
                 my @snp_hits = VcfReader::searchForPosition(
                     %{ $search_args->{$k} },
@@ -600,7 +606,7 @@ sub filterSnps {
 
                     #check whether the snp line(s) match our variant
                     my @snp_split = split( "\t", $snp_line );
-                    if ( checkVarMatches( $min_vars{$allele}, \@snp_split ) ) {
+                    if ( my $match = checkVarMatches( $min_vars{$allele}, \@snp_split ) ) {
                         $is_known_snp++;
 
                         #replace or append to ID field
@@ -645,7 +651,7 @@ sub filterSnps {
                         #get snp info and perform 
                         #filtering if fiters are set
                         $line_should_not_be_filtered += 
-                          evaluate_snp( $min_vars{$allele},  \@snp_split );
+                          evaluate_snp( $min_vars{$allele},  \@snp_split, $match );
                     }
                 }
             }
@@ -655,37 +661,35 @@ sub filterSnps {
         }
     }
     my $filter_count = 0;
-    my @snp_info = ();
+    my %snp_info = ();
     my %clinvar_info = ();
+    #TO DO
+    #Get all snp_info fields present in %min_vars and create undef hash entries
+    foreach my $allele ( keys %min_vars ) {
+        map { $snp_info{$_} = undef }  keys %{ $min_vars{$allele}->{snp_info} } ;
+    }
+    #then work through each allele, adding value to array or '.' in if field is unavailable
     foreach my $allele ( sort { $a <=> $b } keys %min_vars ) {
-        my @al_inf = ();
-        if ( keys %{ $min_vars{$allele}->{snp_info} } ) {
-            foreach my $k ( keys %{ $min_vars{$allele}->{snp_info} } ) {
-                my %seen = ();
-
-                #remove duplicate values for allele
-                @{ $min_vars{$allele}->{snp_info}->{$k} } =
-                  grep { !$seen{$_}++ }
-                  @{ $min_vars{$allele}->{snp_info}->{$k} };
-                push @al_inf, "$k="
-                  . join( "/", @{ $k = $min_vars{$allele}->{snp_info}->{$k} } );
+        foreach my $k (keys %snp_info){
+            if (exists $min_vars{$allele}->{snp_info}->{$k}){
+                push @{$snp_info{$k}}, $min_vars{$allele}->{snp_info}->{$k};
+            }else{  
+                push @{$snp_info{$k}}, ".";
             }
         }
-        else {
-            push @al_inf, '.';
-        }
-        push @snp_info, join( "|", @al_inf );
+        #add clinvar info for allele
         foreach my $k ( keys %{ $min_vars{$allele}->{cvar_info} } ) {
             push @{$clinvar_info{$k}}, $min_vars{$allele}->{cvar_info}->{$k};
         }
     }
-    my $annot = "[" . join( ",", @snp_info ) . "]";
-    $vcf_line = VcfReader::addVariantInfoField
-        (
-            line => $vcf_line,
-            id => "SnpAnnotation",
-            value => $annot,
-        );
+    foreach my $k ( sort keys %snp_info ) {
+        $vcf_line = VcfReader::addVariantInfoField 
+            (
+                line => $vcf_line,
+                id   => "AS_$k",
+                value => join(",", @{ $snp_info{$k} } ), 
+            );
+    }
     foreach my $k ( sort keys %clinvar_info ) {
         $vcf_line = VcfReader::addVariantInfoField 
             (
@@ -736,9 +740,10 @@ sub initializeDbsnpVcfs {
     my @head = VcfReader::getHeader($snpfile);
     die "Header not ok for $snpfile " 
         if not VcfReader::checkHeader( header => \@head );
+    my %info = VcfReader::getInfoFields( header => \@head);
     #my %sargs = VcfReader::getSearchArguments($snpfile);
     my %index = VcfReader::readIndex($snpfile);
-    return ( \@head, \%index );
+    return ( \%info, \%index );
 }
 
 #################################################
@@ -786,13 +791,29 @@ sub evaluate_snp {
 
 #returns 1 if shouldn't be filtered under any circumstance (at the moment only if
 #pathogenic flag is set and snp is clinically associated) and 0 otherwise
-    my ( $min_allele, $snp_line ) = @_;
+    my ( $min_allele, $snp_line, $snp_alt ) = @_;
     my %info_values = ();
+    my @al =  VcfReader::readAlleles(line => $snp_line);
     foreach my $f (qw (SCS CLNSIG dbSNPBuildID G5 G5A GMAF CAF AF COMMON)) {
         my $value = VcfReader::getVariantInfoField( $snp_line, $f );
         if ( defined $value ) {
-            push @{ $min_allele->{snp_info}->{$f} }, $value;
-            $info_values{$f} = $value;
+            if (not exists $min_allele->{snp_info}->{$f} 
+              or $min_allele->{snp_info}->{$f} eq '.' ){ 
+              #we only keep the first field we come accross in our dbSNP files
+                if ($f eq 'CAF'){#we just take the alt value for CAF
+                    my @caf = split(",", $value); 
+                    $min_allele->{snp_info}->{$f} = $caf[$snp_alt];
+                    $info_values{$f} = $caf[$snp_alt];
+                }else{
+                    #Only add COMMON/G5/G5A if there is only one ALT allele for this line
+                    #Otherwise it is not clear whether match is for our alt allele
+                    if ($f =~ /^(G5|COMMON|GMAF)/){
+                        next if (@al > 2);
+                    }
+                    $min_allele->{snp_info}->{$f} = $value;
+                    $info_values{$f} = $value;
+                }
+            }
         }
     }
     if ($opts{pathogenic}) {
@@ -866,22 +887,8 @@ sub evaluate_snp {
             }
         }
         if ( exists $info_values{CAF} ) {
-            my $c = $info_values{CAF};
-            $c =~ s/^\[//;
-            $c =~ s/\]$//;
-            my @caf = split( ',', $c );
-            my %snp_min = VcfReader::minimizeAlleles($snp_line);
-            foreach my $al ( keys %snp_min ) {
-                next if $min_allele->{CHROM} ne $snp_min{$al}->{CHROM};
-                next if $min_allele->{POS} ne $snp_min{$al}->{POS};
-                next if $min_allele->{REF} ne $snp_min{$al}->{REF};
-                next if $min_allele->{ALT} ne $snp_min{$al}->{ALT};
-                die "CAF values don't match no. alleles for "
-                  . " SNP line:\n"
-                  . join( "\t", @$snp_line ) . "\n"
-                  if ( @caf <= $al );
-                next if $caf[$al] eq '.';
-                if ( $freq <= $caf[$al] ) {
+            if ($info_values{CAF} ne '.'){
+                if ( $freq <= $info_values{CAF} ) {
                     $min_allele->{filter_snp}++;
                     return 0;
                 }
@@ -915,7 +922,6 @@ sub evaluate_snp {
 #################################################
 sub checkVarMatches {
     my ( $min_allele, $snp_line ) = @_;
-    my $matches = 0;
     my %snp_min = VcfReader::minimizeAlleles($snp_line);
     foreach my $snp_allele ( keys %snp_min ) {
         $min_allele->{CHROM} =~ s/^chr//;
@@ -924,12 +930,31 @@ sub checkVarMatches {
         next if $min_allele->{POS} ne $snp_min{$snp_allele}->{POS};
         next if $min_allele->{REF} ne $snp_min{$snp_allele}->{REF};
         next if $min_allele->{ALT} ne $snp_min{$snp_allele}->{ALT};
-        $matches++;
+        return $snp_allele;
     }
-    return $matches;
+    return 0;
 }
 
 #################################################
+
+sub checkAndAddHeaders{
+    my $field = shift; 
+    my $inf_head;
+    foreach my $d (@dbsnp){
+        $time = strftime( "%H:%M:%S", localtime );
+        if ( $dbsnp_to_info{$d}->{$field} ){
+            print STDERR "[$time] INFO - $field field found in $d...\n";
+            (my $desc = $dbsnp_to_info{$d}->{$field}->{Description}) =~ s/\"//;
+       
+            $inf_head = "##INFO=<ID=AS_$field,Number=A,Type=$dbsnp_to_info{$d}->{$field}->{Type},Description=\"This annotation has been altered by annotateSnps.pl to ".
+                        "report consequences per ALT allele. Original description was as follows: $desc>";
+        }
+    }
+    return $inf_head;
+}
+
+#################################################
+
 
 =head1 NAME
 
@@ -963,7 +988,7 @@ Optional output file to print identified SNPs to.  If --build or --freq argument
 
 SNP reference VCF file(s). IDs from these files will be used to annotate/filter the input VCF file.  If an ID already exists IDs from matching variants will be appended to the ID field. Your dbSNP file MUST USE THE SAME REFERENCE as your input VCF.
 
-SNP vcf files for use can be downloaded from the NCBI FTP site (ftp://ftp.ncbi.nih.gov/snp/) or from the Broad Institutes FTP site (e.g. ftp://ftp.broadinstitute.org/bundle/1.5/b37/). Clinically annotated VCFs are available from the NCBI FTP site.
+SNP vcf files for use can be downloaded from the NCBI FTP site (ftp://ftp.ncbi.nih.gov/snp/) or from the Broad Institutes FTP site (e.g. ftp://ftp.broadinstitute.org/bundle/1.5/b37/). Clinically annotated VCFs are available from the NCBI FTP site. If more than one dbSNP file is used annotations from the first file will take precedence over subsequent files if the same INFO fields exist for a given variant. 
 
 Your are advised to use bgzip compressed and tabix indexed files as your SNP reference VCFs.
 
@@ -1045,15 +1070,15 @@ Show manual page.
 
 =head1 DESCRIPTION
 
-This program will annotate a VCF file with SNP IDs from a given VCF file and can optionally filter SNPs from a vcf file on user-specified criteria. In its simplest form this program writes ID fields from files specified using the --dbsnp argument to matching variants in input files and adds any dbSNP build, frequency or clinical significance information to the INFO field. However, it's most useful feature is probably its ability to filter variants based on their presence in different builds of dbSNP or on allele frequency. Use the --build, --freq and --pathogenic arguments to set up your filtering parameters (assuming the relevant annotations are present in the dbSNP files used). 
+This program will annotate a VCF file with SNP IDs, frequency and dbSNP build information from a given dbSNP VCF file and can optionally filter SNPs from a vcf file on user-specified criteria. In its simplest form this program writes ID fields from files specified using the --dbsnp argument to matching variants in input files and adds any dbSNP build, frequency or clinical significance information to the INFO field. However, it can also be used to filter variants based on their presence in different builds of dbSNP or on allele frequency. Use the --build, --freq and --pathogenic arguments to set up your filtering parameters as detailed above (assuming the relevant annotations are present in the dbSNP files used). 
 
 For example:
 
-annotateSnps.pl -d dbSnp138.b37.vcf.gz clinvar_20130506.vcf -b 129 -f 1 --pathogenic -i input.vcf -o input_filtered.vcf
+    annotateSnps.pl -d dbSnp138.b37.vcf.gz clinvar_20130506.vcf -b 129 -f 1 --pathogenic -i input.vcf -o input_filtered.vcf
 
 The above command will remove variants if they were present in dbSNP build 129 or earlier dbSNP builds or if they are in later builds but have an allele frequency equal to or greater than 1 %. However, any variant with a 'pathogenic' or 'probably pathogenic' annotation will not be filtered regardless of frequency of dbSNP build.
 
-dbSNP and ClinVar VCF files are available from NCBI's ftp site the Broad Institutes FTP site. Make sure you are using a file with the correct genome version for your data.
+dbSNP and ClinVar VCF files are available from NCBI's ftp site the Broad Institutes FTP site. Make sure you are using a file with the correct genome version for your data. A more consistently annotated collection of ClinVar variants is available from https://github.com/macarthur-lab/clinvar for use with the -c option instead of or as well as a ClinVar VCF.
 
 =cut
 
