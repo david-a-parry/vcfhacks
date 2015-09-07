@@ -7,6 +7,7 @@ use Sys::CPU;
 use Pod::Usage;
 use Term::ProgressBar;
 use Data::Dumper;
+use List::Util qw (sum);
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use POSIX qw/strftime/;
 use FindBin;
@@ -14,6 +15,7 @@ use lib "$FindBin::Bin/lib";
 use VcfReader;
 my @samples;
 my @evs;
+my @evs_pop = qw ( EVS_EA_AF EVS_AA_AF EVS_ALL_AF ) ;
 my $freq;
 my $forks = 1;
 my $buffer_size;
@@ -41,9 +43,9 @@ if (defined $freq){
         pod2usage(-exitval => 2, -message => "value for --freq argument must be greater than 0 and less than 50") if $freq > 50 or $freq <= 0;
         print STDERR "Filtering variant alleles with an allele frequency of $freq percent or above.\n";
 }else{
-    print STDERR "WARNING - no allele frequency (--freq) specified, ANY matching alleles will be filtered.\n";
+    print STDERR "WARNING - no allele frequency (--freq) specified, matching alleles will be labelled but not filtered.\n";
 }
-
+$freq /= 100 if ($freq);
 if ( $forks < 2 ) {
     $forks = 0;    #no point having overhead of forks for one fork
 }else{
@@ -105,7 +107,7 @@ if ($opts{dir}){
 
 
 #initialize EVS VCFs in parallel
-my @evs_headers = ();
+my %evs_to_info = ();
 my %evs_to_index = ();
 my $dbpm = Parallel::ForkManager->new($forks);
 for ( my $i = 0 ; $i < @evs ; $i++ ) {
@@ -117,7 +119,7 @@ for ( my $i = 0 ; $i < @evs ; $i++ ) {
 
             if ( defined($data_structure_reference) ){                
                 if ( ref $data_structure_reference eq 'ARRAY' ) {
-                    push @evs_headers, @{ $data_structure_reference->[0] };
+                    $evs_to_info{$data_structure_reference->[2]} = $data_structure_reference->[0];
                     $evs_to_index{ $data_structure_reference->[2] } =
                       $data_structure_reference->[1];
                 }else {
@@ -135,45 +137,19 @@ for ( my $i = 0 ; $i < @evs ; $i++ ) {
       . ( $i + 1 ) . " of "
       . scalar(@evs) . "\n";
     $dbpm->start() and next;
-    my @head_and_index = initializeDbsnpVcfs( $evs[$i] );
-    push @head_and_index, $evs[$i];
+    my @info_and_index = initializeDbsnpVcfs( $evs[$i] );
+    push @info_and_index, $evs[$i];
     $time = strftime( "%H:%M:%S", localtime );
     print STDERR
       "[$time] Finished initializing $evs[$i] EVS reference VCF.\n";
-    $dbpm->finish( 0, \@head_and_index );
+    $dbpm->finish( 0, \@info_and_index );
 }
 print STDERR "Waiting for children...\n" if $opts{VERBOSE};
 $dbpm->wait_all_children;
 
+checkEvsInfoFields();
 
-if ($freq){
-    if (not grep {/##INFO=<ID=MAF/} @evs_headers ){
-        die  "Can't find MAF fields in evs file headers.\n";
-    }
-}
-my $meta_head = VcfReader::getMetaHeader( $opts{input} );
-print $OUT "$meta_head\n";
-print $OUT  "##filterOnEvsMaf.pl=\"";
-my @opt_string = ();
-foreach my $k (sort keys %opts){
-    if (not ref $opts{$k}){
-        push @opt_string, "$k=$opts{$k}";
-    }elsif (ref $opts{$k} eq 'SCALAR'){
-        if (defined ${$opts{$k}}){
-            push @opt_string, "$k=${$opts{$k}}";
-        }else{
-            push @opt_string, "$k=undef";
-        }
-    }elsif (ref $opts{$k} eq 'ARRAY'){
-        if (@{$opts{$k}}){
-            push @opt_string, "$k=" .join(",", @{$opts{$k}});
-        }else{
-            push @opt_string, "$k=undef";
-        }
-    }
-}
-my $col_header = VcfReader::getColumnHeader( $opts{input} );
-print $OUT join( " ", @opt_string ) . "\"\n" . $col_header . "\n";
+writeHeaders(); 
 
 $time = strftime("%H:%M:%S", localtime);
 print STDERR "[$time] EVS filter starting\n";
@@ -418,42 +394,80 @@ ALLELE: foreach my $allele ( sort { $a <=> $b } keys %min_vars ) {
 
                     #check whether the snp line(s) match our variant
                     my @snp_split = split( "\t", $snp_line );
-                    if ( checkVarMatches( $min_vars{$allele}, \@snp_split ) ) {
+                    if ( my $match = checkVarMatches( $min_vars{$allele}, \@snp_split ) ) {
                         $r{found} = 1;
-                        #perform filtering if freq is set
-                        if ($freq){
-                            my $maf_field = VcfReader::getVariantInfoField( \@snp_split, 'MAF');
-                            die "Expected MAF field to be a comma separated list of 3 numbers for $k line: $snp_line " 
-                                if $maf_field !~/(\d+\.\d+,){2,}\d+\.\d+/;
-                            my @mafs = split(',', $maf_field);
-                            foreach my $maf (@mafs){
-                                if ($maf >= $freq){
-                                    $min_vars{$allele}->{filter_snp}++ ;
-                                    next ALLELE;
-                                }
-                            }
-                        }else{#default behaviour is to filter everything that matches
-                            $min_vars{$allele}->{filter_snp}++ ;
-                            next ALLELE;
-                        }
+                        annotateEvsAlleleFrequencies($min_vars{$allele}, \@snp_split, $match);#this annotates allele frequencies per allele and adds {filter_snp} annotation if >= $freq
                     }
                 }
             }
         }
     }
-    foreach my $allele (keys %min_vars){
-        if (not $min_vars{$allele}->{filter_snp}){
-            #print if ANY of the alleles haven't met 
-            #our filter criteria
-            $r{keep} = $vcf_line;
+    #filter if ALL ALT alleles have been found to have MAF above $freq
+    if ($freq){
+        my $al_filter = 0;
+FILTER: foreach my $allele (keys %min_vars){
+            if (not $min_vars{$allele}->{filter_snp}){
+                last FILTER;
+            }
+            $al_filter++;
+        }
+        if ($al_filter == keys %min_vars){
+            $r{filter} = 1;
             return %r;
         }
     }
-    #if we're here all alleles must have met filter criteria
-    $r{filter} = 1;
+    #not all alleles' MAF above $freq, annotate information and return
+    my %evs_info = ();
+    #create hash of MAF values, one value per allele
+    foreach my $allele ( sort { $a <=> $b } keys %min_vars){
+        foreach my $pop (@evs_pop){
+            if (exists $min_vars{$allele}->{$pop}){
+                push @{$evs_info{$pop}}, $min_vars{$allele}->{$pop};
+            }else{
+                push @{$evs_info{$pop}}, '.';
+            }
+        }
+    }
+    #add EVS MAF values to INFO field
+    foreach my $pop (@evs_pop){
+        $vcf_line = VcfReader::addVariantInfoField 
+            (
+                line => $vcf_line,
+                id   => $pop,
+                value => join(",", @{ $evs_info{$pop} } ), 
+            );
+    }
+    $r{keep} = $vcf_line;
     return %r;
 }
 
+################################################
+sub annotateEvsAlleleFrequencies{
+    my ($min_allele, $snp_line, $snp_allele) = @_;
+    
+    $min_allele->{EVS_EA_AF}  = getAf($snp_line, $snp_allele, "EA_AC");
+    $min_allele->{EVS_AA_AF}  = getAf($snp_line, $snp_allele, "AA_AC");
+    $min_allele->{EVS_ALL_AF} = getAf($snp_line, $snp_allele, "TAC");
+    if ($freq){
+        foreach my $af (qw / EVS_EA_AF EVS_AA_AF EVS_ALL_AF / ){
+            next if $min_allele->{$af} eq '.';
+            $min_allele->{filter_snp}++ if $min_allele->{$af} >= $freq;
+        }
+    }
+}
+################################################
+sub getAf{
+    my ($snp_line, $alt, $field) = @_;
+    my $counts = VcfReader::getVariantInfoField( $snp_line, $field);
+    my @af = split(",", $counts); 
+    if (@af < $alt){
+        die "Not enough allele frequencies found for allele counts!\n";
+    }
+    my $total = sum (@af);
+    return '.' if not $total;
+    #EVS VCF ACs have the alt alleles first, then the REF allele
+    return sprintf("%g", $af[$alt -1] / $total) ;
+}
 ################################################
 sub checkVarMatches {
     my ( $min_allele, $snp_line ) = @_;
@@ -466,9 +480,9 @@ sub checkVarMatches {
         next if $min_allele->{POS} ne $snp_min{$snp_allele}->{POS};
         next if $min_allele->{REF} ne $snp_min{$snp_allele}->{REF};
         next if $min_allele->{ALT} ne $snp_min{$snp_allele}->{ALT};
-        $matches++;
+        return $snp_allele;
     }
-    return $matches;
+    return 0;
 }
         
 ################################################
@@ -479,13 +493,60 @@ sub initializeDbsnpVcfs {
     die "Header not ok for $snpfile " 
         if not VcfReader::checkHeader( header => \@head );
     #my %sargs = VcfReader::getSearchArguments($snpfile);
+    my %info = VcfReader::getInfoFields( header => \@head);
     my %index = VcfReader::readIndex($snpfile);
-    return ( \@head, \%index );
+    return ( \%info, \%index );
 }
 ################################################
+sub checkEvsInfoFields{
+    foreach my $field ( qw / EA_AC AA_AC TAC / ){ 
+        foreach my $d (@evs){
+            $time = strftime( "%H:%M:%S", localtime );
+            if ( not $evs_to_info{$d}->{$field} ){
+                die "Could not find required EVS field ($field) in file: $d\n";
+            }
+        }
+    }
+}
+
+#####################################
+sub writeHeaders{
+    my $meta_head = VcfReader::getMetaHeader( $opts{input} );
+    print $OUT "$meta_head\n";
+    print $OUT "##INFO=<ID=EVS_EA_AF,Number=A,Type=Number,"
+      ."Description=\"European American allele frequencies calculated from NHLBI EVS VCFs\">\n";
+    print $OUT "##INFO=<ID=EVS_AA_AF,Number=A,Type=Number,"
+      ."Description=\"African American allele frequencies calculated from NHLBI EVS VCFs\">\n";
+    print $OUT "##INFO=<ID=EVS_ALL_AF,Number=A,Type=Number,"
+      ."Description=\"Total allele frequencies calculated from NHLBI EVS VCFs\">\n";
+    print $OUT  "##filterOnEvsMaf.pl=\"";
+    my @opt_string = ();
+    foreach my $k (sort keys %opts){
+        if (not ref $opts{$k}){
+            push @opt_string, "$k=$opts{$k}";
+        }elsif (ref $opts{$k} eq 'SCALAR'){
+            if (defined ${$opts{$k}}){
+                push @opt_string, "$k=${$opts{$k}}";
+            }else{
+                push @opt_string, "$k=undef";
+            }
+        }elsif (ref $opts{$k} eq 'ARRAY'){
+            if (@{$opts{$k}}){
+                push @opt_string, "$k=" .join(",", @{$opts{$k}});
+            }else{
+                push @opt_string, "$k=undef";
+            }
+        }
+    }
+    my $col_header = VcfReader::getColumnHeader( $opts{input} );
+    print $OUT join( " ", @opt_string ) . "\"\n" . $col_header . "\n";
+}
+
+#####################################
+
 =head1 NAME
 
-filterOnEvsMaf.pl - filter NHLBI ESP variants from a VCF file 
+filterOnEvsMaf.pl - annotate/filter NHLBI ESP variants from a VCF file 
 
 =head1 SYNOPSIS
 
@@ -522,7 +583,7 @@ One or more samples to check variants for.  Default is to check all variants spe
 
 =item B<-f    --freq>
 
-Percent minor allele frequency to filter from. Only variants with minor alleles equal to or over this frequency will be removed. Default is to remove any matching variant.
+Percent minor allele frequency to filter from. Only variants with minor alleles equal to or over this frequency will be removed. Default is to not filter variants, only annotate.
 
 =item B<-t    --forks>
 
@@ -551,7 +612,14 @@ Show manual page.
 
 =head1 DESCRIPTION
 
-This program will filter a VCF file to remove variants matching variants in VCF files from NHLBI ESP.  If --freq is set only variants in ESP with a MAF equal to or greater than --freq will be filtered. ESP VCF files are available from http://evs.gs.washington.edu/EVS/.
+This program will annotate variants in a VCF file with NHLBI ESP allele frequencies and optionally filter variants with an allele frequency equal to or greater than a user supplied allele frequency (as specified with --freq). The following INFO fields are added to variants: 
+
+    EVS_EA_AF  (European-American allele frequency)
+    EVS_AA_AF  (African-American allele frequency)
+    EVS_ALL_AF (Allele frequency for all EVS samples)
+    
+
+ESP VCF files are available from http://evs.gs.washington.edu/EVS/.
 
 =cut
 
@@ -561,7 +629,7 @@ David A. Parry
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2013,2014  David A. Parry
+Copyright 2013,2014,2015  David A. Parry
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with this program. If not, see <http://www.gnu.org/licenses/>.
 
