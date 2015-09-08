@@ -954,8 +954,6 @@ sub filter_on_vcf_samples {
       ; #check each allele matches in all filter_vcfs but don't reset after each file
     my %thresh_counts =
       ();    #count samples in all filter_vcfs i.e. don't reset after each file
-    my %af_counts
-      ; #count allele occurences and total alleles to calculate allele frequency
     my %f_genos =
       ();    #store genotypes as keys if we're using $filter_homozygotes
 
@@ -1117,7 +1115,7 @@ FILTER_LINE: foreach my $snp_line (@snp_hits) {
     if ($maf) {
         my $alleles_over_maf = 0;
 COUNTS: foreach my $allele ( keys %sample_alleles ) {
-            last COUNTS if not exists $af_counts{$allele};
+            last COUNTS if not exists $min_vars{$allele}->{AF};
             if (
                 $min_vars{$allele}->{AF} >= $maf and 
                 $min_vars{$allele}->{AN} >= $MIN_AN
