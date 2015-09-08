@@ -492,7 +492,7 @@ LINE: while ( my $line = <$VCF> ) {
         my @split = split( "\t", $line );
         my $l = filter_on_vcf( \@split, \%no_fork_args );
         if ($l) {
-            print $OUT "$line\n";
+            print $OUT join("\t", @$l) . "\n";
             $kept++;
         }
         else {
@@ -673,7 +673,7 @@ sub filter_on_info_fields {
   ALLELE: foreach my $allele ( keys %sample_alleles ) {
         if (
             my @snp_hits = VcfReader::searchForPosition(
-                $search_args, 
+                %{$search_args},
                 chrom => $min_vars{$allele}->{CHROM},
                 pos   => $min_vars{$allele}->{POS}
             )
@@ -963,7 +963,7 @@ sub filter_on_vcf_samples {
 ALLELE: foreach my $allele ( keys %sample_alleles ) {
         if (
             my @snp_hits = VcfReader::searchForPosition(
-                $search_args,
+                %{$search_args},
                 chrom => $min_vars{$allele}->{CHROM},
                 pos   => $min_vars{$allele}->{POS}
             )
@@ -1082,7 +1082,7 @@ FILTER_LINE: foreach my $snp_line (@snp_hits) {
                 return;
             }else{
                 if ($annotate_af){
-                    $vcf_line = annotate_sample_freqs(%min_vars, $vcf_line, $annotate_af);
+                    $vcf_line = annotate_sample_freqs(\%min_vars, $vcf_line, $annotate_af);
                 }
                 return $vcf_line ;
             }
@@ -1140,7 +1140,7 @@ COUNTS: foreach my $allele ( keys %sample_alleles ) {
     }
     else {
         if ($annotate_af){
-            $vcf_line = annotate_sample_freqs(%min_vars, $vcf_line, $annotate_af);
+            $vcf_line = annotate_sample_freqs(\%min_vars, $vcf_line, $annotate_af);
         }
         return $vcf_line;
     }
@@ -1166,8 +1166,16 @@ sub annotate_sample_freqs{
     my @an = ();
     my @af = ();
     foreach my $allele (sort {$a <=> $b} keys %{$m_var}){
-        push @an, $m_var->{$allele}->{AN};
-        push @af, $m_var->{$allele}->{AF};
+        if (exists  $m_var->{$allele}->{AN}){
+            push @an, $m_var->{$allele}->{AN};
+        }else{
+            push @an, '.';
+        }
+        if (exists  $m_var->{$allele}->{AF}){
+            push @af, $m_var->{$allele}->{AF};
+        }else{
+            push @af, '.';
+        }
     }
     $vcf_line = VcfReader::addVariantInfoField 
         (
