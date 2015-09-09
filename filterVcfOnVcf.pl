@@ -333,17 +333,17 @@ else {
 
 my $time = strftime( "%H:%M:%S", localtime );
 my $total_variants;
-print STDERR "[$time] Initializing input VCF... ";
-die "Header not ok for input ($vcf) "
+print STDERR "[$time] Initializing input VCF...\n";
+die "[ERROR] Header not ok for input ($vcf) "
   if not VcfReader::checkHeader( vcf => $vcf );
 if ( defined $progress ) {
     if ( $vcf eq "-" ) {
-        print STDERR "Can't use --progress option when input is from STDIN\n";
+        print STDERR "[WARNING] Can't use --progress option when input is from STDIN\n";
         $progress = 0;
     }
     else {
         $total_variants = VcfReader::countVariants($vcf);
-        print STDERR "$vcf has $total_variants variants. ";
+        print STDERR "[INFO] $vcf has $total_variants variants.\n";
     }
 }
 my %contigs = ();
@@ -356,12 +356,17 @@ if (@samples) {
         vcf         => $vcf,
         get_columns => 1,
     );
+    foreach my $samp (@samples){ 
+        if (not exists $sample_to_col{$samp}){
+            die "[ERROR] Sample $samp was not found in input VCF ($vcf)\n"; 
+        }
+    }
 }
 
 $time = strftime( "%H:%M:%S", localtime );
 print STDERR "\n[$time] Finished initializing input VCF\n";
 
-print STDERR "[$time] Initializing filter VCF ($filter_vcf)...";
+print STDERR "[$time] Initializing filter VCF ($filter_vcf)...\n";
 my ($filter_vcf_index, $filter_vcf_samples, $filter_info) = initializeFilterVcfs( $filter_vcf );
 print STDERR "[$time] Finished initializing filter VCF.\n";
 if ($filter_with_info) {
@@ -374,8 +379,7 @@ if ($filter_with_info) {
 if ( keys %{ $filter_vcf_samples } == 0 ) {
     if (@reject) {
         die
-"Filter VCF $filter_vcf has no samples - cannot run with --reject argument.\n"
-          if keys %{ $filter_vcf_samples } == 0;
+"Filter VCF $filter_vcf has no samples - cannot run with --reject argument.\n";
     }
     if (@ignore_samples) {
         die
@@ -394,8 +398,17 @@ if ( keys %{ $filter_vcf_samples } == 0 ) {
 foreach my $ignore (@ignore_samples) {
     if ( exists $filter_vcf_samples->{$ignore} ) {
         delete $filter_vcf_samples->{$ignore};
+    }else{
+        die "[ERROR] Sample $ignore was not found in --filter VCF ($filter_vcf).\n";
     }
 }
+
+foreach my $rej (@reject){
+    if (not exists $filter_vcf_samples->{$rej} ) {
+        die "[ERROR] Sample $rej was not found in --filter VCF ($filter_vcf).\n";
+    }
+}
+
 if (@reject) {
     foreach my $samp ( keys %{ $filter_vcf_samples } ) {
         if ( not grep { $_ eq $samp } @reject ) {
@@ -405,7 +418,7 @@ if (@reject) {
 }
 my $OUT;
 if ($out) {
-    open( $OUT, ">$out" ) or die "Can't open $out for writing: $!\n";
+    open( $OUT, ">$out" ) or die "[ERROR] Can't open $out for writing: $!\n";
 }
 else {
     $OUT = \*STDOUT;
@@ -565,7 +578,7 @@ sub process_buffer {
                 }
             }
             else {
-                die "ERROR: no message received from child process $pid!\n";
+                die "[ERROR] no message received from child process $pid!\n";
             }
         }
     );
@@ -798,6 +811,23 @@ ALT:            foreach my $alt (@f_alts) {
         }    #search
     }   #foreach allele
         #done each allele - see if we've got enough data to filter this line
+    if ( not $maf and not $filter_homozygotes ) { # no filters - default is filter if we found a match
+        if (keys %sample_matches == keys %sample_alleles ){#found all alleles
+            if ($print_matching) {
+                $vcf_line = annotate_pop_freqs(\%min_vars, $vcf_line);
+                return $vcf_line;
+            }else {
+                return;
+            }
+        }else{#not all alleles found so don't filter
+            if (not $print_matching) {
+                $vcf_line = annotate_pop_freqs(\%min_vars, $vcf_line);
+                return $vcf_line;
+            }else {
+                return;
+            }
+        }
+    }
     my $homozygous_alleles = 0;
     if ($filter_homozygotes) {
         foreach my $allele ( keys %sample_alleles ) {
@@ -817,17 +847,7 @@ ALT:            foreach my $alt (@f_alts) {
         }
     }
 
-    if ( not $maf and not @pop_acs ) {
-        if ($print_matching) {
-            $vcf_line = annotate_pop_freqs(\%min_vars, $vcf_line);
-            return $vcf_line;
-        }
-        else {
-            return;
-        }
-    }
-         #no line meeting criteria for allele in filter vcf
-         #now check allele frequency if given
+     #check allele frequency if given
     if ($maf) {
         if ( keys %alleles_over_maf == keys %sample_alleles ) {
             if ($print_matching) {
@@ -852,6 +872,7 @@ sub pop_freq_over_maf{
     my $min_allele = shift;
     foreach my $pop (@pop_acs){
         next if not $min_allele->{"FVOV_AN_$pop"} ;
+        next if $min_allele->{"FVOV_AN_$pop"} eq '.';
         next if $min_allele->{"FVOV_AN_$pop"} < $MIN_AN;
         if ( $min_allele->{"FVOV_AF_$pop"} >= $maf){
             return 1;
@@ -864,9 +885,9 @@ sub pop_freq_over_maf{
 sub annotate_pop_freqs{
     my $m_var = shift;
     my $vcf_line = shift;
-    my @an = ();
-    my @af = ();
     foreach my $pop (@pop_acs){
+        my @an = ();
+        my @af = ();
         foreach my $allele (sort {$a <=> $b} keys %{$m_var}){
             push @an, 
               exists $m_var->{$allele}->{"FVOV_AN_$pop"} 
@@ -979,13 +1000,21 @@ FILTER_LINE: foreach my $snp_line (@snp_hits) {
                 my %filter_min = VcfReader::minimizeAlleles( \@snp_split, );
 
 #%f_alts = map {$_ => undef} $filter_obj->getSampleActualGenotypes(multiple => \@temp_reject, return_alleles_only => 1, minGQ => $unaff_quality);
-                my @f_alts = VcfReader::getSampleCall(
-                    line                => \@snp_split,
-                    multiple            => \@temp_reject,
-                    sample_to_columns   => $filter_vcf_samples,
-                    return_alleles_only => 1,
-                    minGQ               => $unaff_quality
-                );
+                my @f_alts = ();
+                if (@temp_reject){
+                    @f_alts = VcfReader::getSampleCall(
+                        line                => \@snp_split,
+                        multiple            => \@temp_reject,
+                        sample_to_columns   => $filter_vcf_samples,
+                        return_alleles_only => 1,
+                        minGQ               => $unaff_quality
+                    );
+                }else{#no samples specified - check all alt alleles
+                    my @alts = VcfReader::readAlleles( line => \@snp_split, );
+                    for ( my $i = 0 ; $i < @alts ; $i++ ) {
+                        push @f_alts, $i;
+                    }
+                }
                 if ($filter_homozygotes) {
                     my %genos = VcfReader::getSampleCall(
                         line              => \@snp_split,
@@ -1041,10 +1070,6 @@ FILTER_LINE: foreach my $snp_line (@snp_hits) {
                         }
                     }
 
-                   #foreach my $alt (@alts){
-                   #   next FILTER_LINE if not exists $thresh_counts{$alt};
-                   #  next FILTER_LINE if $thresh_counts{$alt} < $threshold;
-                   #}
                 }
                 if ($maf or $annotate_af) {
                     my %f_allele_counts = VcfReader::countAlleles(
@@ -1073,10 +1098,10 @@ FILTER_LINE: foreach my $snp_line (@snp_hits) {
     }   #foreach allele
     #done each allele 
     if (  not $filter_homozygotes and not $threshold and not $maf ){
-        if (keys %sample_matches == keys %sample_alleles ){
+        if (keys %sample_matches == keys %sample_alleles ){#found
             return filter_line(\%min_vars, $vcf_line);
-        }else{
-            if (not $print_matching){
+        }else{#not found
+            if ($print_matching){
                 return;
             }else{
                 if ($annotate_af){
@@ -1195,7 +1220,7 @@ sub initializeFilterVcfs {
 
     #we getSearchArguments here simply to prevent a race condition later
     my @head = VcfReader::getHeader($snpfile);
-    die "Header not ok for $snpfile "
+    die "[ERROR] Header not ok for $snpfile "
       if not VcfReader::checkHeader( header => \@head );
 
     #my %sargs = VcfReader::getSearchArguments($snpfile);
