@@ -70,7 +70,7 @@ If using the --info_filter option and --allele_frequency_filter option, by defau
     
 =item B<--minimum_allele_number>
 
-Minimum number of alleles for a variant that needs to be reached before it will be filtered on allele frequency. If filtering using population allele counts (see --population_ids above) this sets the minimum number of alleles to be called per population (default = 100). If filtering using samples in a VCF the default is 0 (i.e. no minimum allele number). 
+Minimum number of allele counts for a variant found in a --filter VCF before it will be used for filtering on allele frequency. If filtering using population allele counts (see --population_ids above) this sets the minimum number of alleles that have to be called in a population (default = 100) before the frequency value will be used for filtering. If filtering using samples in a VCF the default is 0 (i.e. no minimum allele number).
 
 =item B<-l    --threshold>
 
@@ -441,37 +441,8 @@ if ($progress) {
     print STDERR "[$time] Filtering started.\n";
 }
 
-my $meta_head = VcfReader::getMetaHeader($vcf);
-print $OUT "$meta_head\n";
-print $OUT "##filterVcfOnVcf.pl=\"";
-my @opt_string = ();
-foreach my $k ( sort keys %opts ) {
-    if ( not ref $opts{$k} ) {
-        push @opt_string, "$k=$opts{$k}";
-    }
-    elsif ( ref $opts{$k} eq 'SCALAR' ) {
-        if ( defined ${ $opts{$k} } ) {
-            push @opt_string, "$k=${$opts{$k}}";
-        }
-        else {
-            push @opt_string, "$k=undef";
-        }
-    }
-    elsif ( ref $opts{$k} eq 'ARRAY' ) {
-        if ( @{ $opts{$k} } ) {
-            push @opt_string, "$k=" . join( ",", @{ $opts{$k} } );
-        }
-        else {
-            push @opt_string, "$k=undef";
-        }
-    }
-}
+printHeader();
 
-#TO DO
-#ADD INFO FIELD HEADERS AS APPROPIATE
-
-my $col_header = VcfReader::getColumnHeader($vcf);
-print $OUT join( " ", @opt_string ) . "\"\n" . $col_header . "\n";
 my $kept             = 0;
 my $filtered         = 0;
 my $n                = 0;
@@ -643,6 +614,50 @@ sub process_batch {
 }
 
 ################################################
+sub printHeader{
+    my $meta_head = VcfReader::getMetaHeader($vcf);
+    print $OUT "$meta_head\n";
+    
+    foreach my $pop (@pop_acs){
+        my $desc = $filter_info->{"AC_$pop"}->{Description} ;
+        print $OUT "##INFO=<ID=FVOV_AF_$pop,Number=A,Type=Float,Description=\"Putative population frequency calculated using AC_$pop and AN_$pop annotations from $filter_vcf. ".
+                    "Description of original AC_$pop was as follows: $desc\">";
+        my $an_desc = $filter_info->{"AC_$pop"}->{Description} ;
+        print $OUT "##INFO=<ID=FVOV_AN_$pop,Number=A,Type=Integer,Description=\"Putative population allele number from $filter_vcf. ".
+                    "Description of original AN_$pop was as follows: $an_desc\">";
+    }
+    if ($annotate_af){
+        print $OUT "##INFO=<ID=$annotate_af." ."_AF,Number=A,Type=Float,Description=\"Allele frequency calculated by filterVcfOnVcf.pl from $filter_vcf.\">\n";
+        print $OUT "##INFO=<ID=$annotate_af" . "_AN,Number=A,Type=Integer,Description=\"Allele number annotated by filterVcfOnVcf.pl from $filter_vcf.\">\n";
+    }
+    print $OUT "##filterVcfOnVcf.pl=\"";
+    my @opt_string = ();
+    foreach my $k ( sort keys %opts ) {
+        if ( not ref $opts{$k} ) {
+            push @opt_string, "$k=$opts{$k}";
+        }
+        elsif ( ref $opts{$k} eq 'SCALAR' ) {
+            if ( defined ${ $opts{$k} } ) {
+                push @opt_string, "$k=${$opts{$k}}";
+            }
+            else {
+                push @opt_string, "$k=undef";
+            }
+        }
+        elsif ( ref $opts{$k} eq 'ARRAY' ) {
+            if ( @{ $opts{$k} } ) {
+                push @opt_string, "$k=" . join( ",", @{ $opts{$k} } );
+            }
+            else {
+                push @opt_string, "$k=undef";
+            }
+        }
+    } 
+    print $OUT join( " ", @opt_string ) . "\"\n";
+    my $col_header = VcfReader::getColumnHeader($vcf);
+    print $OUT "$col_header\n";
+}
+################################################
 sub filter_on_info_fields {
     my ( $vcf_line, $search_args ) = @_;
     my $qual  = VcfReader::getVariantField( $vcf_line, 'QUAL' );
@@ -778,9 +793,16 @@ ALT:            foreach my $alt (@f_alts) {
                             )
                         );
                         my $freq = $afs[ $filter_match - 1 ];
-                        if ( $freq >= $maf ) {
+                        if ( exists $filter_info->{AN}) {
+                            if ($filter_info->{AN} >= $MIN_AN){
+                                if ( $freq >= $maf ) {
+                                    $alleles_over_maf{$allele}++;
+                                }
+                            }
+                        }elsif ( $freq >= $maf ) {
                             $alleles_over_maf{$allele}++;
-                        }elsif(@pop_acs){
+                        }
+                        if(@pop_acs and not $alleles_over_maf{$allele}){#if total AF not over maf check individual populations
                             if ( pop_freq_over_maf($min_vars{$allele}) ) {
                                 $alleles_over_maf{$allele}++;
                             }
