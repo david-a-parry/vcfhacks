@@ -513,11 +513,11 @@ sub checkEvsInfoFields{
 sub writeHeaders{
     my $meta_head = VcfReader::getMetaHeader( $opts{input} );
     print $OUT "$meta_head\n";
-    print $OUT "##INFO=<ID=EVS_EA_AF,Number=A,Type=Number,"
+    print $OUT "##INFO=<ID=EVS_EA_AF,Number=A,Type=Float,"
       ."Description=\"European American allele frequencies calculated from NHLBI EVS VCFs\">\n";
-    print $OUT "##INFO=<ID=EVS_AA_AF,Number=A,Type=Number,"
+    print $OUT "##INFO=<ID=EVS_AA_AF,Number=A,Type=Float,"
       ."Description=\"African American allele frequencies calculated from NHLBI EVS VCFs\">\n";
-    print $OUT "##INFO=<ID=EVS_ALL_AF,Number=A,Type=Number,"
+    print $OUT "##INFO=<ID=EVS_ALL_AF,Number=A,Type=Float,"
       ."Description=\"Total allele frequencies calculated from NHLBI EVS VCFs\">\n";
     print $OUT  "##filterOnEvsMaf.pl=\"";
     my @opt_string = ();
