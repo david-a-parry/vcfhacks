@@ -95,14 +95,6 @@ my %database     = (
 #    #might be worth including at a later date but will need to implement some processing
 #    to reduce the filesize (filter on taxonomy and throwaway entries without nucleotide IDs)
 
-    orthologs => {
-        localfile => "$genedir/HMD_Human5.rpt",
-        col       => 1,
-        delimiter => "\t",
-        url       => "ftp.informatics.jax.org",
-        dir       => "pub/reports/archive/orthology_reports.old/",
-        file      => "HMD_Human5.rpt"
-    },
     human_summary => {
         localfile => "$genedir/Homo_sapiens_ncbi_gene_all_summaries.txt",
         col       => 0,
@@ -110,14 +102,6 @@ my %database     = (
         url       => "ftp.ncbi.nlm.nih.gov",
         dir       => "gene/DATA/ASN_BINARY/Mammalia",
         file      => "Homo_sapiens.ags.gz"
-    },
-    mouse_phenotype_acc => {
-        localfile => "$genedir/MGI_PhenotypicAllele.rpt",
-        col       => 6,
-        delimiter => "\t",
-        url       => "ftp.informatics.jax.org",
-        dir       => "pub/reports/",
-        file      => "MGI_PhenotypicAllele.rpt"
     },
     mouse_phenotype_desc => {
         localfile => "$genedir/VOC_MammalianPhenotype.rpt",
@@ -128,12 +112,12 @@ my %database     = (
         file      => "VOC_MammalianPhenotype.rpt"
     },
     mgi2entrez => {
-        localfile => "$genedir/MGI_EntrezGene.rpt",
-        col       => 8,
+        localfile => "$genedir/HMD_HumanPhenotype.rpt",
+        col       => 1,
         delimiter => "\t",
         url       => "ftp.informatics.jax.org",
         dir       => "pub/reports/",
-        file      => "MGI_EntrezGene.rpt"
+        file      => "HMD_HumanPhenotype.rpt"
     },
     mim_morbid => {
         localfile => "$genedir/morbidmap",
@@ -418,35 +402,10 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
             #$annot{$entrez_id}->{interactants} = "-";
             push( @{ $annot{$entrez_id}->{omim} }, "" );
         }
-        my $ortholog = getMouseOrtholog(
-            $entrez_id,
-            $database{orthologs}->{fh},
-            $database{orthologs}->{idx},
-            $database{orthologs}->{length}
-        );
-        if ($ortholog) {
-            push(
-                my @mgi,
-                get_MGI_phenotype(
-                    $ortholog,
-                    $database{mouse_phenotype_acc}->{fh},
-                    $database{mouse_phenotype_acc}->{idx},
-                    $database{mouse_phenotype_acc}->{length},
-                    $database{mouse_phenotype_desc}->{fh},
-                    $database{mouse_phenotype_desc}->{idx},
-                    $database{mouse_phenotype_desc}->{length},
-                    $database{mgi2entrez}->{fh},
-                    $database{mgi2entrez}->{idx},
-                    $database{mgi2entrez}->{length}
-                )
-            );
-            @mgi
-              ? push @{ $annot{$entrez_id}->{mgi_phenotype} }, @mgi
-              : push @{ $annot{$entrez_id}->{mgi_phenotype} }, "";
-        }
-        else {
-            push( @{ $annot{$entrez_id}->{mgi_phenotype} }, "" );
-        }
+        my @mgi = get_MGI_phenotype($entrez_id) ;
+        @mgi
+          ? push @{ $annot{$entrez_id}->{mgi_phenotype} }, @mgi
+          : push @{ $annot{$entrez_id}->{mgi_phenotype} }, "";
     }
     if ( not keys %annot) {
         my $ens_annot = "|" x @annotations;
@@ -1137,7 +1096,8 @@ sub sort_and_index_gene_files {
     #$$prog_ref += $increment/6;
     #print $bar "$$prog_ref";
     close $FILE;
-    $incr_per_line = ( $increment / 2 ) / @lines;
+    my $li = @lines ? @lines : 1;
+    $incr_per_line = ( $increment / 2 ) / $li;
     @lines = sort { $a->[1] cmp $b->[1] } @lines;
     $$prog_ref += $increment / 2;
     #$next_update = $progressbar->update($$prog_ref)
@@ -1145,7 +1105,7 @@ sub sort_and_index_gene_files {
     my ( $tmp, $TEMP );
     ( $TEMP, $tmp ) = tempfile( "$dir/tmp_dharmaXXXX", UNLINK => 1 )
       or die "Can't create temporary sort file\n";
-    $incr_per_line = ( $increment / 6 ) / @lines;
+    $incr_per_line = ( $increment / 6 ) / $li;
     $line_counter  = 0;
     $prev_counter  = 0;
 
@@ -1247,10 +1207,11 @@ sub binSearchLineWithIndex {
         }
         else {
             my @line = split( /$delimiter/, $line );
-            if ( $x lt $line[$column] ) {
+            (my $value = $line[$column] ) =~ s/\s+//g; #some files have extra whitespace...
+            if ( $x lt $value ) {
                 $u = $i - 1;
             }
-            elsif ( $x gt $line[$column] ) {
+            elsif ( $x gt $value ) {
                 $l = $i + 1;
             }
             else {
@@ -1421,52 +1382,61 @@ sub getMouseOrtholog {
 
 #########################################
 sub get_MGI_phenotype {
-    my (
-        $gene_id,               $PHENO,
-        $PHENO_INDEX,           $pheno_line_count,
-        $PHENO_DESC,            $PHENO_DESC_INDEX,
-        $pheno_desc_line_count, $MGI_ENTREZ,
-        $MGI_ENTREZ_INDEX,      $mgi_entrez_line_count
-    ) = @_;
+    my $gene_id = shift;
     my @desc = ();
-    my $i    = binSearchLineWithIndex( $gene_id, $MGI_ENTREZ, $MGI_ENTREZ_INDEX,
-        $mgi_entrez_line_count, 8 );
+    my $i = binSearchLineWithIndex
+      ( 
+        $gene_id, 
+        $database{mgi2entrez}->{fh}, 
+        $database{mgi2entrez}->{idx},
+        $database{mgi2entrez}->{length},
+        1 
+      );
     if ( $i > 0 ) {
-        my $accession =
-          ( split "\t", line_with_index( $MGI_ENTREZ, $MGI_ENTREZ_INDEX, $i ) )
-          [0];
-        my $j = binSearchLineWithIndex( $accession, $PHENO, $PHENO_INDEX,
-            $pheno_line_count, 6 );
-        if ( $j > 0 ) {
-            my @hits = look_forward_and_back( $accession, $PHENO, $PHENO_INDEX, $pheno_line_count, 6, $j); 
-            my @phenos = ();
-            foreach my $hit (@hits){
-                push @phenos, split( ",",
-                  ( split "\t", $hit )[10]
+        my @phenos = ();
+        my @hits = look_forward_and_back
+          ( 
+            $gene_id, 
+            $database{mgi2entrez}->{fh},
+            $database{mgi2entrez}->{idx},
+            $database{mgi2entrez}->{length},
+            1,
+            $i,
+        );
+        foreach my $hit (@hits){
+            push @phenos, split( /\s+/,
+              ( split "\t", $hit )[5]
+            );
+            @phenos = grep { !/^\s*$/ } @phenos;#some MGI files have extra whitespace
+        }
+        foreach my $ph (@phenos) {
+            my $k = binSearchLineWithIndex
+              ( 
+                $ph, 
+                $database{mouse_phenotype_desc}->{fh},
+                $database{mouse_phenotype_desc}->{idx},
+                $database{mouse_phenotype_desc}->{length},
+                0,
+              );
+
+            if ( $k > 0 ) {
+                push(
+                    @desc,
+                    (
+                        split "\t",
+                        line_with_index(
+                            $database{mouse_phenotype_desc}->{fh},
+                            $database{mouse_phenotype_desc}->{idx},
+                            $k,
+                        )
+                    )[1]
                 );
             }
-            if (@phenos) {
-                foreach my $ph (@phenos) {
-                    my $k = binSearchLineWithIndex( $ph, $PHENO_DESC,
-                        $PHENO_DESC_INDEX, $pheno_desc_line_count, 0 );
-                    if ( $k > 0 ) {
-                        push(
-                            @desc,
-                            (
-                                split "\t",
-                                line_with_index(
-                                    $PHENO_DESC, $PHENO_DESC_INDEX, $k
-                                )
-                            )[1]
-                        );
-                    }
-                    else {
-                        display_error_and_continue(
-                            "Missing phenotype description",
+            else {
+                display_error_and_continue(
+                    "Missing phenotype description",
 "Can't find matching phenotype description for phenotype ID $ph\nTry updating your database."
-                        );
-                    }
-                }
+                );
             }
         }
     }
