@@ -622,7 +622,7 @@ sub printHeader{
         my $desc = $filter_info->{"AC_$pop"}->{Description} ;
         print $OUT "##INFO=<ID=FVOV_AF_$pop,Number=A,Type=Float,Description=\"Putative population frequency calculated using AC_$pop and AN_$pop annotations from $filter_vcf. ".
                     "Description of original AC_$pop was as follows: $desc\">\n";
-        my $an_desc = $filter_info->{"AC_$pop"}->{Description} ;
+        my $an_desc = $filter_info->{"AN_$pop"}->{Description} ;
         print $OUT "##INFO=<ID=FVOV_AN_$pop,Number=A,Type=Integer,Description=\"Putative population allele number from $filter_vcf. ".
                     "Description of original AN_$pop was as follows: $an_desc\">\n";
     }
