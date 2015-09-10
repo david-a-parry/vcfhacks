@@ -1205,6 +1205,35 @@ sub line_with_index {
     seek( $data_file, $d_offset, 0 );
     return scalar(<$data_file>);
 }
+
+
+#####################################
+sub look_forward_and_back{
+    my ( $x, $FILE, $FILE_INDEX, $u, $column, $start, $delimiter ) = @_;
+    $delimiter = "\t" if not $delimiter;
+    my @lines = (); 
+    push @lines, line_with_index( $FILE, $FILE_INDEX, $start );
+    for (my $i = $start - 1; $i > 0; $i--){#look back
+        my $line = line_with_index( $FILE, $FILE_INDEX, $i );
+        my @split = split(/$delimiter/, $line); 
+        if ($split[$column] eq $x){
+            push @lines, $line;
+        }else{
+            last;
+        }
+    }
+    for (my $i = $start + 1; $i < $u; $i++){#look forward 
+        my $line = line_with_index( $FILE, $FILE_INDEX, $i );
+        my @split = split(/$delimiter/, $line); 
+        if ($split[$column] eq $x){
+            push @lines, $line;
+        }else{
+            last;
+        }
+    }
+    return @lines;
+}
+
 ######################################################################
 sub binSearchLineWithIndex {
     my ( $x, $FILE, $FILE_INDEX, $u, $column, $delimiter ) = @_;
@@ -1409,9 +1438,13 @@ sub get_MGI_phenotype {
         my $j = binSearchLineWithIndex( $accession, $PHENO, $PHENO_INDEX,
             $pheno_line_count, 6 );
         if ( $j > 0 ) {
-            my @phenos = split( ",",
-                ( split "\t", line_with_index( $PHENO, $PHENO_INDEX, $j ) )[10]
-            );
+            my @hits = look_forward_and_back( $accession, $PHENO, $PHENO_INDEX, $pheno_line_count, 6, $j); 
+            my @phenos = ();
+            foreach my $hit (@hits){
+                push @phenos, split( ",",
+                  ( split "\t", $hit )[10]
+                );
+            }
             if (@phenos) {
                 foreach my $ph (@phenos) {
                     my $k = binSearchLineWithIndex( $ph, $PHENO_DESC,
