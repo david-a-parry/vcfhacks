@@ -795,7 +795,8 @@ ALT:            foreach my $alt (@f_alts) {
                         );
                         my $freq = $afs[ $filter_match - 1 ];
                         if ( exists $filter_info->{AN}) {
-                            if ($filter_info->{AN} >= $MIN_AN){
+                            my $an = VcfReader::getVariantInfoField(\@snp_split, "AN");
+                            if ($an >= $MIN_AN){
                                 if ( $freq >= $maf ) {
                                     $alleles_over_maf{$allele}++;
                                 }
