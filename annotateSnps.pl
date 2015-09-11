@@ -104,7 +104,8 @@ die "Header not ok for input ($opts{input}) "
     if not VcfReader::checkHeader( vcf => $opts{input} );
 if ( defined $opts{progress} ) {
     $total_vcf = VcfReader::countVariants( $opts{input} );
-    print STDERR " INFO - $opts{input} has $total_vcf variants. ";
+    $time = strftime( "%H:%M:%S", localtime );
+    print STDERR "\n[$time] INFO - $opts{input} has $total_vcf variants. ";
 }
 my %contigs = ();
 if ($forks){
@@ -271,7 +272,8 @@ print STDERR "[$time] INFO - SNP annotation starting\n";
 
 $freq /= 100 if ($freq);
 if ( $opts{build} || $freq ) {
-    print STDERR "INFO - Filtering variants on following criteria:\n";
+    $time = strftime( "%H:%M:%S", localtime );
+    print STDERR "[$time] INFO - Filtering variants on following criteria:\n";
     print STDERR ">in dbSNP$opts{build} or previous\n"
       if defined $opts{build} && $opts{build};
     print STDERR
