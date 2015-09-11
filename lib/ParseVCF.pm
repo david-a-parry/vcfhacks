@@ -1193,7 +1193,7 @@ sub splitMultiAllelicVariants{
     my @alleles = split(",", $self->{_currentVar}->{ALT});
     return  $self->{_currentLine} if (@alleles < 2);#not multiallelic
     my @splitLines = ();
-    $self->getFormatFields();
+    $self->getVariantFormatFields();
     my %ac = $self->countAlleles();
     my $an = 0;
     map {$an += $ac{$_}} keys %ac;
@@ -1507,7 +1507,7 @@ sub isMultiAllelic{
     return 0;
 }
 
-sub getFormatFields{
+sub getVariantFormatFields{
     my ($self) = @_;
     if (not defined ($self->{_fields}->{FORMAT})){
         carp "No FORMAT field in VCF "; 
@@ -1688,7 +1688,7 @@ sub getSampleGenotypeField{
     croak "Can't invoke getSampleGenotypeField method when no samples/genotypes are present in VCF " if not defined $self->{_samples};
     carp "WARNING Both multiple and sample arguments supplied to getSampleGenotypeField method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
     croak "\"field\" argument must be passed to getSampleGenotypeField - e.g. getSampleGenotypeField(field=>\"GQ\") " if not defined $args{field};
-    $self->getFormatFields();
+    $self->getVariantFormatFields();
     if (not defined $self->{_currentVar}->{varFormat}->{$args{field}}){
         carp "Field $args{field} not found for getSampleGenotypeField ";
         return;
@@ -2304,7 +2304,7 @@ ParseVCF.pm - read standard and custom Variant Call Format (VCF) files and retur
 
 DOCUMENTATION NEEDS SERIOUS ATTENTION
 #TO DO - ADD filtering on GQ etc. for sample variants, test changeHeader method
-#NEED DOCUMENTATION FOR getSampleGenotypeField, getSampleCall, getFormatFields, getAltAlleles, reopenFileHandle, searchForPosition, readPosition, getVepFields, checkSampleInVcf methods
+#NEED DOCUMENTATION FOR getSampleGenotypeField, getSampleCall, getVariantFormatFields, getAltAlleles, reopenFileHandle, searchForPosition, readPosition, getVepFields, checkSampleInVcf methods
 
 $obj = ParseVCF -> new(file => $vcf);
 #(initialise object with a VCF file)

@@ -407,6 +407,61 @@ sub getInfoFields{
     }
     return %info;
 }
+
+=item B<getFormatFields>
+
+Reads a VCF header and returns a hash of FORMAT IDs found in the header to anonymous hashes of the values for 'Number', 'Type' and 'Description'. Requires either "vcf" or "header" argument. The former requires a filename while the "header" argument can be either a string or a reference to an array of header lines.
+
+Arguments
+
+=over 16
+
+=item vcf
+
+filename of VCF file to check.
+
+=item header
+
+Header string or an array of header lines in the same order they appear in a file. Ignored if using 'vcf' argument.
+
+=back
+
+ my %format_fields = VcfReader::getFormatFields(vcf => "file.vcf");
+
+=cut
+sub getFormatFields{
+    #return a hash of INFO IDs, to anon hashes of 
+    #Number, Type and Description
+    my (%args) = @_;
+    my @header = ();
+    if ($args{vcf}){
+        @header = getHeader($args{vcf});
+    }elsif($args{header}){
+        if (ref $args{header} eq 'ARRAY'){
+            @header = @{$args{header}};
+        }else{
+            @header = split("\n", $args{header});
+        }
+    }else{
+        croak "getFormatFields method requires either 'vcf' or 'header arguments ";
+    }
+    my %info = ();
+    foreach my $h (@header){
+        if ($h =~ /^##FORMAT=<ID=(\w+),Number=([\.\w+]),Type=(\w+),Description=(.+)>$/){
+            $info{$1} = 
+                {
+                Number => $2,
+                Type => $3,
+                Description => $4,
+                };
+        }
+    }
+    return %info;
+}
+=back
+
+
+
 =back
 
 =head2 File Utilities
@@ -984,7 +1039,7 @@ Returns a hash of the different fields found in the FORMAT column for a variant 
  my %format = VcfReader::getFormatFields(\@split_line);
 
 =cut
-sub getFormatFields{
+sub getVariantFormatFields{
     my ($line) = @_;
     my $format = getVariantField($line, "FORMAT");
     if (not defined $format){
@@ -999,6 +1054,20 @@ sub getFormatFields{
     return %format_fields if wantarray;
     return keys %format_fields if defined wantarray;
     carp "getFormatFields method called in void context ";
+}
+
+=item B<getAllSampleVariants>
+
+Returns an array of all sample genotype columns in the order they appear in the VCF. Requires an array reference to a split line to be passed as the first and only argument. 
+
+ my @calls = VcfReader::getAllSampleVariants(\@line);
+
+=cut
+
+sub getAllSampleVariants{
+    my ($line) = @_;
+    croak "Line has too few fields: " . join("\t", @$line) . " " if 9 > $#{$line};
+    return @$line[9 .. $#{$line} ] ;
 }
 
 
