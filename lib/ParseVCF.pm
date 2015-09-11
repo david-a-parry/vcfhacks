@@ -1709,7 +1709,7 @@ sub getSampleAlleleDepths{
                         sample => $sample,
                         field  => 'AO',
                     );
-        @ad = $ro , split(",", $ao);
+        @ad = ( $ro , split(",", $ao)) ;
     }else{
        carp "Cannot calculate allele depth without either AD or AO and RO FORMAT fields!\n"; 
     }
