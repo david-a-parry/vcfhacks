@@ -685,10 +685,9 @@ sub get_simplified_fields{
             }else{
                 push @sample_calls, "-";
             }
-            my $ad = $vcf_obj->getSampleGenotypeField(sample => $sample, field => "AD"); 
+            my @ads = $vcf_obj->getSampleAlleleDepths($sample);
             my $allele_depths = '-';
-            if (defined $ad && $ad =~ /(\d+,*)+/){
-                my @ads = split(",", $ad);
+            if (@ads){
                 my @allele_depth = ();
                 for (my $n = 0; $n < @ads and $n < @all_alleles; $n++){
                     push (@allele_depth, "$all_alleles[$n]=$ads[$n]");

@@ -490,13 +490,11 @@ sub filter_on_sample {
 
                     if ($allele_ratio_cutoff)
                     {    #find the min ad ratios for --samples
-                        my $ad = VcfReader::getSampleGenotypeField(
+                        my @ads = VcfReader::getSampleAlleleDepths(
                             column => $sample_to_col{$sample},
-                            field  => 'AD',
                             line   => $vcf_line,
                         );
-                        if ($ad) {
-                            my @ads = split( ",", $ad );
+                        if (@ads) {
                             @ads = grep { !/\./ }
                               @ads
                               ;   #sometimes with no reads an AD of '.' is given
@@ -574,13 +572,11 @@ sub filter_on_sample {
             if ($allele_depth_cutoff) {
 
     #reject even if uncalled if proportion of alt allele >= $allele_depth_cutoff
-                my $ad = VcfReader::getSampleGenotypeField(
+                my @ads = VcfReader::getSampleAlleleDepths(
                     column => $sample_to_col{$reject},
-                    field  => 'AD',
                     line   => $vcf_line,
                 );
-                if ($ad) {
-                    my @ads = split( ",", $ad );
+                if (@ads) {
                     @ads = grep { !/\./ }
                       @ads;    #sometimes with no reads an AD of '.' is given
                     my $dp = sum(@ads);
@@ -594,13 +590,11 @@ sub filter_on_sample {
                 }
             }
             if ($allele_ratio_cutoff) {    #find the max ad ratios for --reject
-                my $ad = VcfReader::getSampleGenotypeField(
+                my @ads = VcfReader::getSampleAlleleDepths(
                     column => $sample_to_col{$reject},
-                    field  => 'AD',
                     line   => $vcf_line,
                 );
-                if ($ad) {
-                    my @ads = split( ",", $ad );
+                if (@ads) {
                     @ads = grep { !/\./ }
                       @ads;    #sometimes with no reads an AD of '.' is given
                     my $dp = sum(@ads);
@@ -741,13 +735,11 @@ sub get_depth_for_sample{
         line   => $vcf_line,
     );
     if (not $dp){
-        my $ad = VcfReader::getSampleGenotypeField(
+        my @ads = VcfReader::getSampleAlleleDepths(
             column => $sample_to_col{$sample},
-            field  => 'AD',
             line   => $vcf_line,
         ); 
-        if ($ad) {
-            my @ads = split( ",", $ad );
+        if (@ads) {
             @ads = grep { !/\./ }
               @ads
               ;   #sometimes with no reads an AD of '.' is given
