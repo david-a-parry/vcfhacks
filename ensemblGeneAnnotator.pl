@@ -22,6 +22,8 @@ use Term::ProgressBar;
 #use Bio::SeqIO::entrezgene_interactants;
 use FindBin;
 use lib "$FindBin::Bin/lib";
+use lib "$FindBin::Bin/lib/Bioperl";
+use lib "$FindBin::Bin/lib/BioASN1EntrezGene/lib";
 use ParseVCF;
 
 my $genedir;
