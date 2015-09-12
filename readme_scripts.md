@@ -29,7 +29,13 @@ If you want to use scripts to search bgzip compressed VCFs or use rankOnCaddScor
 
 ...in Tabix.pm (and reinstalling). 
 
-Other perl modules required by these scripts are installable via CPAN - perl will complain that they are not available in "@INC" when you attempt to run these programs if they are not on your system. Please see http://www.cpan.org/modules/INSTALL.html for instructions on how to install these modules.
+Other perl modules required by these scripts are installable via CPAN - perl will complain that they are not available in "@INC" when you attempt to run these programs if they are not on your system. Please see http://www.cpan.org/modules/INSTALL.html for instructions on how to install these modules. Below is a list of these non-core modules that you are likely to need install:
+
+    Bio::DB::Sam (hgmdMartToVcf.pl only)
+    Excel::Writer::XLSX (annovcfToSimple.pl only)
+    Parallel::ForkManager
+    Sys::CPU
+    Term::ProgressBar
 
 
 __UPDATE__
