@@ -20,7 +20,7 @@ use Cwd;
 use Term::ProgressBar;
 
 #use Bio::SeqIO::entrezgene_interactants;
-use FindBin;
+use FindBin qw($RealBin);
 use lib "$FindBin::Bin/lib";
 use lib "$FindBin::Bin/lib/Bioperl";
 use lib "$FindBin::Bin/lib/BioASN1EntrezGene/lib";
@@ -65,8 +65,7 @@ pod2usage( -exitval => 2, -message => "--input is required", )
   and not $repair;
 
 my ( $script, $script_dir ) = fileparse($0);
-$script_dir = getcwd() if $script_dir eq "./" or $script_dir eq ".\\";
-$genedir = "$script_dir/gene_ref_files" if ( not $genedir );
+$genedir = "$RealBin/gene_ref_files" if ( not $genedir );
 $genedir =~ s/\/$//;
 my $OUT;
 if ($out) {
@@ -1547,7 +1546,7 @@ Output file name.
 
 =item B<-d    --directory>
 
-Directory containing reference files. Will look for reference files in the same directory as this program if not supplied.
+Directory containing reference files. Will look for a folder called 'gene_ref_files' in the same directory as this program if not supplied. This directory will be created and populated if using the --DOWNLOAD_NEW option.
 
 =item B<-s    --snpEff>
 
