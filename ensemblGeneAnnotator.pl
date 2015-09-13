@@ -19,7 +19,6 @@ use File::stat;
 use Cwd;
 use Term::ProgressBar;
 
-#use Bio::SeqIO::entrezgene_interactants;
 use FindBin qw($RealBin);
 use lib "$FindBin::Bin/lib";
 use lib "$FindBin::Bin/lib/Bioperl";
@@ -65,7 +64,7 @@ pod2usage( -exitval => 2, -message => "--input is required", )
   and not $repair;
 
 my ( $script, $script_dir ) = fileparse($0);
-$genedir = "$RealBin/gene_ref_files" if ( not $genedir );
+$genedir = "$RealBin/ensAnnotatorDb" if ( not $genedir );
 $genedir =~ s/\/$//;
 my $OUT;
 if ($out) {
@@ -1286,8 +1285,8 @@ sub extract_ncbi_summaries {
         my @rifs        = ();
         my @mim         = ();
         my @ensembl     = ();
-        my $annotations = $gene->annotation;
-        my @annotations = $annotations->get_Annotations();
+        my $annotation_ref = $gene->annotation;
+        my @annotations = $annotation_ref->get_Annotations();
         
         print $SUMOUT "$gene->{primary_seq}->{accession_number}\t";
         exists $gene->{primary_seq}->{display_id}
@@ -1318,7 +1317,7 @@ sub extract_ncbi_summaries {
                   "$anno->{value}\t$gene->{primary_seq}->{accession_number}\n";
             }
         }
-        @annotations = $annotations->get_Annotations('OntologyTerm');
+        @annotations = $annotation_ref->get_Annotations('OntologyTerm');
         foreach my $anno (@annotations) {
             next
               if ( ( defined $anno->term->authority )
@@ -1546,7 +1545,7 @@ Output file name.
 
 =item B<-d    --directory>
 
-Directory containing reference files. Will look for a folder called 'gene_ref_files' in the same directory as this program if not supplied. This directory will be created and populated if using the --DOWNLOAD_NEW option.
+Directory containing reference files. Will look for a folder called 'ensAnnotatorDb' in the same directory as this program if not supplied. This directory will be created and populated if using the --DOWNLOAD_NEW option.
 
 =item B<-s    --snpEff>
 
