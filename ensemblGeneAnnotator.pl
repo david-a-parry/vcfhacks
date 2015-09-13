@@ -3,6 +3,7 @@
 use warnings;
 use strict;
 use Config;
+use LWP::Simple;
 use Getopt::Long qw(:config no_ignore_case);
 use POSIX qw/strftime/;
 use Pod::Usage;
@@ -11,6 +12,7 @@ use Net::FTP;
 use Cwd;
 use IO::File;
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
+use IO::Uncompress::Unzip qw(unzip $UnzipError) ;
 use File::Path qw(make_path remove_tree);
 use File::Temp qw/ tempfile tempdir /;
 use File::Copy;
@@ -127,6 +129,14 @@ my %database     = (
         dir       => "OMIM",
         file      => "morbidmap"
     },
+    biogrid    => {
+        localfile => "$genedir/BIOGRID-ALL-3.4.128.tab2.txt",
+        col       => 1,
+        delimiter => "\t",
+        url       => "http://thebiogrid.org",
+        dir       => "downloads/archives/Release%20Archive/BIOGRID-3.4.128/",
+        file      => "BIOGRID-ALL-3.4.128.tab2.zip"
+    },
 );
 
 #NEED TO FIND ALTERNATIVE TO "HMD_Human5.rpt" - deprecated in current MGI scheme
@@ -187,7 +197,7 @@ if (@missing) {
 
 my $next_update  = 0;
 my $pre_progress = 0;
-my @all_annotations = qw(ENSGENE_ID ENTREZ_ID SYMBOL GO_ID GO_DESCRIPTION GENERIFS SUMMARY OMIM MGI_PHENOTYPE);
+my @all_annotations = qw(ENSGENE_ID ENTREZ_ID SYMBOL GO_ID GO_DESCRIPTION GENERIFS BIOGRID_INTERACTANTS SUMMARY OMIM MGI_PHENOTYPE);
 if (@annotations){
     foreach my $anno (@annotations){
         if (not grep {/uc($_) eq uc($anno)/} @annotations){
@@ -331,7 +341,6 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
             $annot{$entrez_id}->{go_description} = $humsum_line[5];
             $annot{$entrez_id}->{generifs}     = $humsum_line[6];
 
-            #$annot{$entrez_id}->{interactants} = $humsum_line[8];
             my $mim_accession = $humsum_line[7];
             if ( $mim_accession ne "-" ) {
                 my $j = binSearchLineWithIndex(
@@ -399,9 +408,12 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
             $annot{$entrez_id}->{go_description} = "";
             $annot{$entrez_id}->{generifs}     = "";
 
-            #$annot{$entrez_id}->{interactants} = "-";
             push( @{ $annot{$entrez_id}->{omim} }, "" );
         }
+        my @interactants = get_interactants($entrez_id);
+        @interactants 
+          ? push @{ $annot{$entrez_id}->{biogrid_interactants} }, @interactants,
+          : push @{ $annot{$entrez_id}->{biogrid_interactants} }, "";
         my @mgi = get_MGI_phenotype($entrez_id) ;
         @mgi
           ? push @{ $annot{$entrez_id}->{mgi_phenotype} }, @mgi
@@ -770,15 +782,10 @@ CLASS: foreach my $class (@classes) {
 ########################################
 sub prepare_files {
     my ( $file_array_ref, $database_ref ) = @_;
-    my $increment    = 100 / @$file_array_ref;
-    my $prep_percent = 0;
-    my $next_update  = 0;
-    my $prep_bar     = Term::ProgressBar->new(
-        { name => "Preparing Database", count => 100, ETA => "linear", } );
     foreach my $file (@$file_array_ref) {
         sort_and_index_gene_files(
-            $file->{localfile}, $file->{col}, \$prep_percent,
-            $increment,         \$prep_bar,   \$next_update,
+            $file->{localfile}, 
+            $file->{col}, 
             $file->{delimiter}
         );
     }
@@ -824,8 +831,6 @@ sub prepare_database {
     else {
         die "Unrecognised mode ($mode) for prepare_database subroutine\n";
     }
-    my $db_percent  = 0;
-    my $next_update = 0;
     #my $progressbar = Term::ProgressBar->new(
     #    { name => "Prep Database", count => 100, ETA => "linear", } );
     if ( not -e $genedir ) {
@@ -862,21 +867,24 @@ sub prepare_database {
         $n++;
         my $time = strftime( "%H:%M:%S", localtime );
         print STDERR "[$time] Processing $file_name, file $n of $t...\n";
-        my $increment = 100 / @files;
-        $increment /= 10;
         chdir $genedir or display_error_and_exit(
             "Directory Error",
             "Can't move to directory $genedir",
         );
         my $file_exists = 0;
 
-        if ( -e $file ) {
-            move( $file, "$file.bkup" ) or display_error_and_exit(
+        if ( -e $file->{localfile} ) {
+            move( $file->{localfile} , "$file->{localfile}.bkup" ) or display_error_and_exit(
                 "File Error",
                 "Error creating file backup of $file->{localfile}",
                 "Check permissions and/or disk space."
             );
             $file_exists++;
+        }
+        if ($file->{url} eq "http://thebiogrid.org"){
+            chdir $dir;
+            downloadBiogrid($file, $file_exists);
+            next; 
         }
         $time = strftime( "%H:%M:%S", localtime );
         print STDERR "[$time] Connecting to $file->{url}...\n";
@@ -901,15 +909,9 @@ sub prepare_database {
           or restore_file( $file_exists, $file )
           && display_error_and_exit( "Download error",
             "Could not download $file->{url}/$file->{dir}/$file->{file}" );
-        $db_percent += $increment;
-        #$next_update = $progressbar->update($db_percent)
-          #if $db_percent >= $next_update;
-        $increment *= 9;
-
         if ( $file->{file} =~ /\.gz$/ ) {
             $time = strftime( "%H:%M:%S", localtime );
             print STDERR "[$time] Decompressing $file->{file}...\n";
-            $increment /= 3;
             ( my $output = $file->{file} ) =~ s/\.gz$//i;
             if ( $file->{file} =~ /\.ags/ )
             {    #make sure we use binmode for .ags files
@@ -929,29 +931,16 @@ sub prepare_database {
                 while ( $z->read($buffer) ) {
                     print $ZOUT $buffer;
                 }
-                $db_percent += $increment;
-                #$next_update = $progressbar->update($db_percent)
-                  #if $db_percent >= $next_update;
-
             }
             else {
                 gunzip( $file->{file} => $output )
                   or restore_file( $file_exists, $file )
                   && display_error_and_exit( "Error decompressing file",
                     "Error decompressing $file->{file}" );
-                $db_percent += $increment;
-                #$next_update = $progressbar->update($db_percent)
-                  #if $db_percent >= $next_update;
             }
 
-            #$file_name = $output unless $file->{file} =~ /\.ags/;
-            #$next_update = $progressbar->update($db_percent)
-              #if $db_percent >= $next_update;
-            $increment *= 2;
         }
         if ( $file->{file} =~ /\.ags/ ) {
-            $increment /= 2;
-
             #use gene2xml script to extract summaries...
             my $gene2xml = "./gene2xml";
             if ( not -e $gene2xml ) {
@@ -964,10 +953,6 @@ sub prepare_database {
 #my $command = "\"$gene2xml\" -i \"$decomp_file\" -b -o \"$xml_out\"";
 #my $exit_status = `$command`;
 #display_error_and_continue("Error processing gene2xml command", "Exit status of $exit_status from $command") if $exit_status;
-            $db_percent += $increment / 2;
-            #$next_update = $progressbar->update($db_percent)
-              #if $db_percent >= $next_update;
-
 #unlink $file->{file} or display_error_and_exit( "Can't delete xml output ($file->{file})", "Check permissions - it is safe to manually delete this file now");
             my ( $enstoEntrez_file_name, $file_dir ) = fileparse( $database_ref->{ensemblToEntrez}->{localfile} );
             extract_ncbi_summaries( $gene2xml, $decomp_file, "$file_name.tmp",
@@ -987,15 +972,8 @@ sub prepare_database {
             sort_and_index_gene_files(
                 $enstoEntrez_file_name,
                 $database_ref->{ensemblToEntrez}->{col},
-                \$db_percent,
-                $increment,
-                $progressbar,
-                $next_update,
                 $database_ref->{ensemblToEntrez}->{delimiter}
             );
-            $db_percent += $increment / 2;
-            #$next_update = $progressbar->update($db_percent)
-              #if $db_percent >= $next_update;
             unlink $decomp_file or display_error_and_continue(
                 "Can't delete decompressed ags file ($decomp_file)",
 "Check permissions - it is safe to manually delete this file now"
@@ -1003,45 +981,15 @@ sub prepare_database {
 
 #unlink $xml_out or display_error_and_exit( "Can't delete xml output ($xml_out)", "Check permissions - it is safe to manually delete this file now");
         }
-        if ( $file->{file} =~ /HMD_Human5\.rpt/ ) {
-            $increment /= 3;
-            move( $file->{file}, "$file->{file}.bak" )
-              or display_error_and_exit(
-                "File Error",
-                "Error creating file backup of $file->{file}",
-                "Check permissions and/or disk space."
-              );
-            open( my $HMD_DOWN, "$file->{file}.bak" )
-              or display_error_and_exit( "File Read Error",
-                "Can't open $file->{file}.bak to read" );
-            open( my $HMD_MOD, ">$file->{file}" )
-              or display_error_and_exit( "Write Error",
-                "Can't open $file->{file} to write." );
-            while ( my $line = <$HMD_DOWN> ) {
-                next if $line !~ /^[0-9MXYU]/;
-                print $HMD_MOD $line;
-            }
-            $db_percent += $increment;
-            #$next_update = $progressbar->update($db_percent)
-              #if $db_percent >= $next_update;
-            close $HMD_MOD;
-            close $HMD_DOWN;
-            unlink "$file->{file}.bak" or display_error_and_continue(
-                "Can't delete backup file $file->{file}.bak",
-"Check permissions - it is safe to manually delete this file now"
-            );
-            $increment *= 2;
-        }
         chdir $dir;
         $time = strftime( "%H:%M:%S", localtime );
         print STDERR "[$time] Sorting and indexing $file_name...\n";
         sort_and_index_gene_files( "$file_dir/$file_name", $file->{col},
-            \$db_percent, $increment, $progressbar, $next_update,
             $file->{delimiter} );
-        if (-e "$file.bkup"){
-            unlink "$file.bkup"
+        if (-e "$file->{localfile}.bkup"){
+            unlink "$file->{localfile}.bkup"
                 or display_error_and_continue(
-                "Can't delete backup file \"$file.bkup\"",
+                "Can't delete backup file \"$file->{localfile}.bkup\"",
                 "Check permissions - it is safe to manually delete this file now" );
         }
     }
@@ -1051,36 +999,53 @@ sub prepare_database {
 }
 
 #########################################
+sub downloadBiogrid{
+    my $file = shift;
+    my $exists = shift;
+    my $url = "$file->{url}/$file->{dir}/$file->{file}";
+    my $dl  = "$genedir/$file->{file}";
+    my $time = strftime( "%H:%M:%S", localtime );
+    print STDERR "[$time] Downloading $url...\n";
+    getstore($url, $dl )
+          or restore_file( $exists, $file )
+          && display_error_and_exit( 
+            "Download error",
+            "Error downloading $url!\n"
+    );
+    $time = strftime( "%H:%M:%S", localtime );
+    print STDERR "[$time] Decompressing $dl...\n";
+    unzip $dl => $file->{localfile} or die "Unzip failed: $UnzipError\n";   
+    unlink($dl) 
+                or display_error_and_continue(
+                "Can't delete backup file \"$dl\"",
+                "Check permissions - it is safe to manually delete this file now" );
+    sort_and_index_gene_files(
+        $file->{localfile},
+        $file->{col},
+        $file->{delimiter},
+    );
+    print STDERR "[$time] Sorting and indexing $file->{file}...\n";
+    if (-e "$file->{localfile}.bkup"){
+        unlink "$file->{localfile}.bkup"
+            or display_error_and_continue(
+            "Can't delete backup file \"$file->{localfile}.bkup\"",
+            "Check permissions - it is safe to manually delete this file now" );
+    }
+}
+
+#########################################
 sub sort_and_index_gene_files {
-    my (
-        $file,        $sort_column, $prog_ref, $increment,
-        $progressbar, $next_update, $delimiter
-    ) = @_;    #column no. is 0 based
+    my ($file,$sort_column, $delimiter) = @_;    #column no. is 0 based
     open( my $FILE, $file )
       or die "Can't open $file for sorting and indexing!\n";
     my ( $file_short, $dir ) = fileparse($file);
     my @lines;
     $delimiter = "\t" if not $delimiter;
-    my $line_count = 0;
-    $line_count += tr/\n/\n/ while sysread( $FILE, $_, 2**16 );
-    $line_count ||= 1;
-
-    #print STDERR "$file has $line_count lines\n";/
-    close $FILE;
-    my $incr_per_line = ( $increment / 6 ) / $line_count;
-
-    #print STDERR "increment per line is $incr_per_line\n";
-    open( $FILE, $file ) or die "Can't open $file for sorting and indexing!\n";
     my $check_taxon = 0;
     $check_taxon = 1
       if ( $file =~ /gene2go/ or $file =~ /generifs/ )
       ;    #for these files we'll ignore non-mouse and non-human genes
-    my $line_counter = 0;
-    my $prev_counter = 0;
     while (<$FILE>) {
-        $$prog_ref += $incr_per_line;
-        #$next_update = $progressbar->update($$prog_ref)
-          #if $$prog_ref >= $next_update;
         next if /^#/;
         if ($check_taxon) {
             my $tax_id = ( split "\t" )[0];
@@ -1092,28 +1057,12 @@ sub sort_and_index_gene_files {
             push( @lines, [ $_, ( split /$delimiter/ )[$sort_column] ] );
         }
     }
-
-    #$$prog_ref += $increment/6;
-    #print $bar "$$prog_ref";
     close $FILE;
-    my $li = @lines ? @lines : 1;
-    $incr_per_line = ( $increment / 2 ) / $li;
     @lines = sort { $a->[1] cmp $b->[1] } @lines;
-    $$prog_ref += $increment / 2;
-    #$next_update = $progressbar->update($$prog_ref)
-      #if $$prog_ref >= $next_update;
     my ( $tmp, $TEMP );
     ( $TEMP, $tmp ) = tempfile( "$dir/tmp_dharmaXXXX", UNLINK => 1 )
       or die "Can't create temporary sort file\n";
-    $incr_per_line = ( $increment / 6 ) / $li;
-    $line_counter  = 0;
-    $prev_counter  = 0;
-
     foreach my $line (@lines) {
-        $$prog_ref += $incr_per_line;
-        #$next_update = $progressbar->update($$prog_ref)
-          #if $$prog_ref >= $next_update;
-        $prev_counter = int($line_counter);
         print $TEMP "$line->[0]\n";
     }
     close $TEMP;
@@ -1126,10 +1075,6 @@ sub sort_and_index_gene_files {
     binmode $INDEX;
     open( my $NEWFILE, "$file" ) or die "Can't open $file for reading ";
     build_index( $NEWFILE, $INDEX );
-    $$prog_ref += $increment / 6;
-    #$next_update = $progressbar->update($$prog_ref)
-      #if $$prog_ref >= $next_update;
-
 }
 
 #####################################
@@ -1340,11 +1285,6 @@ sub extract_ncbi_summaries {
         @rifs ? print $SUMOUT join( "|", @rifs ) . "\t" : print $SUMOUT "-\t";
         @mim  ? print $SUMOUT join( "|", @mim ) . "\t"  : print $SUMOUT "-\t";
    
-# my @interactants;
-# foreach my $k (keys %{$inters}){
-#         push (@interactants, "$inters->{$k}($k)");
-# }
-# @interactants ? print $SUMOUT join("|", @interactants) ."\t"  : print $SUMOUT "-\t";
         print $SUMOUT "\n";
     }
     
@@ -1355,7 +1295,7 @@ sub extract_ncbi_summaries {
 
 #####################################
 sub display_error_and_exit {
-    my ( $text, $informative_text, $button ) = @_;
+    my ( $text, $informative_text, ) = @_;
 
 #we require the main text at a minimum.  Follow this with informative text and $button label if desired.
     $informative_text = "" if not $informative_text;
@@ -1380,6 +1320,62 @@ sub getMouseOrtholog {
     }
 }
 
+#########################################
+sub get_interactants{
+    my $gene_id = shift;
+    my @inter = ();
+    my @symbols = ();
+    my $i = binSearchLineWithIndex
+      ( 
+        $gene_id, 
+        $database{biogrid}->{fh}, 
+        $database{biogrid}->{idx},
+        $database{biogrid}->{length},
+        1 
+      );
+    if ( $i > 0 ) {
+        my @hits = look_forward_and_back
+          ( 
+            $gene_id, 
+            $database{biogrid}->{fh},
+            $database{biogrid}->{idx},
+            $database{biogrid}->{length},
+            1,
+            $i,
+        );
+        foreach my $hit (@hits){
+            push @inter, (split "\t", $hit)[2];
+        }
+    }
+    my %seen = ();
+    @inter = grep { !$seen{$_}++ }  @inter;
+    foreach my $inter (@inter){
+        my $i = binSearchLineWithIndex(
+            $inter,
+            $database{human_summary}->{fh},
+            $database{human_summary}->{idx},
+            $database{human_summary}->{length},
+            $database{human_summary}->{col}
+        );
+        if ( $i > 0 ) {
+            chomp(
+                my @humsum_line = split(
+                    "\t",
+                    line_with_index(
+                        $database{human_summary}->{fh},
+                        $database{human_summary}->{idx},
+                        $i
+                    )
+                )
+            );
+            push @symbols, $humsum_line[1];
+        }
+        
+    }
+    @symbols = sort @symbols;
+    return @symbols;
+}
+     
 #########################################
 sub get_MGI_phenotype {
     my $gene_id = shift;
