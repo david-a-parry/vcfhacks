@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 #David Parry August 2011
 #
 =head1 NAME

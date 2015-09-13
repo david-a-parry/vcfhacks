@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 #David Parry University of Leeds April 2011
 
 #This program is free software: you can redistribute it and/or modify
