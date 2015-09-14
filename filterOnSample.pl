@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 #David Parry August 2011
 
 #TO DO - implement an allele frequency filter which uses information from ped files

@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 #David Parry June 2015
 use strict;
 use warnings;

@@ -1,0 +1,6 @@
+[submodule "lib/Bioperl"]
+	path = lib/Bioperl
+	url = https://github.com/gantzgraf/bioperl-live.git
+[submodule "lib/BioASN1EntrezGene"]
+	path = lib/BioASN1EntrezGene
+	url = https://github.com/gantzgraf/Bio-ASN1-EntrezGene.git
