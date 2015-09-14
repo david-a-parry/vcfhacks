@@ -1032,11 +1032,11 @@ sub isMultiAllelic{
     return 0;
 }
 
-=item B<getFormatFields>
+=item B<getVariantFormatFields>
 
 Returns a hash of the different fields found in the FORMAT column for a variant with the key being the name of the field and the value being the 0-based order in which it occurs unless called in a scalar context in which case the number of FORMAT fields will be returned. Requires an array reference to a split line to be passed as the only argument.
 
- my %format = VcfReader::getFormatFields(\@split_line);
+ my %format = VcfReader::getVariantFormatFields(\@split_line);
 
 =cut
 sub getVariantFormatFields{
@@ -1053,7 +1053,7 @@ sub getVariantFormatFields{
     }
     return %format_fields if wantarray;
     return keys @form if defined wantarray;
-    carp "getFormatFields method called in void context ";
+    carp "getVariantFormatFields method called in void context ";
 }
 
 =item B<getAllSampleVariants>
@@ -1199,7 +1199,7 @@ sub getSampleGenotypeField{
     #}elsif(defined $args{sample} or $args{multiple}){
 #        croak "\"multiple\" and \"sample\" arguments can only be used in conjunction with \"sample_to_columns\" option for getSampleGenotypeField method ";
     }
-    my %var_format = getFormatFields($args{line});
+    my %var_format = getVariantFormatFields($args{line});
     if (not defined $var_format{$args{field}}){
         carp "Field $args{field} not found for getSampleGenotypeField ";
         return;
@@ -1766,8 +1766,8 @@ sub getSampleAlleleDepths{
             croak "\"sample_to_columns\" argument passed to getSampleAlleleDepths must be a hash reference ";
         }
     }
-    my $col = $args{col} || $args{sample_to_columns}->{$args{sample}};
-    my %var_format = getFormatFields($args{line});
+    my $col = $args{column} || $args{sample_to_columns}->{$args{sample}};
+    my %var_format = getVariantFormatFields($args{line});
     my @ad = ();
     if (defined $var_format{AD}){
         my $ad = getSampleGenotypeField
