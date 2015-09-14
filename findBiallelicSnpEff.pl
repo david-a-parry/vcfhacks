@@ -51,6 +51,7 @@ my $pass_filters;      #only keep variants with PASS filter field.
 my $gmaf;    #filter GMAF if present if equal to or above this value (0.0 - 0.5)
 my $any_maf
   ;    #filter MAF if present if equal to or above this value in any population
+my $check_snp_annotations; #check for annotateSnps.pl frequencies
 my $help;
 my $man;
 my $progress;
@@ -215,7 +216,7 @@ else {
 
 print STDERR "Initializing VCF input ($vcf)...\n";
 my $vcf_obj = ParseVCF->new( file => $vcf );
-print STDERR "Checking VCF is sorted...\n";
+my %info_fields = $vcf_obj->getInfoFields();
 
 #CHECK SNPEFF ARGUMENTS AGAINST VCF
 my $meta_header    = $vcf_obj->getHeader(0);
@@ -230,6 +231,9 @@ my @filters = checkAndParseDbnsfpExpressions( \@filter_dbnsfp, $meta_header );
 my @match   = checkAndParseDbnsfpExpressions( \@match_dbnsfp,  $meta_header );
 if ($any_maf) {
     push @filters, getFrequencyFilters( $any_maf, ">=", );
+    if (exists $info_fields{SnpAnnotation}){
+        $check_snp_annotations++;
+    }
 }
 
 my %allelic_genes
