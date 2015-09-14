@@ -1019,12 +1019,12 @@ sub downloadBiogrid{
                 or display_error_and_continue(
                 "Can't delete backup file \"$dl\"",
                 "Check permissions - it is safe to manually delete this file now" );
+    print STDERR "[$time] Sorting and indexing $file->{localfile}...\n";
     sort_and_index_gene_files(
         $file->{localfile},
         $file->{col},
         $file->{delimiter},
     );
-    print STDERR "[$time] Sorting and indexing $file->{file}...\n";
     if (-e "$file->{localfile}.bkup"){
         unlink "$file->{localfile}.bkup"
             or display_error_and_continue(
