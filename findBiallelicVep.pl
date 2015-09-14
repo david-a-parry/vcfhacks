@@ -42,6 +42,7 @@ my $pass_filters;      #only keep variants with PASS filter field.
 my $gmaf;    #filter GMAF if present if equal to or above this value (0.0 - 0.5)
 my $any_maf
   ;    #filter MAF if present if equal to or above this value in any population
+my $check_snp_annotations; #check for annotateSnps.pl frequencies
 my $help;
 my $man;
 my $progress;
@@ -309,6 +310,7 @@ if ($splice_consensus) {
 
 print STDERR "Initializing VCF input ($vcf)...\n";
 my $vcf_obj = ParseVCF->new( file => $vcf );
+my %info_fields = $vcf_obj->getInfoFields();
 
 #CHECK VEP ARGUMENTS AGAINST VCF
 my $vep_header     = $vcf_obj->readVepHeader();
@@ -319,6 +321,9 @@ if ( defined $any_maf ) {
             push @available_mafs, $key;
             push @csq_fields,     $key;
         }
+    }
+    if (exists $info_fields{SnpAnnotation}){
+        $check_snp_annotations++;
     }
 }
 if ( @csq_fields > 1 ) {
@@ -657,98 +662,116 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
               if not identical_genotypes( $ped->getAffectedsFromFamily($fam) );
         }
     }
-
+    #get annotateSnps.pl annotations if present and using --maf 
+    my @snp_annots = (); 
+    if ($check_snp_annotations){ 
+        my $snp = $vcf_obj->getVariantInfoField("SnpAnnotation");
+        $snp =~ s/^\[//;
+        $snp =~ s/\]$//;
+    }
     my @csq = $vcf_obj->getVepFields( \@csq_fields )
       ; #returns array of hashes e.g. $csq[0]->{Gene} = 'ENSG000012345' ; $csq[0]->{Consequence} = 'missense_variant'
     die
 "No consequence field found for line:\n$line\nPlease annotated your VCF file with ensembl's variant effect precictor before running this program.\n"
       if not @csq;
-  CSQ: foreach my $annot (@csq) {
-        my @anno_csq = split( /\&/, $annot->{consequence} );
+    my @alts = $vcf_obj->readAlleles( alt_alleles => 1 );
+    my $ref = $vcf_obj->getVariantField("REF");
+    my @va = $vcf_obj->altsToVepAllele( ref => $ref, alt => \@alts );
+    my $alt_num = 1;
+    my %vep_alleles = map { $alt_num++ => $_ } @va
+     ;#key is ALT allele number, value is VEP allele
+ALT: for (my $i = 0; $i < @alts; $i++){
+        if ($check_snp_annotations){ #check for annotateSnps.pl frequencies
+            my $snp_annot = $vcf_obj->getVariantInfoField();
+        }
+        my @a_csq = grep { $_->{allele} eq $alts[$i] } @csq;
+CSQ:    foreach my $annot (@a_csq) {
+            my @anno_csq = split( /\&/, $annot->{consequence} );
 
-        #skip NMD transcripts
-        if ( grep { /NMD_transcript_variant/i } @anno_csq ) {
-            next CSQ;
-        }
-        my $matches_class = 0;
-        next if ( $annot->{consequence} eq 'intergenic_variant' );
-        if ($canonical_only) {
-            next if ( not $annot->{canonical} );
-        }
-        if ( defined $gmaf ) {
-            if ( $annot->{gmaf} ) {
-                if ( $annot->{gmaf} =~ /\w+:(\d\.\d+)/ ) {
-                    next if $1 >= $gmaf;
-                }
+            #skip NMD transcripts
+            if ( grep { /NMD_transcript_variant/i } @anno_csq ) {
+                next CSQ;
             }
-        }
-        if ( defined $any_maf ) {
-            foreach my $some_maf (@available_mafs) {
-                if ( $annot->{$some_maf} ) {
-                    if ( $annot->{$some_maf} =~ /\w+:(\d\.\d+)/ ) {
-                        next if $1 >= $any_maf;
+            my $matches_class = 0;
+            next if ( $annot->{consequence} eq 'intergenic_variant' );
+            if ($canonical_only) {
+                next if ( not $annot->{canonical} );
+            }
+            if ( defined $gmaf ) {
+                if ( $annot->{gmaf} ) {
+                    if ( $annot->{gmaf} =~ /\w+:(\d\.\d+)/ ) {
+                        next if $1 >= $gmaf;
                     }
                 }
             }
-        }
-
-      CLASS: foreach my $class (@classes) {
-          ANNO: foreach my $ac (@anno_csq) {
-                if ( lc $ac eq lc $class ) {
-                    if ( lc $class eq 'missense_variant' and %damage_filters ) {
-                        next ANNO
-                          if (
-                            filter_missense(
-                                $annot,             \%damage_filters,
-                                $keep_any_damaging, $filter_unpredicted
-                            )
-                          );
-                    }
-                    elsif ( lc $class eq 'splice_region_variant'
-                        and $splice_consensus )
-                    {
-                        my $consensus = $annot->{splice_consensus};
-                        next if not $consensus;
-                        if ( $consensus !~ /SPLICE_CONSENSUS\S+/i ) {
-                            print STDERR
-"WARNING - SPLICE_CONSENSUS annotation $consensus is"
-                              . " not recognised as an annotation from the SpliceConsensus VEP plugin.\n";
-                            next;
+            if ( defined $any_maf ) {
+                foreach my $some_maf (@available_mafs) {
+                    if ( $annot->{$some_maf} ) {
+                        if ( $annot->{$some_maf} =~ /\w+:(\d\.\d+)/ ) {
+                            next if $1 >= $any_maf;
                         }
                     }
-                    $matches_class++;
-                    last CLASS;
+                }
+            }
+
+          CLASS: foreach my $class (@classes) {
+              ANNO: foreach my $ac (@anno_csq) {
+                    if ( lc $ac eq lc $class ) {
+                        if ( lc $class eq 'missense_variant' and %damage_filters ) {
+                            next ANNO
+                              if (
+                                filter_missense(
+                                    $annot,             \%damage_filters,
+                                    $keep_any_damaging, $filter_unpredicted
+                                )
+                              );
+                        }
+                        elsif ( lc $class eq 'splice_region_variant'
+                            and $splice_consensus )
+                        {
+                            my $consensus = $annot->{splice_consensus};
+                            next if not $consensus;
+                            if ( $consensus !~ /SPLICE_CONSENSUS\S+/i ) {
+                                print STDERR
+    "WARNING - SPLICE_CONSENSUS annotation $consensus is"
+                                  . " not recognised as an annotation from the SpliceConsensus VEP plugin.\n";
+                                next;
+                            }
+                        }
+                        $matches_class++;
+                        last CLASS;
+                    }
+                }
+            }
+            if ($matches_class) {
+                my %var_hash =
+                  create_var_hash( $annot, $vcf_obj, \@samples, \@reject );
+                foreach my $k ( keys %var_hash ) {
+
+                    #$allelic_genes{$subannot[2]}->{$k} =  $var_hash{$k};
+                    $allelic_genes{ $annot->{feature} }->{$k} = $var_hash{$k};
+                }
+
+                # creates a  structure like:
+                # $hash{transcript}->{chr:pos/allele}->{sample} = count
+                # and $hash{transcript}->{chr:pos/allele}->{mutation} = $annotation
+                # and $hash{transcript}->{chr:pos/allele}->{vcf_line} = $line
+                # containing info for all relevant @classes
+                if ( $annot->{symbol} ) {
+                    $id_to_symbol{ $annot->{feature} } = $annot->{symbol};
+                }
+                elsif ( $annot->{hgnc} ) {
+                    $id_to_symbol{ $annot->{feature} } = $annot->{hgnc};
+                }
+                elsif ( $annot->{gene} ) {
+                    $id_to_symbol{ $annot->{feature} } = $annot->{gene};
+                }
+                else {
+                    $id_to_symbol{ $annot->{feature} } = $annot->{feature};
                 }
             }
         }
-        if ($matches_class) {
-            my %var_hash =
-              create_var_hash( $annot, $vcf_obj, \@samples, \@reject );
-            foreach my $k ( keys %var_hash ) {
-
-                #$allelic_genes{$subannot[2]}->{$k} =  $var_hash{$k};
-                $allelic_genes{ $annot->{feature} }->{$k} = $var_hash{$k};
-            }
-
-            # creates a  structure like:
-            # $hash{transcript}->{chr:pos/allele}->{sample} = count
-            # and $hash{transcript}->{chr:pos/allele}->{mutation} = $annotation
-            # and $hash{transcript}->{chr:pos/allele}->{vcf_line} = $line
-            # containing info for all relevant @classes
-            if ( $annot->{symbol} ) {
-                $id_to_symbol{ $annot->{feature} } = $annot->{symbol};
-            }
-            elsif ( $annot->{hgnc} ) {
-                $id_to_symbol{ $annot->{feature} } = $annot->{hgnc};
-            }
-            elsif ( $annot->{gene} ) {
-                $id_to_symbol{ $annot->{feature} } = $annot->{gene};
-            }
-            else {
-                $id_to_symbol{ $annot->{feature} } = $annot->{feature};
-            }
-        }
-    }
+    }#end ALT
 }
 
 my %vcf_lines = ();
@@ -1132,7 +1155,9 @@ sub check_segregation {
 #we've already checked that these allele combinations are not present in unaffected members including parents.
         if ( not $ignore_carrier_status and $chrom !~ /(chr)*X/i) {
 
-#check that parents (if available) contain one allele of a compound het (admittedly this does not allow for hemizygous variants in case of a deletion in one allele)
+#check that parents (if available) contain one allele of a compound het 
+#(admittedly this does not allow for hemizygous variants in case of a deletion in one allele)
+#or somatic mosaicism
             my %unaffected =
               map { $_ => undef } $ped->getUnaffectedsFromFamily($f);
           KEY: foreach my $key ( keys %intersect ) {
