@@ -14,7 +14,7 @@ These programs are all command line utilities. To run these programs you simply 
 
 ### SCRIPTS
 
-Unzip the downloaded file and ensure you keep the .pl scripts in the same directory as the 'lib' folder containing .pm module files.  The lib folder also contains two Variant Effect Predictor (VEP) plugin modules (SpliceConsensus.pm and SpliceConsensusFilter.pm) which should be installed in your VEP cache 'Plugins' folder if you want to use them. The SpliceConsensus.pm annotations can be used for variant filtering purposes in getFunctionalVariantsVep.pl and findBiallelicVep.pl.
+Unzip the downloaded file and ensure you keep the .pl scripts in the same directory as the 'lib' folder containing .pm module files.  The vep_plugins folder also contains two Variant Effect Predictor (VEP) plugin modules (SpliceConsensus.pm and SpliceConsensusFilter.pm) which should be installed in your VEP cache 'Plugins' folder if you want to use them. The SpliceConsensus.pm annotations can be used for variant filtering purposes in getFunctionalVariantsVep.pl and findBiallelicVep.pl.
 
 To run the scripts either add the enclosing directory to your PATH and make sure the scripts are executable (e.g. 'chmod +x vcfhacks/*.pl') or run each script using 'perl [location of script]' followed by the required arguments. Help information is available for most scripts by running the script with either '--help' or '--manual' options. 
 
@@ -37,7 +37,13 @@ If you want to use scripts to search bgzip compressed VCFs or use rankOnCaddScor
 
 ...in Tabix.pm (and reinstalling). 
 
-Other perl modules required by these scripts are installable via CPAN - perl will complain that they are not available in "@INC" when you attempt to run these programs if they are not on your system. Please see http://www.cpan.org/modules/INSTALL.html for instructions on how to install these modules.
+Other perl modules required by these scripts are installable via CPAN - perl will complain that they are not available in "@INC" when you attempt to run these programs if they are not on your system. Please see http://www.cpan.org/modules/INSTALL.html for instructions on how to install these modules. Below is a list of these non-core modules that you are likely to need install:
+
+    Bio::DB::Sam (hgmdMartToVcf.pl only)
+    Excel::Writer::XLSX (annovcfToSimple.pl only)
+    Parallel::ForkManager
+    Sys::CPU
+    Term::ProgressBar
 
 
 ## UPDATE
