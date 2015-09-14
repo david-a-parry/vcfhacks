@@ -33,6 +33,7 @@ Other perl modules required by these scripts are installable via CPAN - perl wil
 
     Bio::DB::Sam (hgmdMartToVcf.pl only)
     Excel::Writer::XLSX (annovcfToSimple.pl only)
+    LWP::Simple (ensemblGeneAnnotator.pl only)
     Parallel::ForkManager
     Sys::CPU
     Term::ProgressBar
