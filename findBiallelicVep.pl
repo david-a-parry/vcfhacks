@@ -311,7 +311,7 @@ if ($splice_consensus) {
 print STDERR "Initializing VCF input ($vcf)...\n";
 my $vcf_obj = ParseVCF->new( file => $vcf );
 my %info_fields = $vcf_obj->getInfoFields();
-
+my %af_info_fields = (); #check available INFO fields for AF annotations if $maf
 #CHECK VEP ARGUMENTS AGAINST VCF
 my $vep_header     = $vcf_obj->readVepHeader();
 my @available_mafs = ();
@@ -322,9 +322,7 @@ if ( defined $any_maf ) {
             push @csq_fields,     $key;
         }
     }
-    if (exists $info_fields{SnpAnnotation}){
-        $check_snp_annotations++;
-    }
+    %af_info_fields = getAfAnnotations();   
 }
 if ( @csq_fields > 1 ) {
     my %seen = ();
@@ -662,12 +660,10 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
               if not identical_genotypes( $ped->getAffectedsFromFamily($fam) );
         }
     }
-    #get annotateSnps.pl annotations if present and using --maf 
-    my @snp_annots = (); 
-    if ($check_snp_annotations){ 
-        my $snp = $vcf_obj->getVariantInfoField("SnpAnnotation");
-        $snp =~ s/^\[//;
-        $snp =~ s/\]$//;
+    #get annotateSnps.pl/filterOnEvsMaf.pl/filterVcfOnVcf.pl annotations if present and using --maf 
+    my %af_info_values = (); 
+    if (%af_info_fields){ 
+        %af_info_values = getAfInfoValues();
     }
     my @csq = $vcf_obj->getVepFields( \@csq_fields )
       ; #returns array of hashes e.g. $csq[0]->{Gene} = 'ENSG000012345' ; $csq[0]->{Consequence} = 'missense_variant'
@@ -678,13 +674,11 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
     my $ref = $vcf_obj->getVariantField("REF");
     my @va = $vcf_obj->altsToVepAllele( ref => $ref, alt => \@alts );
     my $alt_num = 1;
-    my %vep_alleles = map { $alt_num++ => $_ } @va
-     ;#key is ALT allele number, value is VEP allele
 ALT: for (my $i = 0; $i < @alts; $i++){
-        if ($check_snp_annotations){ #check for annotateSnps.pl frequencies
-            my $snp_annot = $vcf_obj->getVariantInfoField();
+        if (%af_info_fields){ #check for annotateSnps.pl etc. frequencies
+           next ALT if ( alleleAboveMaf($i, \%af_info_values) );
         }
-        my @a_csq = grep { $_->{allele} eq $alts[$i] } @csq;
+        my @a_csq = grep { $_->{allele} eq $va[$i] } @csq;
 CSQ:    foreach my $annot (@a_csq) {
             my @anno_csq = split( /\&/, $annot->{consequence} );
 
@@ -816,6 +810,84 @@ if ($list_genes) {
     print $LIST join( "\n", @$list ) . "\n";
 }
 
+###########
+sub alleleAboveMaf{
+    my $i = shift; #1-based index of alt allele to assess
+    my $af_values = shift; #hash ref of INFO fields to their values
+    foreach my $k (keys %{$af_values}){
+        next if not $af_values->{$k};
+        next if $af_values->{$k} eq '.';
+        my @split = split(",", $af_values->{$k}); 
+        next if $split[$i] eq '.';
+        if ($k eq "AS_G5" or $k eq "AS_G5A"){
+            if ($any_maf <= 0.05 and $split[$i] > 0){
+                return 1;
+            }
+        }elsif ($k eq "AS_COMMON"){
+            if ($any_maf <= 0.01 and $split[$i] > 0){
+                return 1;
+            }
+        }else{#should be a standard allele freq now
+            if ($info_fields{$k}->{Type} eq 'Float' or $k eq 'AS_CAF'){
+                return 1 if $split[$i] >= $any_maf;
+            }else{
+                print STDERR "WARNING: Don't know how to parse INFO field: $k.\n";
+            }
+        }
+    }
+    return 0;
+}
+###########
+sub getAfInfoValues{
+    my %values = ();
+    foreach my $k (keys %af_info_fields){
+        $values{$k} = $vcf_obj->getVariantInfoField($k);
+    }
+    return %values;
+}
+
+###########
+sub getAfAnnotations{
+    my %af_found = ();
+    my @af_fields =  qw ( 
+        AS_CAF
+        AS_G5A
+        AS_G5
+        AS_COMMON
+        EVS_EA_AF
+        EVS_AA_AF
+        EVS_ALL_AF
+    );
+    foreach my $key (keys %info_fields){
+        my $warning = <<EOT
+[WARNING] Found expected frequency annotation ($key) in INFO fields, but 'Number' field is $info_fields{$key}->{Number}, expected 'A'. Ignoring this field.
+EOT
+;
+        my $info = <<EOT
+[INFO] Found allele frequency annotation: $key. This will be used for filtering on allele frequency.
+EOT
+;
+        if (grep { $key eq $_ } @af_fields){
+            if ($info_fields{$key}->{Number} ne 'A'){
+                print STDERR $warning;
+            }else{
+                print STDERR $info;
+                $af_found{$key} = $info_fields{$key};
+            }
+        }else{
+            if ($key =~ /^FVOV_AF_\S+$/){
+                if ($info_fields{$key}->{Number} ne 'A'){
+                    print STDERR $warning;
+                }else{
+                    print STDERR $info;
+                    $af_found{$key} = $info_fields{$key};
+                }
+            }
+        }
+    }
+    return %af_found;
+}
+            
 ###########
 sub is_autosome {
     my ($chrom) = @_;
