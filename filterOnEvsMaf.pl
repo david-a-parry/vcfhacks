@@ -376,6 +376,10 @@ sub filter_on_evs_maf{
         );
     }
 ALLELE: foreach my $allele ( sort { $a <=> $b } keys %min_vars ) {
+        if ($min_vars{$allele}->{ORIGINAL_ALT} eq '*'){
+            $min_vars{$allele}->{filter_snp} = 1;
+            next;
+        }
         $min_vars{$allele}->{filter_snp} = 0;
         if (@samples){
             #doesn't exist in any sample...

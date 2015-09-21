@@ -591,6 +591,11 @@ sub filterSnps {
     }
     my @info;
     foreach my $allele ( sort { $a <=> $b } keys %min_vars ) {
+        if ($min_vars{$allele}->{ORIGINAL_ALT} eq '*'){
+            #filter new asterisk allele notation
+            $min_vars{$allele}->{filter_snp} = 1;
+            next;
+        }
         $min_vars{$allele}->{filter_snp} = 0;
         if (@samples) {
 
