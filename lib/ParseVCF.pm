@@ -365,6 +365,7 @@ sub _altToVep{
     my $is_snv_or_mnv = 0;
     my $is_indel = 0; 
     foreach my $alt (@$alt_array){
+        next if $alt eq '*';
         if (length($alt) == length($ref)){
             $is_snv_or_mnv++;
         }else{
@@ -378,6 +379,7 @@ sub _altToVep{
         }
     }else{
         foreach my $alt (@$alt_array){
+            next if $alt eq '*';
             if (length($alt) == length($ref)){
                 push @vep_alleles,  $alt;
             }elsif(length($alt) > length($ref)){#insertion - VEP trims first base
