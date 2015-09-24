@@ -450,6 +450,7 @@ sub filter_on_sample {
     #returns $vcf_line if we want to keep it
     #returns nothing if we want to filter it
     my ($vcf_line)        = @_;
+    my @ref_alt = VcfReader::readAlleles( line => $vcf_line );
     my %alleles           = ();
     my %min_allele_ratios = ()
       ; #collect the minimum allele depth ratio in called samples for comparison with --reject samples
@@ -644,7 +645,6 @@ sub filter_on_sample {
         );
     }
     if ( not @samples ) {
-        my @ref_alt = VcfReader::readAlleles( line => $vcf_line );
         for ( my $i = 1 ; $i < @ref_alt ; $i++ ) {
             push @{ $alleles{alt} }, $i if not exists $reject_alleles{$i};
         }
@@ -666,6 +666,7 @@ sub filter_on_sample {
 #if we're looking for alleles that match in ALL samples than we only need to check a single hash entry
         my %uniq_alleles = map {$_ => undef} @{ $alleles{$samp} };
       ALLELE: foreach my $allele ( keys %uniq_alleles) {
+            next ALLELE if $allele eq '*';
             next ALLELE if ( $allele == 0 );
             if ( exists $reject_alleles{$allele} ){
                 if (not $threshold and not $af){

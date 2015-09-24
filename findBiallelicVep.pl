@@ -675,6 +675,7 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
     my @va = $vcf_obj->altsToVepAllele( ref => $ref, alt => \@alts );
     my $alt_num = 1;
 ALT: for (my $i = 0; $i < @alts; $i++){
+        next ALT if $alts[$i] eq '*';
         if (%af_info_fields){ #check for annotateSnps.pl etc. frequencies
            next ALT if ( alleleAboveMaf($i, \%af_info_values) );
         }

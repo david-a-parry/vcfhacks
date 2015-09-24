@@ -316,6 +316,7 @@ LINE: while (my $line = $vcf_obj->readLine){
     #START FILTERING on CSQ fields
     #check whether canonical transcript
 ANNOT: foreach my $annot (@csq){
+    next if $vep_alleles{$annot->{allele}} eq '*';
     my @anno_csq = split(/\&/, $annot->{consequence});
     #skip NMD transcripts
     if (grep {/NMD_transcript_variant/i} @anno_csq){

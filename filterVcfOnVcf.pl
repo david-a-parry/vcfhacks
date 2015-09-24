@@ -679,8 +679,7 @@ sub filter_on_info_fields {
             minGQ               => $aff_quality,
             sample_to_columns   => \%sample_to_col
         );
-        delete $sample_alleles{0};
-        delete $sample_alleles{'.'};
+        deleteRefAndNoCallAlleles(\%sample_alleles, \%min_vars);
         return
           if not keys
           %sample_alleles;  #filter if we don't have any variants in our samples
@@ -688,6 +687,7 @@ sub filter_on_info_fields {
     else {
         #if no samples specified use all alleles for %sample_alleles
         %sample_alleles = map { $_ => undef } keys %min_vars;
+        deleteRefAndNoCallAlleles(\%sample_alleles, \%min_vars);
     }
 
     my %sample_matches = ()
@@ -891,6 +891,25 @@ ALT:            foreach my $alt (@f_alts) {
         return $vcf_line;
     }
 }
+
+#################################################
+sub deleteRefAndNoCallAlleles{
+    my $al_hash = shift;
+    my $min = shift;
+    my @del = ();
+    foreach my $k (keys %$al_hash){
+        if ($k eq '0' or $k eq '.'){
+            push @del, $k;
+        }elsif($min->{$k}->{ORIGINAL_ALT} eq '*'){
+            push @del, $k;
+        }
+    }
+    foreach my $d (@del){
+        delete $al_hash->{$d};
+    }
+}
+
+
 #################################################
 sub pop_freq_over_maf{
     my $min_allele = shift;
@@ -985,8 +1004,7 @@ sub filter_on_vcf_samples {
             minGQ               => $aff_quality,
             sample_to_columns   => \%sample_to_col
         );
-        delete $sample_alleles{0};
-        delete $sample_alleles{'.'};
+        deleteRefAndNoCallAlleles(\%sample_alleles, \%min_vars);
         return
           if not keys
           %sample_alleles;  #filter if we don't have any variants in our samples
@@ -994,6 +1012,7 @@ sub filter_on_vcf_samples {
     else {
         #if no samples specified use all alleles for %sample_alleles
         %sample_alleles = map { $_ => undef } keys %min_vars;
+        deleteRefAndNoCallAlleles(\%sample_alleles, \%min_vars);
     }
     my %sample_matches = ()
       ; #check each allele matches in all filter_vcfs but don't reset after each file
