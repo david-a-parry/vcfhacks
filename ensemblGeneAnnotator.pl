@@ -504,7 +504,10 @@ sub ensRestQuery{
     my $response = $http->get($url, {
           headers => { 'Content-type' => 'application/json' }
     });
-    informUser("[WARNING] Ensembl REST query ('$url') failed!\n") unless $response->{success} ;
+    if (not $response->{success} ){
+        informUser("[WARNING] Ensembl REST query ('$url') failed!\n");
+        return ;
+    }
     if(length $response->{content}) {
       return decode_json($response->{content});
     }
