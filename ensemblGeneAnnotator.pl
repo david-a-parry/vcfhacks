@@ -41,10 +41,14 @@ my $progress;
 my $functional;
 my @annotations;
 my $snpEff_mode;
+my $rest_server = "http://rest.ensembl.org";
+my $no_rest_queries;
 GetOptions(
     "input=s"                   => \$vcf,
     "directory=s"               => \$genedir,
     "output=s"                  => \$out,
+    "rest_server"               => \$rest_server,
+    "no_rest_queries"           => \$no_rest_queries,
     "snpEff"                    => \$snpEff_mode,
     "functional"                => \$functional,
     "classes=s{,}"              => \@classes,
@@ -64,6 +68,16 @@ pod2usage( -exitval => 2, -message => "--input is required", )
   and not $downdb
   and not $prep
   and not $repair;
+
+my $http;
+if (not $no_rest_queries){
+    if (eval "use HTTP::Tiny; 1"){
+        $http = HTTP::Tiny->new();
+    }else{
+        informUser("[WARNING] HTTP::Tiny is required for using rest queries to find missing ENTREZ IDs. If you want to use this feature please install this module using CPAN.\n");  
+    $no_rest_queries = 1;
+    }
+}
 
 my ( $script, $script_dir ) = fileparse($0);
 $genedir = "$RealBin/ensAnnotatorDb" if ( not $genedir );
@@ -468,6 +482,28 @@ for my $k ( keys %database ) {
 print STDERR "\nAnnotation finished.\n";
 $vcf_obj -> DESTROY();
 
+######################################################
+sub informUser{
+    my $msg = shift;
+    my $time = strftime( "%H:%M:%S", localtime );
+    if ($progressbar){
+        $progressbar->message( "[INFO - $time] $msg" );
+    }else{
+        print STDERR "[INFO - $time] $msg";
+    }
+}
+######################################################
+sub ensRestQuery{
+    my $url = shift;
+    my $response = $http->get($url, {
+          headers => { 'Content-type' => 'application/json' }
+    });
+    die "Ensembl REST query ('$url') failed!\n" unless $response->{success};
+    if(length $response->{content}) {
+      return decode_json($response->{content});
+    }
+    informUser("[WARNING] No content for Ensembl REST query ('$url')!\n");
+}
 ########################################
 sub search_refseq_id{
     my ($csq) = @_;
@@ -599,6 +635,15 @@ sub search_ensembl_id{
         }
         else {
             last;
+        }
+    }
+    if (not @ids and not $no_rest_queries){
+        my $rest_url = "$rest_server/xrefs/id/$csq->{$gene_field}?external_db=ENTREZGENE";
+        my $xref_array = ensRestQuery($rest_url);
+        foreach my $xref (@$xref_array){
+            if (exists $xref->{primary_id}){
+                push @ids, $xref->{primary_id};
+            }
         }
     }
     return @ids;
