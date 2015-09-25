@@ -575,6 +575,20 @@ sub search_refseq_id{
 
 
 ########################################
+sub query_rest_ensid{
+    my $ensid = shift;
+    my @ids = ();
+    my $rest_url = "$rest_server/xrefs/id/$ensid?external_db=ENTREZGENE";
+    my $xref_array = ensRestQuery($rest_url);
+    foreach my $xref (@$xref_array){
+        if (exists $xref->{primary_id}){
+            push @ids, $xref->{primary_id};
+        }
+    }
+    return @ids;
+}
+
+########################################
 sub search_ensembl_id{
     my ($csq) = @_;
     my @ids = (); 
@@ -585,7 +599,11 @@ sub search_ensembl_id{
         $database{ensemblToEntrez}->{length},
         $database{ensemblToEntrez}->{col}
     );
-    return if ( $i < 1 );
+    if ( $i < 1 ){
+        return query_rest_ensid($csq->{$gene_field}) if (not $no_rest_queries);
+        return;
+    }
+            
     for ( my $j = $i - 1 ; $j > 0 ; $j-- ) {
         my @ens_line = split(
             "\t",
@@ -635,15 +653,6 @@ sub search_ensembl_id{
         }
         else {
             last;
-        }
-    }
-    if (not @ids and not $no_rest_queries){
-        my $rest_url = "$rest_server/xrefs/id/$csq->{$gene_field}?external_db=ENTREZGENE";
-        my $xref_array = ensRestQuery($rest_url);
-        foreach my $xref (@$xref_array){
-            if (exists $xref->{primary_id}){
-                push @ids, $xref->{primary_id};
-            }
         }
     }
     return @ids;
