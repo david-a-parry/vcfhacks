@@ -41,13 +41,14 @@ my $progress;
 my $functional;
 my @annotations;
 my $snpEff_mode;
-my $rest_server = "http://rest.ensembl.org";
+my $rest_server = "http://grch37.rest.ensembl.org" ;
+my %entid_cache = (); #store results of ENTREZ ID searches here
 my $no_rest_queries;
 GetOptions(
     "input=s"                   => \$vcf,
     "directory=s"               => \$genedir,
     "output=s"                  => \$out,
-    "rest_server"               => \$rest_server,
+    "rest_server=s{,}"          => \$rest_server,
     "no_rest_queries"           => \$no_rest_queries,
     "snpEff"                    => \$snpEff_mode,
     "functional"                => \$functional,
@@ -72,7 +73,12 @@ pod2usage( -exitval => 2, -message => "--input is required", )
 my $http;
 if (not $no_rest_queries){
     if (eval "use HTTP::Tiny; 1"){
-        $http = HTTP::Tiny->new();
+        if (eval "use JSON; 1"){
+            $http = HTTP::Tiny->new();
+        }else{
+            informUser("[WARNING] JSON module is required for using rest queries to find missing ENTREZ IDs. If you want to use this feature please install this module using CPAN.\n");  
+            $no_rest_queries = 1;
+        }
     }else{
         informUser("[WARNING] HTTP::Tiny is required for using rest queries to find missing ENTREZ IDs. If you want to use this feature please install this module using CPAN.\n");  
     $no_rest_queries = 1;
@@ -498,7 +504,7 @@ sub ensRestQuery{
     my $response = $http->get($url, {
           headers => { 'Content-type' => 'application/json' }
     });
-    die "Ensembl REST query ('$url') failed!\n" unless $response->{success};
+    informUser("[WARNING] Ensembl REST query ('$url') failed!\n") unless $response->{success} ;
     if(length $response->{content}) {
       return decode_json($response->{content});
     }
@@ -579,28 +585,40 @@ sub query_rest_ensid{
     my $ensid = shift;
     my @ids = ();
     my $rest_url = "$rest_server/xrefs/id/$ensid?external_db=ENTREZGENE";
+    informUser("[INFO] Querying Ensembl REST server for Gene ID $ensid...\n");
     my $xref_array = ensRestQuery($rest_url);
-    foreach my $xref (@$xref_array){
-        if (exists $xref->{primary_id}){
-            push @ids, $xref->{primary_id};
+    if (ref $xref_array eq 'ARRAY'){
+        foreach my $xref (@$xref_array){
+            if (exists $xref->{primary_id}){
+                push @ids, $xref->{primary_id};
+            }
         }
     }
+    
+    $entid_cache{$ensid} = \@ids;
     return @ids;
 }
 
 ########################################
 sub search_ensembl_id{
     my ($csq) = @_;
+    my $ensid = $csq->{$gene_field};
+    if (exists $entid_cache{$ensid}){
+        if (ref $entid_cache{$ensid} eq 'ARRAY' ){ 
+            return @{ $entid_cache{$ensid} } ;
+        }
+        return;
+    }
     my @ids = (); 
     my $i = binSearchLineWithIndex(
-        $csq->{$gene_field},
+        $ensid,
         $database{ensemblToEntrez}->{fh},
         $database{ensemblToEntrez}->{idx},
         $database{ensemblToEntrez}->{length},
         $database{ensemblToEntrez}->{col}
     );
     if ( $i < 1 ){
-        return query_rest_ensid($csq->{$gene_field}) if (not $no_rest_queries);
+        return query_rest_ensid($ensid) if (not $no_rest_queries);
         return;
     }
             
@@ -614,7 +632,7 @@ sub search_ensembl_id{
             )
         );
         chomp @ens_line;
-        if ( $ens_line[ $database{ensemblToEntrez}->{col} ] eq $csq->{$gene_field} )
+        if ( $ens_line[ $database{ensemblToEntrez}->{col} ] eq $ensid )
         {
             push @ids, $ens_line[1];
         }
@@ -647,7 +665,7 @@ sub search_ensembl_id{
             )
         );
         chomp @ens_line;
-        if ( $ens_line[ $database{ensemblToEntrez}->{col} ] eq $csq->{$gene_field} )
+        if ( $ens_line[ $database{ensemblToEntrez}->{col} ] eq $ensid )
         {
             push @ids, $ens_line[1];
         }
@@ -655,6 +673,7 @@ sub search_ensembl_id{
             last;
         }
     }
+    $entid_cache{$ensid} = \@ids;
     return @ids;
 }
 
