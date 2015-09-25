@@ -1776,7 +1776,9 @@ sub getSampleAlleleDepths{
                     field  => 'AD',
                     column => $col,
             );
+        if (defined $ad){
             @ad = split(",", $ad);
+        }
     }elsif(defined $var_format{RO} and defined $var_format{AO}){ 
 #freebayes observation counts
         

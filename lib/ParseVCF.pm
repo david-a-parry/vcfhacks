@@ -1690,14 +1690,15 @@ sub getSampleAlleleDepths{
     my @ad = ();
     $self->getVariantFormatFields();
     if (defined $self->{_currentVar}->{varFormat}->{AD}){
-        @ad = split
-            (",", 
-                    $self->getSampleGenotypeField
+        
+        my $ad = $self->getSampleGenotypeField
                     (
                         sample => $sample,
                         field  => 'AD',
-                    )
-            );
+                    );
+        if (defined $ad){
+            @ad = split(",", $ad);
+        }
     }elsif (defined $self->{_currentVar}->{varFormat}->{RO} and
             defined $self->{_currentVar}->{varFormat}->{AO}){
             #freebaye allele observation counts
