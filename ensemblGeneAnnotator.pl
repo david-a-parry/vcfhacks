@@ -1648,6 +1648,15 @@ List of gene annotations to include in output. By default all of the following c
 
 Specify one or more of these to limit the annotations in your output to these classes only.
 
+
+=item B<-r    --rest_server>
+
+URL for Ensmbl REST server for gene ID queries. Default is "http://grch37.rest.ensembl.org". If using GRCh38 you may which to change to  "http://rest.ensembl.org". REST queries are only made when a gene ID can't be found in the local database. An internet connection is required.
+
+=item B<-n    --no_rest_queries>
+
+Use this flag to disable REST queries (e.g. if you have no internet connection). 
+
 =item B<-p    --progress>
 
 Show a progress bar.
