@@ -71,6 +71,7 @@ sub readSampleFile{
     open (my $SAMP, $f) or die "Can't open $f for reading: $!\n";
     my %samps = ();
     while (my $line = <$SAMP>){
+        chomp $line;
         next if $line =~ /^#/;
         my @s = split(/$delimiter/, $line);
         if (@s < 2){
