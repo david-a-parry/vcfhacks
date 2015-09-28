@@ -44,6 +44,7 @@ my $snpEff_mode;
 my $rest_server = "http://grch37.rest.ensembl.org" ;
 my %entid_cache = (); #store results of ENTREZ ID searches here
 my $no_rest_queries;
+my $list_mode;
 GetOptions(
     "input=s"                   => \$vcf,
     "directory=s"               => \$genedir,
@@ -55,6 +56,7 @@ GetOptions(
     "classes=s{,}"              => \@classes,
     "add=s{,}"                  => \@add,
     "gene_annotations=s{,}"     => \@annotations,
+    "list_mode"                 => \$list_mode,
     "progress"                  => \$progress, 
     "PREPARE"                   => \$prep,
     "DOWNLOAD_NEW"              => \$downdb,
@@ -227,24 +229,6 @@ if (@annotations){
 }else{
     @annotations = @all_annotations;
 }
-    
-print STDERR "Initialising input VCF...\n";
-my $vcf_obj = ParseVCF->new( file => $vcf );
-if ($snpEff_mode){
-    my $snp_eff_header = $vcf_obj->readSnpEffHeader();
-    die "No 'Effect' field identified in header for file $vcf - " .
-    "please annotate with SnpEff.\n" if (not exists $snp_eff_header->{Effect});
-    checkAndParseSnpEffClasses(\@classes, \@add);
-}else{
-    my $vep_header = $vcf_obj->readVepHeader();
-    die "No 'GENE' field identified in header for file $vcf - "
-    . "please annotate with Ensembl's variant_effect_precictor.pl script.\n"
-    if ( not exists $vep_header->{gene} );
-    if ( @classes or @add ) {
-        $functional = 1;
-    }
-    checkAndParseVepClasses();
-}
 
 my $pre_progressbar;
 if ($progress){
@@ -281,213 +265,330 @@ foreach my $k ( keys %database ) {
 }
 
 my $progressbar; 
-if ($progress){
-    $progressbar = Term::ProgressBar->new(
-    {
-        name  => "Annotating",
-        count => $vcf_obj->get_totalLines,
-        ETA   => "linear",
-    });
+my %symbol_to_id = ();
+if ($list_mode){
+    parseAsList(); 
+}else{
+    parseAsVcf();
 }
-my $vcf_line = 0;
-$next_update = 0;
-print $OUT join( "", @{ $vcf_obj->get_metaHeader() } );
-print $OUT
-    "##INFO=<ID=GeneAnno,Number=.,Type=String,Description=\"Collected Entrez/MGI gene annotations from for VEP/SnpEff annotated human genes. ". 
-    "Multiple values per annotation are separated using two colons ('::'), spaces are replaced with underscores, commas are replaced with the ` ".
-    "symbol, and semi-colons are replaced with the ^ symbol so that regexes can be used to extract the original text programmatically. ".
-    "Format: " . join("|", @annotations) ."\">\n";
 
-my $header = $vcf_obj->getHeader(1);
-print $OUT $header;
-my $gene_field = "gene";#if using VEP annotations we get Gene ID from this key
-if ($snpEff_mode){
-    $gene_field = "Gene_Name";#if using SnpEff annotations we get Gene ID from this key
+
+######################################################
+sub getEntrezIdFromSymbol{
+    my $s = shift;
+    if (not %symbol_to_id){
+        getSymbolsToIds();
+    }
+    if (exists $symbol_to_id{$s}){
+        return $symbol_to_id{$s};
+    }
+    return;
 }
-LINE: while ( my $line = $vcf_obj->readLine ) {
-    $vcf_line++;
-    my %annot = ();
-    my @entrez_ids = ();
-    my @csq = ();
-    if ($snpEff_mode){
-        @csq = $vcf_obj->getSnpEffFields([ "Effect", "Gene_Name", "Transcript_BioType" ] ); #returns array of hashes e.g. $csq[0]->{Gene_Name} = 'ABCA1' ; $csq[0]->{EFFECT} = 'DOWNSTREAM'
-        die
-"No consequence field found for line:\n$line\nPlease annotated your VCF file with SnpEff before running this program with the --snpEff_mode option.\n"
-        if not @csq;
-    }else{
-        @csq = $vcf_obj->getVepFields( [ "Gene", "Consequence" ] );
-        die
-"No consequence field found for line:\n$line\nPlease annotated your VCF file with ensembl's variant effect precictor before running this program.\n"
-        if not @csq;
-    }
-    foreach my $c (@csq) {
-        if ($functional) {
-            next if ( not check_consequence( $c ) );
-        }
-        if ($c->{$gene_field} =~ /^ENS/){
-            push @entrez_ids, search_ensembl_id($c); 
-        }elsif($c->{$gene_field} =~ /^\d+$/){
-            push @entrez_ids, $c->{$gene_field} ; 
-        }elsif($c->{$gene_field} =~ /^[NX][MR]_\d+$/){
-            #not implemented unless we decide to include gene2refseq in database
-           # push @entrez_ids, search_refseq_id($c); 
-        }
-    }
 
-    #USE ENTREZ IDs TO SEARCH DATABSE FILES
-    foreach my $entrez_id ( @entrez_ids ) {
-        my $i = binSearchLineWithIndex(
-            $entrez_id,
-            $database{human_summary}->{fh},
-            $database{human_summary}->{idx},
-            $database{human_summary}->{length},
-            $database{human_summary}->{col}
-        );
-        if ( $i > 0 ) {
-            chomp(
-                my @humsum_line = split(
-                    "\t",
-                    line_with_index(
-                        $database{human_summary}->{fh},
-                        $database{human_summary}->{idx},
-                        $i
-                    )
-                )
-            );
-            $annot{$entrez_id}->{symbol}  = $humsum_line[1];
-            $annot{$entrez_id}->{summary} = $humsum_line[2];
-            push @{ $annot{$entrez_id}->{ensgene_id} }, split(/\|/, $humsum_line[3]);
-            $annot{$entrez_id}->{go_id}   = $humsum_line[4];
-            $annot{$entrez_id}->{go_description} = $humsum_line[5];
-            $annot{$entrez_id}->{generifs}     = $humsum_line[6];
+######################################################
+sub getSymbolsToIds{
+    open (my $FH, $database{human_summary}->{localfile}) or die "Cannot open database file for reading: $!\n";
+    while (my $line = <$FH>){
+        chomp $line;
+        my @spl = split("\t", $line);
+        $symbol_to_id{$spl[1]} = $spl[0];
+    }
+    close $FH;
+}
 
-            my $mim_accession = $humsum_line[7];
-            if ( $mim_accession ne "-" ) {
-                my $j = binSearchLineWithIndex(
-                    $mim_accession,
-                    $database{mim_morbid}->{fh},
-                    $database{mim_morbid}->{idx},
-                    $database{mim_morbid}->{length},
-                    $database{mim_morbid}->{col},
-                    $database{mim_morbid}->{delimiter}
-                );
-                if ( $j > 0 ) {
-                  MIM_UP:
-                    for ( my $line_no = $j ; $line_no > 0 ; $line_no-- ) {
-                        my @mim_line = split(
-                            /\|/,
-                            line_with_index(
-                                $database{mim_morbid}->{fh},
-                                $database{mim_morbid}->{idx},
-                                $line_no
-                            )
-                        );
-                        if ( $mim_line[2] eq $mim_accession ) {
-                            push( @{ $annot{$entrez_id}->{omim} },
-                                $mim_line[0] );
-                        }
-                        else {
-                            last MIM_UP;
-                        }
-                    }
-                  MIM_DOWN:
-                    for (
-                        my $line_no = $j + 1 ;
-                        $line_no <= $database{mim_morbid}->{length} ;
-                        $line_no++
-                      )
-                    {
-                        my @mim_line = split(
-                            /\|/,
-                            line_with_index(
-                                $database{mim_morbid}->{fh},
-                                $database{mim_morbid}->{idx},
-                                $line_no
-                            )
-                        );
-                        if ( $mim_line[2] eq $mim_accession ) {
-                            push( @{ $annot{$entrez_id}->{omim} },
-                                $mim_line[0] );
-                        }
-                        else {
-                            last MIM_DOWN;
-                        }
-                    }
-                }
-                else {
-                    push( @{ $annot{$entrez_id}->{omim} }, "" );
-                }
-            }
-            else {
-                push( @{ $annot{$entrez_id}->{omim} }, "" );
-            }
-        }else {
-            $annot{$entrez_id}->{symbol}  = "";
-            $annot{$entrez_id}->{summary} = "";
-            $annot{$entrez_id}->{go_id}   = "";
-            $annot{$entrez_id}->{go_description} = "";
-            $annot{$entrez_id}->{generifs}     = "";
 
-            push( @{ $annot{$entrez_id}->{omim} }, "" );
+######################################################
+sub parseAsList{
+    open (my $LIST, $vcf) or die "Could not open input ($vcf): $!\n";
+    print $OUT join(",", @annotations) . "\n";
+    while (my $line = <$LIST>){
+        next if $line =~ /^#/;
+        chomp $line;
+        next if not $line;
+        my $id = (split "\t", $line)[0];
+        my $entrez_id;
+        if ($id =~ /^\d+$/){
+            $entrez_id = $id;
+        }else{
+            $entrez_id = getEntrezIdFromSymbol($id);
         }
-        my @interactants = get_interactants($entrez_id);
-        @interactants 
-          ? push @{ $annot{$entrez_id}->{biogrid_interactants} }, @interactants,
-          : push @{ $annot{$entrez_id}->{biogrid_interactants} }, "";
-        my @mgi = get_MGI_phenotype($entrez_id) ;
-        @mgi
-          ? push @{ $annot{$entrez_id}->{mgi_phenotype} }, @mgi
-          : push @{ $annot{$entrez_id}->{mgi_phenotype} }, "";
-    }
-    if ( not keys %annot) {
-        my $ens_annot = "|" x @annotations;
-        my $new_line = $vcf_obj->addVariantInfoField('GeneAnno', $ens_annot);
-        #print $OUT "-\t-\t-\t-\t-\t-\t-\t-\t$line\n";
-        print $OUT "$new_line\n";
-        next LINE;
-    }
-    my @gene_anno = ();
-    foreach my $entrez_id ( keys %annot ) {
+        if (not defined $entrez_id){
+            print $OUT join(",", ( "$id-NOT_FOUND")  x @annotations)  . "\n";
+            next;
+        }
         my @single_anno = ();
+        my $gene_annot = searchWithEntrezId($entrez_id);
         foreach my $annot (@annotations){
             if (lc$annot eq 'entrez_id'){
-                push @single_anno, $entrez_id;    
-            }elsif (exists $annot{$entrez_id}->{lc($annot)}){
-                if (ref ($annot{$entrez_id}->{lc($annot)}) eq 'ARRAY'){
-                    remove_duplicates( \@{ $annot{$entrez_id}->{lc($annot)} } );
+                push @single_anno, $entrez_id; 
+            }elsif (exists $gene_annot->{lc($annot)}){
+                if (ref ($gene_annot->{lc($annot)}) eq 'ARRAY'){
+                    remove_duplicates( \@{ $gene_annot->{lc($annot)} } );
                     my @conv = ();
-                    foreach my $g (@{$annot{$entrez_id}->{lc($annot)}}){
-                        push @conv, convert_text($g);
+                    foreach my $g (@{$gene_annot->{lc($annot)}}){
+                        push @conv, $g;
                     }
-                    push @single_anno, join("::", @conv);
+                    
+                    my $joined = join("|", @conv);
+                    if ($joined =~ /\s/){
+                        push @single_anno, "\"$joined\"";
+                    }else{
+                        push @single_anno, $joined;
+                    }
                 }else{
-                    my $converted = convert_text($annot{$entrez_id}->{lc($annot)});
-                    push @single_anno, $converted;
+                    if ($gene_annot->{lc($annot)} =~ /\s/){
+                        push @single_anno, "\"$gene_annot->{lc($annot)}\"";
+                    }else{
+                        push @single_anno, "$gene_annot->{lc($annot)}";
+                    }
                 }
             }else{
                 push @single_anno, '';
             }
         }
-        push @gene_anno, join("|", @single_anno);
+        print $OUT join(",", @single_anno) . "\n";
     }
-    my $ens_annot = join(",", @gene_anno);
-    my $new_line = $vcf_obj->addVariantInfoField('GeneAnno', $ens_annot);
-    print $OUT "$new_line\n";
-    if ($progress){
-        $next_update = $progressbar->update($vcf_line) if $vcf_line >= $next_update;
-    }
+    close $LIST;
 }
-if ($progress){
-    $progressbar->update( $vcf_obj->get_totalLines )
-        if $vcf_obj->get_totalLines >= $next_update;
-}
-for my $k ( keys %database ) {
-    close $database{$k}->{fh};
-    close $database{$k}->{idx};
-}
-print STDERR "\nAnnotation finished.\n";
-$vcf_obj -> DESTROY();
 
+######################################################
+sub parseAsVcf{
+    print STDERR "Initialising input VCF...\n";
+    my $vcf_obj = ParseVCF->new( file => $vcf );
+    if ($snpEff_mode){
+        my $snp_eff_header = $vcf_obj->readSnpEffHeader();
+        die "No 'Effect' field identified in header for file $vcf - " .
+        "please annotate with SnpEff.\n" if (not exists $snp_eff_header->{Effect});
+        checkAndParseSnpEffClasses(\@classes, \@add);
+    }else{
+        my $vep_header = $vcf_obj->readVepHeader();
+        die "No 'GENE' field identified in header for file $vcf - "
+        . "please annotate with Ensembl's variant_effect_precictor.pl script.\n"
+        if ( not exists $vep_header->{gene} );
+        if ( @classes or @add ) {
+            $functional = 1;
+        }
+        checkAndParseVepClasses();
+    }
+
+    if ($progress){
+        $progressbar = Term::ProgressBar->new(
+        {
+            name  => "Annotating",
+            count => $vcf_obj->get_totalLines,
+            ETA   => "linear",
+        });
+    }
+    my $vcf_line = 0;
+    $next_update = 0;
+    print $OUT join( "", @{ $vcf_obj->get_metaHeader() } );
+    print $OUT
+        "##INFO=<ID=GeneAnno,Number=.,Type=String,Description=\"Collected Entrez/MGI gene annotations from for VEP/SnpEff annotated human genes. ". 
+        "Multiple values per annotation are separated using two colons ('::'), spaces are replaced with underscores, commas are replaced with the ` ".
+        "symbol, and semi-colons are replaced with the ^ symbol so that regexes can be used to extract the original text programmatically. ".
+        "Format: " . join("|", @annotations) ."\">\n";
+
+    my $header = $vcf_obj->getHeader(1);
+    print $OUT $header;
+    my $gene_field = "gene";#if using VEP annotations we get Gene ID from this key
+    if ($snpEff_mode){
+        $gene_field = "Gene_Name";#if using SnpEff annotations we get Gene ID from this key
+    }
+
+    LINE: while ( my $line = $vcf_obj->readLine ) {
+        $vcf_line++;
+        my @entrez_ids = ();
+        my @csq = ();
+        my %gene_annot = ();
+        if ($snpEff_mode){
+            @csq = $vcf_obj->getSnpEffFields([ "Effect", "Gene_Name", "Transcript_BioType" ] ); #returns array of hashes e.g. $csq[0]->{Gene_Name} = 'ABCA1' ; $csq[0]->{EFFECT} = 'DOWNSTREAM'
+            die
+    "No consequence field found for line:\n$line\nPlease annotated your VCF file with SnpEff before running this program with the --snpEff_mode option.\n"
+            if not @csq;
+        }else{
+            @csq = $vcf_obj->getVepFields( [ "Gene", "Consequence" ] );
+            die
+    "No consequence field found for line:\n$line\nPlease annotated your VCF file with ensembl's variant effect precictor before running this program.\n"
+            if not @csq;
+        }
+        foreach my $c (@csq) {
+            if ($functional) {
+                next if ( not check_consequence( $c ) );
+            }
+            if ($c->{$gene_field} =~ /^ENS/){
+                push @entrez_ids, search_ensembl_id($c, $gene_field); 
+            }elsif($c->{$gene_field} =~ /^\d+$/){
+                push @entrez_ids, $c->{$gene_field} ; 
+            }elsif($c->{$gene_field} =~ /^[NX][MR]_\d+$/){
+                #not implemented unless we decide to include gene2refseq in database
+               # push @entrez_ids, search_refseq_id($c, $gene_field); 
+            }
+        }
+        foreach my $id (@entrez_ids){
+            $gene_annot{$id} = searchWithEntrezId($id);
+        }
+
+        if ( not keys %gene_annot) {
+            my $ens_annot = "|" x @annotations;
+            my $new_line = $vcf_obj->addVariantInfoField('GeneAnno', $ens_annot);
+            #print $OUT "-\t-\t-\t-\t-\t-\t-\t-\t$line\n";
+            print $OUT "$new_line\n";
+            next LINE;
+        }
+        my @gene_anno = ();
+        foreach my $entrez_id ( keys %gene_annot ) {
+            my @single_anno = ();
+            foreach my $annot (@annotations){
+                if (lc$annot eq 'entrez_id'){
+                    push @single_anno, $entrez_id;    
+                }elsif (exists $gene_annot{$entrez_id}->{lc($annot)}){
+                    if (ref ($gene_annot{$entrez_id}->{lc($annot)}) eq 'ARRAY'){
+                        remove_duplicates( \@{ $gene_annot{$entrez_id}->{lc($annot)} } );
+                        my @conv = ();
+                        foreach my $g (@{$gene_annot{$entrez_id}->{lc($annot)}}){
+                            push @conv, convert_text($g);
+                        }
+                        push @single_anno, join("::", @conv);
+                    }else{
+                        my $converted = convert_text($gene_annot{$entrez_id}->{lc($annot)});
+                        push @single_anno, $converted;
+                    }
+                }else{
+                    push @single_anno, '';
+                }
+            }
+            push @gene_anno, join("|", @single_anno);
+        }
+        my $ens_annot = join(",", @gene_anno);
+        my $new_line = $vcf_obj->addVariantInfoField('GeneAnno', $ens_annot);
+        print $OUT "$new_line\n";
+        if ($progress){
+            $next_update = $progressbar->update($vcf_line) if $vcf_line >= $next_update;
+        }
+    }
+    if ($progress){
+        $progressbar->update( $vcf_obj->get_totalLines )
+            if $vcf_obj->get_totalLines >= $next_update;
+    }
+    for my $k ( keys %database ) {
+        close $database{$k}->{fh};
+        close $database{$k}->{idx};
+    }
+    print STDERR "\nAnnotation finished.\n";
+    $vcf_obj -> DESTROY();
+
+}
+
+
+######################################################
+sub searchWithEntrezId{ 
+    #USE ENTREZ IDs TO SEARCH DATABSE FILES
+    my $entrez_id = shift;
+    my %an = ();
+    my $i = binSearchLineWithIndex(
+        $entrez_id,
+        $database{human_summary}->{fh},
+        $database{human_summary}->{idx},
+        $database{human_summary}->{length},
+        $database{human_summary}->{col}
+    );
+    if ( $i > 0 ) {
+        chomp(
+            my @humsum_line = split(
+                "\t",
+                line_with_index(
+                    $database{human_summary}->{fh},
+                    $database{human_summary}->{idx},
+                    $i
+                )
+            )
+        );
+        $an{symbol}  = $humsum_line[1];
+        $an{summary} = $humsum_line[2];
+        push @{ $an{ensgene_id} }, split(/\|/, $humsum_line[3]);
+        $an{go_id}   = $humsum_line[4];
+        $an{go_description} = $humsum_line[5];
+        $an{generifs}     = $humsum_line[6];
+
+        my $mim_accession = $humsum_line[7];
+        if ( $mim_accession ne "-" ) {
+            my $j = binSearchLineWithIndex(
+                $mim_accession,
+                $database{mim_morbid}->{fh},
+                $database{mim_morbid}->{idx},
+                $database{mim_morbid}->{length},
+                $database{mim_morbid}->{col},
+                $database{mim_morbid}->{delimiter}
+            );
+            if ( $j > 0 ) {
+              MIM_UP:
+                for ( my $line_no = $j ; $line_no > 0 ; $line_no-- ) {
+                    my @mim_line = split(
+                        /\|/,
+                        line_with_index(
+                            $database{mim_morbid}->{fh},
+                            $database{mim_morbid}->{idx},
+                            $line_no
+                        )
+                    );
+                    if ( $mim_line[2] eq $mim_accession ) {
+                        push( @{ $an{omim} },
+                            $mim_line[0] );
+                    }
+                    else {
+                        last MIM_UP;
+                    }
+                }
+              MIM_DOWN:
+                for (
+                    my $line_no = $j + 1 ;
+                    $line_no <= $database{mim_morbid}->{length} ;
+                    $line_no++
+                  )
+                {
+                    my @mim_line = split(
+                        /\|/,
+                        line_with_index(
+                            $database{mim_morbid}->{fh},
+                            $database{mim_morbid}->{idx},
+                            $line_no
+                        )
+                    );
+                    if ( $mim_line[2] eq $mim_accession ) {
+                        push( @{ $an{omim} },
+                            $mim_line[0] );
+                    }
+                    else {
+                        last MIM_DOWN;
+                    }
+                }
+            }
+            else {
+                push( @{ $an{omim} }, "" );
+            }
+        }
+        else {
+            push( @{ $an{omim} }, "" );
+        }
+    }else {
+        $an{symbol}  = "";
+        $an{summary} = "";
+        $an{go_id}   = "";
+        $an{go_description} = "";
+        $an{generifs}     = "";
+
+        push( @{ $an{omim} }, "" );
+    }
+    my @interactants = get_interactants($entrez_id);
+    @interactants 
+      ? push @{ $an{biogrid_interactants} }, @interactants,
+      : push @{ $an{biogrid_interactants} }, "";
+    my @mgi = get_MGI_phenotype($entrez_id) ;
+    @mgi
+      ? push @{ $an{mgi_phenotype} }, @mgi
+      : push @{ $an{mgi_phenotype} }, "";
+    return \%an;
+}
 ######################################################
 sub informUser{
     my $msg = shift;
@@ -515,7 +616,7 @@ sub ensRestQuery{
 }
 ########################################
 sub search_refseq_id{
-    my ($csq) = @_;
+    my ($csq, $gene_field) = @_;
     my @ids = ();
     (my $nm_short = $csq->{$gene_field}) =~ s/\.\d+$//;
     my $i = binSearchRefseqWithIndex(
@@ -604,7 +705,7 @@ sub query_rest_ensid{
 
 ########################################
 sub search_ensembl_id{
-    my ($csq) = @_;
+    my ($csq, $gene_field) = @_;
     my $ensid = $csq->{$gene_field};
     if (exists $entid_cache{$ensid}){
         if (ref $entid_cache{$ensid} eq 'ARRAY' ){ 
@@ -1609,7 +1710,7 @@ ensemblGeneAnnotator.pl - add gene annotations to a VCF file annotated by Ensemb
 
 =item B<-i    --input>
 
-Input VCF file annotated with variant_effect_predictor.pl or snpEff. Required.
+Input VCF file annotated with variant_effect_predictor.pl or snpEff. Alternatively, if using --list_mode, a list of gene symbols or Enztrez Gene IDs. Required.
 
 =item B<-o    --output>
 
@@ -1651,6 +1752,9 @@ List of gene annotations to include in output. By default all of the following c
 
 Specify one or more of these to limit the annotations in your output to these classes only.
 
+=item B<-l    --list_mode>
+
+Use this flag to indicate your input is not VCF but a list of gene symbols or Entrez IDs to search and annotate. If multiple columns are supplied only the first will be read. Lines beginning with a '#' will be ignored. Output will by in .csv format if using this flag. 
 
 =item B<-r    --rest_server>
 
