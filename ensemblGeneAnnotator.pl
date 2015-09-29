@@ -305,48 +305,56 @@ sub parseAsList{
         next if $line =~ /^#/;
         chomp $line;
         next if not $line;
+        my @entrez_ids = (); 
         my $id = (split "\t", $line)[0];
         my $entrez_id;
         if ($id =~ /^\d+$/){
-            $entrez_id = $id;
+            push @entrez_ids, $id;
+        }elsif ($id =~ /^ENSG\d+(\.\d+)*$/){
+            if ($1){
+                $id =~ s/\.\d+$//; 
+            }
+            push @entrez_ids, search_ensembl_id($id); 
         }else{
-            $entrez_id = getEntrezIdFromSymbol($id);
+            push @entrez_ids, getEntrezIdFromSymbol($id);
         }
-        if (not defined $entrez_id){
+        if (not @entrez_ids){
             print $OUT join(",", ( "$id-NOT_FOUND")  x @annotations)  . "\n";
             next;
         }
-        my @single_anno = ();
-        my $gene_annot = searchWithEntrezId($entrez_id);
-        foreach my $annot (@annotations){
-            if (lc$annot eq 'entrez_id'){
-                push @single_anno, $entrez_id; 
-            }elsif (exists $gene_annot->{lc($annot)}){
-                if (ref ($gene_annot->{lc($annot)}) eq 'ARRAY'){
-                    remove_duplicates( \@{ $gene_annot->{lc($annot)} } );
-                    my @conv = ();
-                    foreach my $g (@{$gene_annot->{lc($annot)}}){
-                        push @conv, $g;
-                    }
-                    
-                    my $joined = join("|", @conv);
-                    if ($joined =~ /\s/){
-                        push @single_anno, "\"$joined\"";
+        foreach my $entrez_id (@entrez_ids){
+            my @single_anno = ();
+            my $gene_annot = searchWithEntrezId($entrez_id);
+            foreach my $annot (@annotations){
+                if (lc$annot eq 'entrez_id'){
+                    push @single_anno, $entrez_id; 
+                }elsif (exists $gene_annot->{lc($annot)}){
+                    if (ref ($gene_annot->{lc($annot)}) eq 'ARRAY'){
+                        remove_duplicates( \@{ $gene_annot->{lc($annot)} } );
+                        my @conv = ();
+                        foreach my $g (@{$gene_annot->{lc($annot)}}){
+                            push @conv, $g;
+                        }
+                        
+                        my $joined = join("|", @conv);
+                        if ($joined =~ /\s/){
+                            push @single_anno, "\"$joined\"";
+                        }else{
+                            push @single_anno, $joined;
+                        }
                     }else{
-                        push @single_anno, $joined;
+                        if ($gene_annot->{lc($annot)} =~ /\s/){
+                            push @single_anno, "\"$gene_annot->{lc($annot)}\"";
+                        }else{
+                            push @single_anno, "$gene_annot->{lc($annot)}";
+                        }
                     }
                 }else{
-                    if ($gene_annot->{lc($annot)} =~ /\s/){
-                        push @single_anno, "\"$gene_annot->{lc($annot)}\"";
-                    }else{
-                        push @single_anno, "$gene_annot->{lc($annot)}";
-                    }
+                    push @single_anno, '';
                 }
-            }else{
-                push @single_anno, '';
             }
+            print $OUT join(",", @single_anno) . "\n";
         }
-        print $OUT join(",", @single_anno) . "\n";
     }
     close $LIST;
 }
@@ -416,7 +424,8 @@ sub parseAsVcf{
                 next if ( not check_consequence( $c ) );
             }
             if ($c->{$gene_field} =~ /^ENS/){
-                push @entrez_ids, search_ensembl_id($c, $gene_field); 
+                my $ensid = $c->{$gene_field};
+                push @entrez_ids, search_ensembl_id($ensid); 
             }elsif($c->{$gene_field} =~ /^\d+$/){
                 push @entrez_ids, $c->{$gene_field} ; 
             }elsif($c->{$gene_field} =~ /^[NX][MR]_\d+$/){
@@ -705,8 +714,7 @@ sub query_rest_ensid{
 
 ########################################
 sub search_ensembl_id{
-    my ($csq, $gene_field) = @_;
-    my $ensid = $csq->{$gene_field};
+    my ($ensid) = @_;
     if (exists $entid_cache{$ensid}){
         if (ref $entid_cache{$ensid} eq 'ARRAY' ){ 
             return @{ $entid_cache{$ensid} } ;
