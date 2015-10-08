@@ -1754,6 +1754,7 @@ List of gene annotations to include in output. By default all of the following c
     GO_ID
     GO_DESCRIPTION
     GENERIFS
+    BIOGRID_INTERACTANTS 
     SUMMARY
     OMIM
     MGI_PHENOTYPE
