@@ -34,6 +34,8 @@ Other perl modules required by these scripts are installable via CPAN - perl wil
     Bio::DB::Sam (hgmdMartToVcf.pl only)
     Excel::Writer::XLSX (annovcfToSimple.pl only)
     LWP::Simple (ensemblGeneAnnotator.pl only)
+    HTTP::Tiny (ensemblGeneAnnotator.pl for remote retrieval of gene IDs only)
+    JSON (ensemblGeneAnnotator.pl for remote retrieval of gene IDs only)
     Parallel::ForkManager
     Sys::CPU
     Term::ProgressBar
