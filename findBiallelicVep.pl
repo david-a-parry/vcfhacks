@@ -50,7 +50,7 @@ my $check_all_samples;
 my $homozygous_only;
 my $splice_consensus =
   0;    #use this flag to check for SpliceConsensus VEP plugin annotations
-my $pedigree;
+my $pedigree;#can add specific families to check using comma separated list
 my $min_matching_samples;
 my $min_matching_per_family;
 my $ignore_carrier_status;
@@ -167,10 +167,18 @@ else {
 
 #QUICKLY CHECK PEDIGREE BEFORE DEALING WITH POTENTIALLY HUGE VCF
 my $ped;
+my @fams = (); #any comma separated fields after ped filename = families to analyze
 if ($pedigree) {
+    @fams = split(",", $pedigree); 
+    $pedigree = shift @fams; 
     $ped = ParsePedfile->new( file => $pedigree );
-
-#die "Pedigree file must contain at least one affected member!\n" if not $ped->getAllAffecteds();
+    if (@fams){#if families specified check they exist in PED
+        my %all_fam = map { $_ => undef } $ped->getAllFamilies();
+        foreach my $f (@fams){
+            die "User specified family \"$f\" does not exist in PED file!\n"
+              if not exists $all_fam{$f}; 
+        }
+    }
 }
 
 #SORT OUT VEP DETAILS
@@ -360,12 +368,14 @@ if ($replace_hgnc) {
 if ($check_all_samples) {
     push @samples, $vcf_obj->getSampleNames();
 }
+
+
 if ($ped) {
     my @aff     = ();
     my @un      = ();
     my @not_aff = ();
     my @not_un  = ();
-    foreach my $s ( $ped->getAllAffecteds() ) {
+    foreach my $s ( getPedAffecteds() ) {
         if ( $vcf_obj->checkSampleInVcf($s) ) {
             push @aff, $s;
         }
@@ -373,7 +383,7 @@ if ($ped) {
             push @not_aff, $s;
         }
     }
-    foreach my $s ( $ped->getAllUnaffecteds() ) {
+    foreach my $s ( getPedUnaffecteds() ) {
         if ( $vcf_obj->checkSampleInVcf($s) ) {
             push @un, $s;
         }
@@ -398,7 +408,7 @@ if ($ped) {
               . "Setting --num_matching to $min_matching_per_family.\n";
             $min_matching_samples = $min_matching_per_family;
         }
-        foreach my $f ( $ped->getAllFamilies ) {
+        foreach my $f ( getPedFamilies() ) {
             my %affected_ped =
               map { $_ => undef } $ped->getAffectedsFromFamily($f);
             my @affected = grep { exists $affected_ped{$_} } @aff;
@@ -467,11 +477,11 @@ if ( defined $min_matching_samples ) {
           if not $min_matching_per_family;
         my $aff_count =
           0;    #only count one sample per family for $min_matching_samples
-        foreach my $f ( $ped->getAllFamilies() ) {
+        foreach my $f ( getPedFamilies() ) {
             $aff_count++ if ( $ped->getAffectedsFromFamily($f) );
         }
         foreach my $s (@samples) {
-            $aff_count++ if not grep { $_ eq $s } $ped->getAllSamples();
+            $aff_count++ if not grep { $_ eq $s } getPedSamples();
         }
         die
 "ERROR: --num_matching (-n) value [$min_matching_samples] is greater than the number of families "
@@ -581,7 +591,7 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
             my $found = 0;
 
             #CHECK SEGREGATION IF PEDIGREE
-            if ($pedigree) {
+            if ($ped) {
                  $found =  check_segregation( \%vcf_lines,  $ped, \%{ $allelic_genes{$gene} }, $chrom);
             }
             else {
@@ -651,11 +661,11 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
     }
 
     #check for identical genotypes within family if using a ped file
-    if (    $pedigree
+    if (    $ped
         and not $min_matching_per_family
         and not $min_matching_samples )
     {
-        foreach my $fam ( $ped->getAllFamilies() ) {
+        foreach my $fam ( getPedFamilies() ) {
             next LINE
               if not identical_genotypes( $ped->getAffectedsFromFamily($fam) );
         }
@@ -774,7 +784,7 @@ foreach my $gene ( keys %allelic_genes ) {
     my $found = 0;
 
     #CHECK SEGREGATION IF PEDIGREE
-    if ($pedigree) {
+    if ($ped) {
         $found = check_segregation( \%vcf_lines, $ped, \%{ $allelic_genes{$gene} }, $prev_chrom) ;
     }
     else {
@@ -809,6 +819,54 @@ if ($progressbar) {
 if ($list_genes) {
     my $list = sort_gene_listing( \%listing );
     print $LIST join( "\n", @$list ) . "\n";
+}
+
+###########
+sub getPedFamilies{
+    if (@fams){
+        return @fams;
+    }else{
+        return $ped->getAllFamilies();
+    }
+}
+
+###########
+sub getPedSamples{
+    my @samples = ();
+    if (@fams){
+        foreach my $f (@fams){
+            push @samples, $ped->getSamplesFromFamily($f);
+        }
+    }else{
+        push @samples, $ped->getAllSamples();       
+    }
+    return @samples;
+}
+
+###########
+sub getPedAffecteds{
+    my @affecteds = ();
+    if (@fams){
+        foreach my $f (@fams){
+            push @affecteds, $ped->getAffectedsFromFamily($f);
+        }
+    }else{
+        push @affecteds, $ped->getAllAffecteds();       
+    }
+    return @affecteds;
+}
+
+###########
+sub getPedUnaffecteds{
+    my @unaffecteds = ();
+    if (@fams){
+        foreach my $f (@fams){
+            push @unaffecteds, $ped->getUnaffectedsFromFamily($f);
+        }
+    }else{
+        push @unaffecteds, $ped->getAllUnaffecteds();       
+    }
+    return @unaffecteds;
 }
 
 ###########
@@ -1151,7 +1209,7 @@ sub get_biallelic {
             if ($count_per_family) {
                 my %counted_fam = ();
                 foreach my $s ( keys %compatible_genotypes ) {
-                    if ( grep { $s eq $_ } $ped->getAllSamples() ) {
+                    if ( grep { $s eq $_ } getPedSamples() ) {
                         my $fam_id = $ped->getFamilyId($s);
                         $match_fam++ if not $counted_fam{$fam_id};
                         $counted_fam{$fam_id}++;
@@ -1202,7 +1260,7 @@ sub check_segregation {
 
 #Then for each family identify common biallelic genotypes but throw away anything if neither allele present in an obligate carrier
 
-    foreach my $f ( $ped->getAllFamilies ) {
+    foreach my $f ( getPedFamilies() ) {
         my %affected_ped = map { $_ => undef } $ped->getAffectedsFromFamily($f);
         my @affected = grep { exists $affected_ped{$_} } @samples;
 
@@ -1286,7 +1344,7 @@ sub check_segregation {
     }
 
     #deal with any samples not in pedigree
-    my %all_ped = map { $_ => undef } $ped->getAllSamples();
+    my %all_ped = map { $_ => undef } getPedSamples();
     my @other_affected = grep { !exists $all_ped{$_} } @samples;
     foreach my $aff (@other_affected) {
         foreach my $bi ( @{ $biallelic_candidates{$aff} } ) {
@@ -1553,6 +1611,16 @@ A PED file (format described below) containing information about samples in the 
 
 Not all samples in a given PED file need be present in the VCF. For example, you may specify an affected child not present in a VCF to indicate that an unaffected sample that IS present in the VCF is an obligate carrier. 
 
+If your VCF contains more than one family you can specify one or more of these families by adding a comma after your ped file followed by a comma separated list of family IDs. For example:
+
+    --family mypedfile.ped,Smith,Jones
+
+...where 'mypedfile.ped' is the name of your ped file, while 'Smith' and 'Jones' are the family IDs of the families to analyze. To specify only family 'Smith' you would use the following argument: 
+
+    --family mypedfile.ped,Smith
+
+You may specify as many families as you like or none to analyze all families found in the PED file. Note, that it is assumed that you expect all families to have a mutation in the SAME GENE unless using the --num_matching argument. 
+
 PED format - from the PLINK documentation:
 
        The PED file is a white-space (space or tab) delimited file: the first six columns are mandatory:
@@ -1751,6 +1819,9 @@ Show the program's manual page.
     
     findBiallelicVep.pl -i <variants.vcf> -f families.ped -o output.vcf -l genelist.txt -w 10 -z 30
     #use a low gneotype quality threshold (10) to identify variants in affected samples but use a higher threshold (30) to identify genotypes in unaffecteds to reject
+
+    findBiallelicVep.pl -i <variants.vcf> -f families.ped,family1,family2 -o output.vcf 
+    #specify specific families to analyze from ped file rather than all families
 
 =cut
 
