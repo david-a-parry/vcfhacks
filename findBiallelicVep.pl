@@ -175,7 +175,7 @@ if ($pedigree) {
     if (@fams){#if families specified check they exist in PED
         my %all_fam = map { $_ => undef } $ped->getAllFamilies();
         foreach my $f (@fams){
-            die "User specified family \"$f\" does not exist in PED file!\n"
+            die "Error - User specified family \"$f\" does not exist in PED file!\n"
               if not exists $all_fam{$f}; 
         }
     }
@@ -1471,6 +1471,7 @@ sub create_var_hash {
     @vep_alleles{@alts} = @v_all; 
     foreach my $alt (@alts) {
         $i++;
+        next if $alt eq '*';
         if ( uc($vep_alleles{$alt}) eq uc( $annotation->{allele} ) ) {
             $var_hash{"$coord-$i"}->{mutation} = $annotation;
             $var_hash{"$coord-$i"}->{vcf_line} = $vcf_obj->get_currentLine;
