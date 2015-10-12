@@ -379,7 +379,10 @@ sub _altToVep{
         }
     }else{
         foreach my $alt (@$alt_array){
-            next if $alt eq '*';
+            if ($alt eq '*'){
+                push @vep_alleles, $alt;
+                next;
+            }
             if (length($alt) == length($ref)){
                 push @vep_alleles,  $alt;
             }elsif(length($alt) > length($ref)){#insertion - VEP trims first base
