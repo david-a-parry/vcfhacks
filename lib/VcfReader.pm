@@ -1052,7 +1052,7 @@ sub getVariantFormatFields{
         $format_fields{$f} = $i++;
     }
     return %format_fields if wantarray;
-    return keys @form if defined wantarray;
+    return @form if defined wantarray;
     carp "getVariantFormatFields method called in void context ";
 }
 
