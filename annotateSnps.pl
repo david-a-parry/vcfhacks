@@ -166,7 +166,7 @@ for ( my $i = 0 ; $i < @dbsnp ; $i++ ) {
         }
     );
     $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "[$time] INFO -  Initializing $dbsnp[$i] dbSNP reference VCF "
+    print STDERR "[$time] INFO - Initializing $dbsnp[$i] dbSNP reference VCF "
       . ( $i + 1 ) . " of "
       . scalar(@dbsnp) . "\n";
     $dbpm->start() and next;
