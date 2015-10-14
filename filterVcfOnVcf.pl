@@ -424,6 +424,8 @@ else {
     $OUT = \*STDOUT;
 }
 
+printHeader();
+
 my $prev_chrom = 0;
 my $progressbar;
 my $next_update = 0;
@@ -440,8 +442,6 @@ if ($progress) {
     $time = strftime( "%H:%M:%S", localtime );
     print STDERR "[$time] Filtering started.\n";
 }
-
-printHeader();
 
 my $kept             = 0;
 my $filtered         = 0;
@@ -628,7 +628,7 @@ sub printHeader{
     }
     if ($annotate_af){
         $annotate_af =~ s/\s/_/g;#no white space in INFO field
-        print STDERR "[INFO] Adding INFO fields $annotate_af" ."_AF and $annotate_af" ."_AN to output for allele frequency and allele counts calculated from $filter_vcf...\n";
+        print STDERR "[INFO] Adding INFO fields $annotate_af" ."_AF and $annotate_af" ."_AN to output for allele frequency and allele numbers calculated from $filter_vcf...\n";
         print $OUT "##INFO=<ID=$annotate_af" ."_AF,Number=A,Type=Float,Description=\"Allele frequency calculated by filterVcfOnVcf.pl from $filter_vcf.\">\n";
         print $OUT "##INFO=<ID=$annotate_af" . "_AN,Number=A,Type=Integer,Description=\"Allele number annotated by filterVcfOnVcf.pl from $filter_vcf.\">\n";
     }
