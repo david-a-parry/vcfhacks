@@ -628,7 +628,7 @@ sub printHeader{
     }
     if ($annotate_af){
         $annotate_af =~ s/\s/_/g;#no white space in INFO field
-        print $OUT "##INFO=<ID=$annotate_af." ."_AF,Number=A,Type=Float,Description=\"Allele frequency calculated by filterVcfOnVcf.pl from $filter_vcf.\">\n";
+        print $OUT "##INFO=<ID=$annotate_af" ."_AF,Number=A,Type=Float,Description=\"Allele frequency calculated by filterVcfOnVcf.pl from $filter_vcf.\">\n";
         print $OUT "##INFO=<ID=$annotate_af" . "_AN,Number=A,Type=Integer,Description=\"Allele number annotated by filterVcfOnVcf.pl from $filter_vcf.\">\n";
     }
     print $OUT "##filterVcfOnVcf.pl=\"";
