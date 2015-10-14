@@ -776,6 +776,9 @@ ALT:            foreach my $alt (@f_alts) {
                 if(@pop_acs){
                     add_pop_freqs_to_allele($min_vars{$allele}, \@snp_split, $filter_match) ;
                 }
+                if ($annotate_af){
+                    add_annotated_af_to_allele($min_vars{$allele}, \@snp_split, $filter_match) ;
+                }
                 if ($threshold) {
                     foreach my $k ( keys %geno_counts ) {
                         my @g_alleles = split( /[\/\|]/, $k );
@@ -953,8 +956,65 @@ sub annotate_pop_freqs{
                 value => join(",", @af ), 
             );
     }
+    if ($annotate_af){
+        my @an = ();
+        my @af = ();
+        foreach my $allele (sort {$a <=> $b} keys %{$m_var}){
+            push @an, 
+              exists $m_var->{$allele}->{$annotate_af . "_AN"} 
+              ? $m_var->{$allele}->{$annotate_af . "_AN"} : '.';
+            push @af, 
+              exists $m_var->{$allele}->{$annotate_af . "_AF"} 
+              ? $m_var->{$allele}->{$annotate_af . "_AF"} : '.';
+        }
+        
+        $vcf_line = VcfReader::addVariantInfoField 
+            (
+                line => $vcf_line,
+                id   => $annotate_af . "_AN",
+                value => join(",", @an ), 
+            );
+        $vcf_line = VcfReader::addVariantInfoField 
+            (
+                line => $vcf_line,
+                id   => $annotate_af . "_AF",
+                value => join(",", @af ), 
+            );
+
+    }
     return $vcf_line;
 }
+
+#################################################
+sub add_annotated_af_to_allele{
+    my ($min_allele, $split, $allele_code) = @_;
+    # calculate AF for each @pops pop 
+    # and return 1 if > $maf
+    my $an = VcfReader::getVariantInfoField($split, "AN");
+    my $ac = VcfReader::getVariantInfoField($split, "AC");
+    my $af = VcfReader::getVariantInfoField($split, "AF");
+    if ($an){
+        $min_allele->{$annotate_af . "_AN"} = $an;
+    }else{
+        $min_allele->{"$annotate_af"."_AN"} = '.';
+    }
+    if (defined $ac){
+        my $count = (split ",", $ac)[$allele_code -1];
+        $min_allele->{$annotate_af . "_AC"} = $count;
+    }else{
+        $min_allele->{"$annotate_af"."_AC"} = '.';
+    }
+    if ($af){
+        my $f = (split ",", $af)[$allele_code -1];
+        $min_allele->{$annotate_af."_AF"} = $f;
+    }elsif($an and defined $ac){
+        my $count = (split ",", $ac)[$allele_code -1];
+        $min_allele->{$annotate_af . "_AF"} = sprintf("%g", $count/$an);
+    }else{
+        $min_allele->{"$annotate_af"."_AF"} = '.';
+    }
+}
+
 #################################################
 sub add_pop_freqs_to_allele{
     my ($min_allele, $split, $allele_code) = @_;
