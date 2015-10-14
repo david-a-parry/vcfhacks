@@ -179,49 +179,41 @@ for ( my $i = 0 ; $i < @dbsnp ; $i++ ) {
 }
 print STDERR "INFO - Waiting for children...\n" if $opts{VERBOSE};
 $dbpm->wait_all_children;
-my @add_head = ();
+
+#get dbSNP category headers
+my %head_info_fields = (
+    "clinical significance" => [ qw / CLNSIG SCS / ] ,
+    "dbSNPBuildID"          => [ qw / dbSNPBuildID / ],
+    "allele frequency"      => [ qw / AF CAF G5A G5 COMMON / ] ,
+);
+my %add_head = checkAndAddHeaders(); 
+
+#if filter options specified check that relevant info field
+#has been found
 if ( $opts{pathogenic} ) {
-    my $inf = checkAndAddHeaders("CLNSIG");
-    push @add_head, $inf if $inf;
-    $inf = checkAndAddHeaders("SCS");
-    push @add_head, $inf if $inf;
-    if ( not @add_head and not $opts{clinvar_file}) {
-        print STDERR
-"WARNING - can't find CLNSIG or SCS fields in dbSNP file headers, your SNP reference files probably don't have pathogenic annotations.\n";
+    my $warning = check_info_found("clinical significance", "pathogenic annotations"); 
+    if ( $warning and not $opts{clinvar_file}) {
+        print STDERR $warning;
     }
 }
 
 if ( $opts{build} ) {
-    my $inf = checkAndAddHeaders("dbSNPBuildID");
-    if ( not $inf ) {
-        print STDERR
-"WARNING - can't find dbSNPBuildID fields in dbSNP file headers, your SNP reference files probably don't have readable dbSNP build annotations.\n";
-    }
-    else {
-        push @add_head, $inf;
-    }
+    my $warning = check_info_found("dbSNPBuildID", "readable dbSNP build annotations"); 
+    print STDERR $warning if $warning;
 }
 if ( $opts{freq} ) {
-    my @freq_head;
-    foreach my $f ( qw / AF CAF G5A G5 COMMON / ) { 
-        my $inf = checkAndAddHeaders("$f");
-        push @freq_head, $inf if $inf;
-    }
-    if ( not @freq_head ) {
-        print STDERR
-"WARNING - can't find allele frequency fields (GMAF, CAF, AF, G5A, G5 or COMMON) in dbSNP file headers, your SNP reference files probably don't have readable frequency data.\n";
-    }
-    else {
-        push @add_head, @freq_head;
-    }
+    my $warning = check_info_found("allele frequency", "readable frequency data"); 
+    print STDERR $warning if $warning;
 }
 
 my $meta_head = VcfReader::getMetaHeader( $opts{input} );
 print $OUT "$meta_head\n";
 print $KNOWN "$meta_head\n" if $KNOWN;
 my $headstring = '';
-if (@add_head) {
-    $headstring .= join("\n", @add_head) . "\n";
+if (%add_head) {
+    foreach my $k (keys %add_head){
+        $headstring .= join("\n", @{$add_head{$k}}) . "\n";
+    }
 }
 if ($opts{clinvar_file}){
     $headstring .= <<EOT
@@ -948,21 +940,41 @@ sub checkVarMatches {
 }
 
 #################################################
+sub check_info_found{
+    my $type = shift;
+    my $annot = shift;
+    my $string; 
+    if (  not exists $add_head{$type} 
+         or not @{$add_head{$type}} ){ 
+        return 
+"WARNING - can't find $type fields (" . join(", ", @{$head_info_fields{$type}} ) . ") in dbSNP file headers, your SNP reference files probably don't have $annot.\n";
+    }
+    return; 
+}
 
+#################################################
 sub checkAndAddHeaders{
-    my $field = shift; 
-    my $inf_head;
-    foreach my $d (@dbsnp){
-        $time = strftime( "%H:%M:%S", localtime );
-        if ( $dbsnp_to_info{$d}->{$field} ){
-            print STDERR "[$time] INFO - $field field found in $d...\n";
-            (my $desc = $dbsnp_to_info{$d}->{$field}->{Description}) =~ s/\"//;
-       
-            $inf_head = "##INFO=<ID=AS_$field,Number=A,Type=$dbsnp_to_info{$d}->{$field}->{Type},Description=\"This annotation has been altered by annotateSnps.pl to ".
-                        "report consequences per ALT allele. Original description was as follows: $desc>";
+
+    my %inf_heads = ();
+
+    foreach my $type (keys %head_info_fields){
+        foreach my $field (@{$head_info_fields{$type}}){
+            my $inf_head;
+DBSNP:      foreach my $d (@dbsnp){
+                $time = strftime( "%H:%M:%S", localtime );
+                if ( $dbsnp_to_info{$d}->{$field} ){
+                    print STDERR "[$time] INFO - $field field found in $d...\n";
+                    (my $desc = $dbsnp_to_info{$d}->{$field}->{Description}) =~ s/\"//;
+               
+                    $inf_head = "##INFO=<ID=AS_$field,Number=A,Type=$dbsnp_to_info{$d}->{$field}->{Type},Description=\"This annotation has been altered by annotateSnps.pl to ".
+                                "report consequences per ALT allele. Original description was as follows: $desc>";
+                    push @{$inf_heads{$type}}, $inf_head;
+                    last DBSNP;#keep first
+                }
+            }
         }
     }
-    return $inf_head;
+    return %inf_heads; 
 }
 
 #################################################
