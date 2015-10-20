@@ -1,0 +1,43 @@
+#Effect Seq. Ontology 	Effect Classic 	Impact	Note & Example 
+coding_sequence_variant  	CDS 	MODIFIER 	The variant hits a CDS. 
+chromosome 	CHROMOSOME_LARGE DELETION 	HIGH 	A large parte (over 1%) of the chromosome was deleted. 
+coding_sequence_variant  	CODON_CHANGE 	MODERATE 	One or many codons are changed e.g.: An MNP of size multiple of 3 
+inframe_insertion  	CODON_INSERTION 	MODERATE 	One or many codons are inserted e.g.: An insert multiple of three in a codon boundary 
+disruptive_inframe_insertion 	CODON_CHANGE_PLUS CODON_INSERTION 	MODERATE 	One codon is changed and one or many codons are inserted e.g.: An insert of size multiple of three, not at codon boundary 
+inframe_deletion  	CODON_DELETION 	MODERATE 	One or many codons are deleted e.g.: A deletion multiple of three at codon boundary 
+disruptive_inframe_deletion  	CODON_CHANGE_PLUS CODON_DELETION 	MODERATE 	One codon is changed and one or more codons are deleted e.g.: A deletion of size multiple of three, not at codon boundary 
+downstream_gene_variant  	DOWNSTREAM 	MODIFIER 	Downstream of a gene (default length: 5K bases) 
+exon_variant  	EXON 	MODIFIER 	The variant hits an exon (from a non-coding transcript) or a retained intron. 
+exon_loss_variant  	EXON_DELETED 	HIGH 	A deletion removes the whole exon. 
+frameshift_variant  	FRAME_SHIFT 	HIGH 	Insertion or deletion causes a frame shift e.g.: An indel size is not multple of 3 
+gene_variant  	GENE 	MODIFIER 	The variant hits a gene. 
+intergenic_region 	INTERGENIC 	MODIFIER 	The variant is in an intergenic region 
+conserved_intergenic_variant 	INTERGENIC_CONSERVED 	MODIFIER 	The variant is in a highly conserved intergenic region 
+intragenic_variant 	INTRAGENIC 	MODIFIER 	The variant hits a gene, but no transcripts within the gene
+intron_variant  	INTRON 	MODIFIER 	Variant hits and intron. Technically, hits no exon in the transcript. 
+conserved_intron_variant  	INTRON_CONSERVED 	MODIFIER 	The variant is in a highly conserved intronic region 
+miRNA  	MICRO_RNA 	MODIFIER 	Variant affects an miRNA 
+missense_variant  	NON_SYNONYMOUS_CODING 	MODERATE 	Variant causes a codon that produces a different amino acid e.g.: Tgg/Cgg, W/R 
+initiator_codon_variant  	NON_SYNONYMOUS_START 	LOW 	Variant causes start codon to be mutated into another start codon (the new codon produces a different AA). e.g.: Atg/Ctg, M/L (ATG and CTG can be START codons) 
+stop_retained_variant  	NON_SYNONYMOUS_STOP 	LOW 	Variant causes stop codon to be mutated into another stop codon (the new codon produces a different AA). e.g.: Atg/Ctg, M/L (ATG and CTG can be START codons) 
+rare_amino_acid_variant 	RARE_AMINO_ACID 	HIGH 	The variant hits a rare amino acid thus is likely to produce protein loss of function 
+splice_acceptor_variant  	SPLICE_SITE_ACCEPTOR 	HIGH 	The variant hits a splice acceptor site (defined as two bases before exon start, except for the first exon). 
+splice_donor_variant  	SPLICE_SITE_DONOR 	HIGH 	The variant hits a Splice donor site (defined as two bases after coding exon end, except for the last exon). 
+splice_region_variant  	SPLICE_SITE_REGION 	LOW 	A sequence variant in which a change has occurred within the region of the splice site, either within 1-3 bases of the exon or 3-8 bases of the intron.
+splice_region_variant  	SPLICE_SITE_BRANCH 	LOW 	A varaint affective putative (Lariat) branch point, located in the intron.
+splice_region_variant  	SPLICE_SITE_BRANCH_U12 	MODERATE 	A varaint affective putative (Lariat) branch point from U12 splicing machinery, located in the intron.
+stop_lost  	STOP_LOST 	HIGH 	Variant causes stop codon to be mutated into a non-stop codon e.g.: Tga/Cga, */R 
+5_prime_UTR_premature start_codon_gain_variant  	START_GAINED 	LOW 	A variant in 5'UTR region produces a three base sequence that can be a START codon. 
+start_lost 	START_LOST 	HIGH 	Variant causes start codon to be mutated into a non-start codon. e.g.: aTg/aGg, M/R 
+stop_gained  	STOP_GAINED 	HIGH 	Variant causes a STOP codon e.g.: Cag/Tag, Q/* 
+synonymous_variant  	SYNONYMOUS_CODING 	LOW 	Variant causes a codon that produces the same amino acid e.g.: Ttg/Ctg, L/L 
+start_retained  	SYNONYMOUS_START 	LOW 	Variant causes start codon to be mutated into another start codon. e.g.: Ttg/Ctg, L/L (TTG and CTG can be START codons) 
+stop_retained_variant  	SYNONYMOUS_STOP 	LOW 	Variant causes stop codon to be mutated into another stop codon. e.g.: taA/taG, */* 
+transcript_variant  	TRANSCRIPT 	MODIFIER 	The variant hits a transcript. 
+regulatory_region_variant  	REGULATION 	MODIFIER 	The variant hits a known regulatory feature (non-coding). 
+upstream_gene_variant  	UPSTREAM 	MODIFIER 	Upstream of a gene (default length: 5K bases) 
+3_prime_UTR_variant  	UTR_3_PRIME 	MODIFIER 	Variant hits 3'UTR region 
+3_prime_UTR_truncation + exon_loss  	UTR_3_DELETED 	MODERATE 	The variant deletes an exon which is in the 3'UTR of the transcript 
+5_prime_UTR_variant  	UTR_5_PRIME 	MODIFIER 	Variant hits 5'UTR region 
+5_prime_UTR_truncation + exon_loss_variant 	UTR_5_DELETED 	MODERATE 	The variant deletes an exon which is in the 5'UTR of the transcript 
+sequence_feature  + exon_loss_variant 	NEXT_PROT 	MODERATE 	A 'NextProt' based annotation. Details are provided in the 'feature type' sub-field (ANN), or in the effect details (EFF). 
