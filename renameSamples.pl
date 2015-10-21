@@ -101,9 +101,9 @@ sub checkDuplicates{
 sub usage{
     my $error = shift;
     if ($error){
-        print "ERROR: $error\n";
+        print STDERR "ERROR: $error\n";
     }
-    print <<EOT
+    print STDERR <<EOT
 
     Renames samples in a VCF according to user-supplied sample mapping file.
 
