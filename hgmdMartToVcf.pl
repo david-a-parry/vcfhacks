@@ -34,6 +34,9 @@ if ($opts{i} =~ /\.gz$/){
 }
 my %hgmd_columns = ();
 my $header = <$FH>;
+#ugh, HGMD for me is only ever accessible from a WINDOWS machine...
+#time to deal with pesky dos style line breaks
+$header =~ s/[\015\012]+$//; 
 chomp (my @head = split("\t", $header)); 
 my $n = 0;
 %hgmd_columns = map { lc($_) => $n++ } map { (my $trim = $_) =~ s/^#+//; $trim } @head;
@@ -75,7 +78,8 @@ initializeOutput();
 #START READING AND CONVERTING HGMD RECORDS
 
 while (my $line = <$FH>){
-    chomp($line);
+    #time to deal with pesky dos style line breaks
+    $line =~ s/[\015\012]+$//; 
     my @fields = split("\t", $line); 
     if (my $vcf_record = convertToVcf(\@fields) ){
         print $OUT "$vcf_record\n";
