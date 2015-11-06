@@ -198,6 +198,7 @@ if (@damaging){
     }
 }
 
+
 if ($canonical_only){
         push @csq_fields, 'canonical';
 }
@@ -258,6 +259,16 @@ foreach my $c (@csq_fields){
         die "Couldn't find '$c' VEP field in header - please ensure your VCF is annotated with " .
         "Ensembl's variant effect precictor specifying the appropriate annotations.\n";
     }
+}
+
+if (grep {/^all$/} @samples){
+    print STDERR "Checking all samples for matching genes...\n";
+    push @samples, $vcf_obj->getSampleNames();
+}
+
+if (@samples){
+    my %seen = ();
+    @samples = grep { ! $seen{$_}++ } @samples;
 }
 
 my $progressbar;
