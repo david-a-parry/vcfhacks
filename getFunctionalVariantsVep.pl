@@ -72,6 +72,7 @@ GetOptions(\%opts,
             "samples=s{,}",
             "each_sample",
             "find_shared_genes:s", 
+            "n|num_matching=i",
             "consensus_splice_site",
             ) or pod2usage(-message => "Syntax error", -exitval => 2);
 pod2usage(-verbose => 2) if ($manual);
@@ -427,10 +428,16 @@ if ($matching_genes){
     my $transcript_count = 0;
 TRANSCRIPT: foreach my $transcript ( keys %{$genes_per_sample{$samples[0]}}){
         #check all transcripts from first sample in all other samples
+        my $sample_count = 0;
         for (my $i = 1; $i < @samples; $i++){
-            if (not $genes_per_sample{$samples[$i]}->{$transcript}){
+            if (not $opts{n} and not $genes_per_sample{$samples[$i]}->{$transcript}){
                 next TRANSCRIPT;
+            }else{
+                $sample_count++ if exists $genes_per_sample{$samples[$i]}->{$transcript};
             }
+        }
+        if ($opts{n}){
+            next TRANSCRIPT if $sample_count < $opts{n};
         }
         #if we haven't hit 'next TRANSCRIPT' gene must be shared in all samples
         $transcript_count++;
@@ -710,6 +717,10 @@ When --samples arguments are specified this switch will cause the program to onl
 =item B<-f    --find_shared_genes>
 
 If --samples argument is specified this switch will return a list of genes shared by each sample according to the filtering criteria.  If a filename is given the list will be printed to file, otherwise the list will be printed to STDERR.
+
+=item B<-n    --num_matching>
+
+Use this option when using --find_shared_genes to specify a minimum number of matching samples. Without this option only genes matched in ALL samples will be printed.
 
 =item B<--progress>
 
