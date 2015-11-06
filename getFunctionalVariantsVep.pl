@@ -262,9 +262,11 @@ foreach my $c (@csq_fields){
     }
 }
 
-if (grep {/^all$/} @samples){
+if (grep { /^all$/i } @samples){
     print STDERR "Checking all samples for matching genes...\n";
+    @samples = grep {! /^all$/i } @samples; 
     push @samples, $vcf_obj->getSampleNames();
+    
 }
 
 if (@samples){
