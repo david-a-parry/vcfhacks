@@ -217,8 +217,8 @@ if (%add_head) {
 }
 if ($opts{clinvar_file}){
     $headstring .= <<EOT
-##INFO=<ID=ClinVarPathogenic,Number=A,Type=Integer,Description="For each allele, a value of 1 is given if the variant has ever been asserted "Pathogenic" or "Likely pathogenic" by any submitter for any phenotype, and 0 if present in ClinVar but does not meet this criteria">
-##INFO=<ID=ClinVarConflicted,Number=A,Type=Integer,Description="For each allele, a value of 1 is given if the variant has ever been asserted "Pathogenic" or "Likely pathogenic" by any submitter for any phenotype, and has also been asserted "Benign" or "Likely benign" by any submitter for any phenotype, and 0 if present in ClinVar but does not meet this criteria">
+##INFO=<ID=ClinVarPathogenic,Number=A,Type=Integer,Description="For each allele, a value of 1 is given if the variant has ever been asserted 'Pathogenic' or 'Likely pathogenic' by any submitter for any phenotype, and 0 if present in ClinVar but does not meet this criteria">
+##INFO=<ID=ClinVarConflicted,Number=A,Type=Integer,Description="For each allele, a value of 1 is given if the variant has ever been asserted 'Pathogenic' or 'Likely pathogenic' by any submitter for any phenotype, and has also been asserted 'Benign' or 'Likely benign' by any submitter for any phenotype, and 0 if present in ClinVar but does not meet this criteria">
 ##INFO=<ID=ClinVarTraits,Number=A,Type=String,Description="Any traits associated with this allele in ClinVar">
 ##INFO=<ID=ClinVarClinicalSignificance,Number=A,Type=String,Description="Clinical significance terms for this allele given in ClinVar">
 EOT
