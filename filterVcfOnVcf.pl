@@ -620,6 +620,7 @@ sub printHeader{
     
     foreach my $pop (@pop_acs){
         my $desc = $filter_info->{"AC_$pop"}->{Description} ;
+        $desc =~ s/\"/\'/g;
         print $OUT "##INFO=<ID=FVOV_AF_$pop,Number=A,Type=Float,Description=\"Putative population frequency calculated using AC_$pop and AN_$pop annotations from $filter_vcf. ".
                     "Description of original AC_$pop was as follows: $desc\">\n";
         my $an_desc = $filter_info->{"AN_$pop"}->{Description} ;
