@@ -348,15 +348,23 @@ if (defined $config->{vep}){
     my %seen = ();
     @fields = grep {! $seen{$_}++ } @fields;
     if (@fields){
+        my @temp_fields = (); 
         if(defined $config->{canonical_only}){
             push @fields, 'canonical' if not grep{/canonical/i} @fields;
         }
         foreach my $csq (@fields){
             if (not exists $vep_header->{($csq)}){
-                die "Couldn't find '$csq' VEP field in header - please ensure your VCF is annotated with " .
-                "Ensembl's variant effect precictor specifying the appropriate annotations.\n";
+                if ($csq eq 'consequence' or $csq eq 'allele'){
+                    die "Couldn't find '$csq' VEP field in header - please ensure your VCF is annotated with " .
+                    "Ensembl's variant effect precictor specifying the appropriate annotations.\n";
+                }else{
+                    warn "Couldn't find '$csq' VEP field in header - will not output this annotaiton.\n";
+                }
+            }else{
+                push @temp_fields, @fields;
             }
         }
+        @fields = @temp_fields;
     }else{
         if(defined $config->{canonical_only}){
             if (not exists $vep_header->{canonical}){
