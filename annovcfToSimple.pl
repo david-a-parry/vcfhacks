@@ -361,7 +361,7 @@ if (defined $config->{vep}){
                     warn "Couldn't find '$csq' VEP field in header - will not output this annotaiton.\n";
                 }
             }else{
-                push @temp_fields, @fields;
+                push @temp_fields, $csq;
             }
         }
         @fields = @temp_fields;
