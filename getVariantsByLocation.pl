@@ -220,25 +220,32 @@ sub process_regions{
         foreach my $bedfile (@bedfile) {
             open( BED, $bedfile ) || die "can't open $bedfile: $!";
             my @temp = ();
-            while ( my $temp = <BED> ) {
-                chomp $temp;
-                next if not $temp;
-                $temp =~ s/[:-]/\t/g;
-                $temp =~ s/\,//g;
-                push( @temp, $temp );
+            my $invalid ;
+            while ( my $line = <BED> ) {
+                chomp $line;
+                next if not $line;
+                (my $temp = $line) =~ s/\,//g;
+                my ($chr, $start, $stop); 
+                if ( $temp =~ /\S+:(\d+)(-\d+)*/){
+                    ($chr, $start, $stop) = split(/[\:\-]/, $temp); 
+                    $stop ||= $start ;
+                }elsif ( $temp =~ /\S+\t\d+\t\d+\s/ or $temp =~ /\S+\t\d+\t\d+$/){
+                    ($chr, $start, $stop) = split(/\t/, $temp); 
+                    $start++;#BED should be 0-based 
+                    $stop--;
+                }else{
+                    $invalid++;
+                    next;
+                }
+                if ($start > $stop){
+                    warn "Invalid region found \"$line\" in bedfile - start is greater than end.\n";
+                    $invalid++;
+                    next;
+                }
+                push @regions, "$chr:$start-$stop";
             }
-
-            #    my @temp = (<BED>) =~ s/[:-]/\t/g;
             close BED;
 
-            my $invalid ;
-            foreach my $t (@temp){
-                if ($t !~ /\S+\t\d+\t\d+\s/ and $t !~ /\S+\t\d+\t\d+$/){
-                    $invalid++;
-                }else{
-                    push( @regions, $t);
-                }
-            }
             warn "$invalid invalid region(s) found in $bedfile\n" 
                 if $invalid and not $silent;
         }
@@ -246,12 +253,13 @@ sub process_regions{
     if (@reg) {
         foreach my $reg (@reg) {
             $reg =~ s/\,//g;
-            if ($reg =~ /^\S+:\d+-\d+$/){
-                (my $r = $reg) =~ s/[\:\-]/\t/g;#keep original intact for option string
-                push( @regions, $r);
+            if ($reg =~ /^\S+:(\d+)-(\d+)$/){
+                if ($1 > $2){
+                    die "Invalid region \"$reg\" - start is greater than end.\n";
+                }
+                push( @regions, $reg);
             }elsif($reg =~ /^\S+:(\d+)$/){
                 my $r = "$reg-$1";
-                $r =~ s/[\:\-]/\t/g;
                 push @regions, $r; 
             }else{
                 die "invalid region specied: $reg";
@@ -263,7 +271,7 @@ sub process_regions{
         my %invalid_contigs = ();
         my @indices_to_remove = ();
         for (my $i = 0; $i <  @regions; $i++){
-            my $c = (split "\t", $regions[$i])[0];
+            my $c = (split /[:-]/, $regions[$i])[0];
             if (not exists $contigs{$c}){
                 $invalid_contigs{$c}++;
                 unshift @indices_to_remove, $i;
@@ -279,7 +287,7 @@ sub process_regions{
         die "No valid regions to parse.\n" if not @regions;
         $reg_obj = SortGenomicCoordinates->new( 
             array => \@regions, 
-            type => 'bed', 
+            type => 'regions', 
             col => 1, 
             contig_order => \%contigs
         );
@@ -287,7 +295,7 @@ sub process_regions{
         die "No valid regions to parse.\n" if not @regions;
         $reg_obj = SortGenomicCoordinates->new( 
             array => \@regions, 
-            type => 'bed', 
+            type => 'regions', 
             col => 1, 
         );
     }
@@ -307,7 +315,7 @@ sub process_regions{
         my @hits = VcfReader::searchByRegion(
             %sargs,
             chrom => $r->{chrom},
-            start => $r->{start},
+            start => $r->{start}+1,
             end   => $r->{end},
         );
 
