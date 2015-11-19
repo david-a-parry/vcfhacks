@@ -398,6 +398,11 @@ sub checkBiallelic{
     foreach my $k (keys %transcript_vars) { 
         parseAlleles($transcript_vars{$k});
     }
+    #clear collected data before moving on to next chromosome
+    %transcript_vars = ();
+    %sample_vars = (); 
+    %vcf_lines = ();
+    %transcript_to_symbol = ();
 }
 
 #################################################
@@ -516,6 +521,7 @@ sub allelesInCis{
     return 1 if $p1 == $p2;
     return 0;
 }
+
 #################################################
 sub readClassesFile{
     my $classes_file = "$data_dir/$opts{m}_classes.tsv";
