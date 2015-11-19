@@ -464,8 +464,12 @@ SAMPLE: foreach my $s (@samples){
                 $f_id = $ped_obj->getFamilyId($s);
             };
             if ($f_id){
-                $matches++ if not exists $counted_fam{$f_id};
-                $counted_fam{$f_id}++;
+                if (not @fams || grep { $f_id eq $_ } @fams){
+                    $matches++ if not exists $counted_fam{$f_id};
+                    $counted_fam{$f_id}++;
+                }else{
+                    $matches++;
+                }
             }else{
                 $matches++;
             }
