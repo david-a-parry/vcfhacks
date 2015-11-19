@@ -92,7 +92,7 @@ GetOptions(
     \%opts,
     'i|input=s' => \$vcf,
     'output=s',
-    'list:s',
+    'l|list:s', => \$list_genes,
     's|samples=s{,}'           => \@samples,
     'r|reject=s{,}'            => \@reject,
     'x|reject_all_except:s{,}' => \@reject_except,
@@ -120,6 +120,7 @@ GetOptions(
     'a|add_classes=s{,}'          => \@add,
     'z|homozygous_only'           => \$homozygous_only,
     'consensus_splice_site',
+    'lenient',
     'h|?|help' => \$help,
     'manual'
 ) or pod2usage( -message => "Syntax error", exitval => 2 );
@@ -486,7 +487,7 @@ if ( defined $min_matching_samples ) {
         die
 "ERROR: --num_matching (-n) value [$min_matching_samples] is greater than the number of families "
           . "with affected members identified in $pedigree and --samples identified ($aff_count)\n"
-          if $min_matching_samples > @samples;
+          if $min_matching_samples > $aff_count;
     }
 }
 
@@ -677,9 +678,16 @@ LINE: while ( my $line = $vcf_obj->readLine ) {
     }
     my @csq = $vcf_obj->getVepFields( \@csq_fields )
       ; #returns array of hashes e.g. $csq[0]->{Gene} = 'ENSG000012345' ; $csq[0]->{Consequence} = 'missense_variant'
-    die
-"No consequence field found for line:\n$line\nPlease annotated your VCF file with ensembl's variant effect precictor before running this program.\n"
-      if not @csq;
+    if (not @csq){
+        my $infofield = $vcf_obj->getVariantField("INFO");
+        my $msg = 
+"No consequence field found for INFO field:\n$infofield\nPlease ensure you have annotated your VCF file with ensembl's variant effect precictor before running this program.\n";
+        if ($opts{lenient}){
+            inform_user("WARNING: $msg");
+        }else{
+            die $msg;
+        }
+    }
     my @alts = $vcf_obj->readAlleles( alt_alleles => 1 );
     my $ref = $vcf_obj->getVariantField("REF");
     my @va = $vcf_obj->altsToVepAllele( ref => $ref, alt => \@alts );
@@ -737,9 +745,9 @@ CSQ:    foreach my $annot (@a_csq) {
                             my $consensus = $annot->{splice_consensus};
                             next if not $consensus;
                             if ( $consensus !~ /SPLICE_CONSENSUS\S+/i ) {
-                                print STDERR
-    "WARNING - SPLICE_CONSENSUS annotation $consensus is"
-                                  . " not recognised as an annotation from the SpliceConsensus VEP plugin.\n";
+                                inform_user(
+"WARNING - SPLICE_CONSENSUS annotation $consensus is"
+                                  . " not recognised as an annotation from the SpliceConsensus VEP plugin.\n");
                                 next;
                             }
                         }
@@ -890,7 +898,7 @@ sub alleleAboveMaf{
             if ($info_fields{$k}->{Type} eq 'Float' or $k eq 'AS_CAF'){
                 return 1 if $split[$i] >= $any_maf;
             }else{
-                print STDERR "WARNING: Don't know how to parse INFO field: $k.\n";
+                inform_user("WARNING: Don't know how to parse INFO field: $k.\n");
             }
         }
     }
@@ -1555,6 +1563,16 @@ sub sort_vcf_lines {
     return $sort_obj->get_ordered;
 }
 ###########
+
+sub inform_user{
+    my $msg = shift;
+    if ($progressbar){
+        $progressbar->message( "$msg" );
+    }else{
+        print STDERR "$msg";
+    }
+}
+
 #=item B<--allow_missing>
 #When multiple --samples are being analysed use this flag to stop the script rejecting variants that are missing (as in no genotype call) from other samples.
 
