@@ -19,7 +19,7 @@ GetOptions(
     'u|unconverted=s',  #optional file for unconverted variants
     's|sort',           #flag to sort final output in coordinate order
     'h|?|help',
-) or pod2usage(-exitval => 2, -message => "Syntax error.\n"); 
+) or usage("Syntax error.\n"); 
 
 usage() if $opts{h};
 usage("-i/--input is required" ) if (not $opts{i});
