@@ -20,14 +20,16 @@ my @reject_except = ();
 my @classes = (); 
 my @add_classes = ();
 my @damaging = ();
+my @biotypes = ();
 
 my %opts = (
-    s           => \@samples,
-    r           => \@reject,
-    x           => \@reject_except,
-    classes     => \@classes,
-    add_classes => \@add_classes,
-    d           => \@damaging,
+    s               => \@samples,
+    r               => \@reject,
+    x               => \@reject_except,
+    classes         => \@classes,
+    add_classes     => \@add_classes,
+    d               => \@damaging,
+    biotype_filters => \@biotypes,
 );
 
 
@@ -36,15 +38,17 @@ GetOptions(
     'i|input=s' ,
     'o|output=s',
     'l|list:s', 
-    's|samples=s{,}'           => \@samples,
-    'r|reject=s{,}'            => \@reject,
-    'x|reject_all_except:s{,}' => \@reject_except,
+    's|samples=s{,}',  
+    'r|reject=s{,}',    
+    'x|reject_all_except:s{,}',
     'f|family=s', # ped file
     'm|mode=s',
-    'classes=s{,}'             => \@classes,
-    'add_classes=s{,}'         => \@add_classes,
-    'd|damaging=s{,}',         => \@damaging,
+    'classes=s{,}',
+    'add_classes=s{,}',
+    'd|damaging=s{,}',
     'canonical_only',
+    'biotype_filters=s{,}',
+    'no_biotype_filtering',
     'pass_filters',
     'keep_any_damaging',
     'skip_unpredicted_missense',
@@ -139,6 +143,9 @@ EOT
     }
 }
 
+my $feature_id = $opts{m} eq 'vep' ? "feature" : "feature_id";
+my $symbol_id = $opts{m} eq 'vep' ? "symbol" : "gene_name";
+
 #check VEP/SNPEFF header and get annotation order
 my %csq_header = getAndCheckCsqHeader();
   # hash of functional annotations from SnpEff/VEP to their annotation index
@@ -147,11 +154,14 @@ my %csq_header = getAndCheckCsqHeader();
 my @csq_fields = getCsqFields();#consequence fields to retrieve from VCF
 
 #and check variant consequence classes are acceptable
-getAndCheckClasses();
+my %class_filters = map { $_ => undef } getAndCheckClasses();
 
 #check in silico prediction classes/scores are acceptable
 my %in_silico_filters = getAndCheckInSilicoPred();
   #hash of prediction program names and values to filter
+
+#and check biotype classes are acceptable
+my %biotype_filters = map { $_ => undef } getAndCheckBiotypes();
 
 #check ped, if provided is ok and get specified families
 my ($ped_obj, @fams) = checkPedAndFamilies();
@@ -170,6 +180,14 @@ checkSamples();
 
 checkMinMatching();
 
+# get available allele frequency annotations if filtering on AF
+# NOTE: we do not use VEP annotations as they do not necessarily match the variant allele
+
+my %af_info_fields = (); #check available INFO fields for AF annotations
+if ( defined $opts{a} ) {
+    my %info_fields = VcfReader::getInfoFields(header => \@header);
+    %af_info_fields = getAfAnnotations(\%info_fields);   
+}
 ######PRE-PROCESSING######
 
 #Get filehandle for output (STDOUT or file) and optionally gene list (STDERR or file)
@@ -211,8 +229,16 @@ EOT
 
 my %contigs = (); 
  #keep track of contigs we've seen so we can check input is (roughly) sorted
-my %allelic_genes = ();
- #store variants meeting our criteria per transcript per chrom
+my %transcript_vars = ();
+ #stores variant IDs meeting our criteria per (key) transcript 
+my %sample_vars = (); 
+ #hash of variant IDs to sample_id to allele counts
+my %vcf_lines = ();
+ #hash of variant IDs to matching VCF line
+my %transcript_to_symbol = ();
+ #transcript ID to gene symbol
+my %gene_listing = ();
+ #gene symbols => transcripts with biallelic variants
 open (my $VCF, $opts{i}) or die "Cannot open $opts{i} for processing variants: $!\n";
 
 #read line
@@ -220,7 +246,13 @@ LINE: while (my $line = <$VCF>){
     next if $line =~ /^#/;#skip header
     $var_count++;#for progress bar
     my @split = split("\t", $line); 
-    my ($chrom, $filter) = VcfReader::getMultipleVariantFields(\@split, 'CHROM', 'FILTER');
+    my ($chrom, $pos, $filter) = VcfReader::getMultipleVariantFields
+    (
+        \@split, 
+        'CHROM', 
+        'POS', 
+        'FILTER',
+    );
     #check if new chromosome - 
     if (exists $contigs{$chrom}){
         #require chroms to be ordered together
@@ -232,6 +264,7 @@ LINE: while (my $line = <$VCF>){
         #if new chrom check biallelics and clear collected data
         $contigs{$chrom} = scalar(keys%contigs);
         checkBiallelic() if $contigs{$chrom} > 0;
+        #TODO - clear hashes, print lines, store genes
     }
     
     #skip if FILTER != PASS and PASS required
@@ -248,7 +281,7 @@ LINE: while (my $line = <$VCF>){
           line              => \@split, 
           all               => 1,
           sample_to_columns => \%sample_to_col,
-          minGQ             => $opts{n}
+          minGQ             => $opts{w},
           multiple          => \@samples,
     );
     next LINE if not haveVariant(\%samp_to_gt);
@@ -257,71 +290,198 @@ LINE: while (my $line = <$VCF>){
     if ($opts{e}){
         next LINE if not identicalGenotypes(\%samp_to_gt, $opts{n});
     }
-    
-sub identicalGenotypes{
-    my $gts = shift;
-    my $min_matching = shift;
-    $min_matching = defined $min_matching ? $min_matching : scalar keys %$gts;
-    return 1 if $min_matching < 2;#if only one sample needs to match then no need to check
-    my $matches = 0; 
-    my $last_geno = '';
-    foreach my $k (keys %$gts){
-        if ( $gts{$k} =~ /^\.[\/\|]\.$/ ){    
-            next;
-        }
-        (my $current_geno = $gts{$k}) =~ s/[\|]/\//;
-          #don't let allele divider affect whether a genotype matches or not
-        if ($last_geno ne ''){
-            if ($current_geno eq $last_geno){
-                $matches++;
-                return 1 if $matches >= $min_matching - 1;
-            }
-        }
-        $last_geno = $current_geno;
-    }
-    return 0;
-}
-    
 
-
-    
-    #skip if homozygous in any unaffected
-
-    #filter if AF annotations > MAF
-
-    #skip if VEP/SNPEFF annotation is not the correct class (or not predicted damaging if using that option)
-
-    #create variant hash if passed all of the above 
-
-    #add variant hash to hash of transcript ID to arrays of variant hashes 
+    #collect genotypes from @reject samples so we can skip homozygous alleles
+    #and add them to our per transcript hash of alleles
     my %reject_to_gt = VcfReader::getSampleCall
     (
           line              => \@split, 
           all               => 1,
           sample_to_columns => \%sample_to_col,
-          minGQ             => $opts{n}
+          minGQ             => $opts{u},
           multiple          => \@reject,
     );
     
-
-   
+    #get Allele frequency annotations if they exist and we're filtering on AF
+    my %af_info_values = (); 
+    if (%af_info_fields){ 
+        %af_info_values = getAfInfoValues(\@split);
+    }
+    
+    #get alleles and consequences for each allele
+    my @alleles = VcfReader::readAlleles(line => \@split);
+    my @csq = getConsequences(\@split);
+    my @alts_to_vep_allele = ();#get VEP style alleles if needed
+    if ($opts{m} eq 'vep'){
+        @alts_to_vep_allele = VcfReader::altsToVepAllele
+        (
+            $alleles[0],
+            [ @alleles[1..$#alleles] ], 
+        );
+    }
+    #assess each ALT allele (REF is index 0)
+ALT: for (my $i = 1; $i < @alleles; $i++){
+        next ALT if $alleles[$i] eq '*';
+        #skip if homozygous in any unaffected
+        next ALT if 
+        (  
+            grep { /^$i[\/\|]$i$/ } 
+            map { $reject_to_gt{$_} }
+            keys %reject_to_gt
+        );
+    
+        #filter if AF annotations > MAF
+        if (%af_info_fields){ #check for annotateSnps.pl etc. frequencies
+           next ALT if ( alleleAboveMaf($i - 1, \%af_info_values) );
+        }
+    
+        #get all consequences for current allele
+        my @a_csq = ();
+        if ($opts{m} eq 'vep'){
+            @a_csq = grep { $_->{allele} eq $alts_to_vep_allele[$i] } @csq;
+        }else{
+            @a_csq = grep { $_->{allele} eq $alleles[$i] } @csq;
+        }
+        
+        #skip if VEP/SNPEFF annotation is not the correct class (or not predicted damaging if using that option)
+        foreach my $annot (@a_csq){
+            if (consequenceMatchesClass($annot)){
+                #create variant ID for this allele
+                my $var_id = "$chrom:$pos-$alleles[$i]";
+                #add variant ID to transcript variants
+                push @{$transcript_vars{$annot->{$feature_id}}}, $var_id;
+                #get allele counts per sample for this variant ID if we haven't already
+                if (not exists $sample_vars{$var_id}){
+                    $sample_vars{$var_id} = getSampleAlleleCounts
+                    (
+                        {%samp_to_gt, %reject_to_gt}, 
+                        $i,
+                    );
+                }
+                #store VCF line for this variant ID for printing out later
+                if (not exists $vcf_lines{$var_id}){
+                    $vcf_lines{$var_id} = \@split;
+                }
+                if (not exists $transcript_to_symbol{$annot->{$feature_id}}){
+                    $transcript_to_symbol{$annot->{$feature_id}} = $annot->{$symbol_id};
+                }
+            }
+        }
+    }
+    updateProgressBar();  
 }
 
+checkBiallelic();
 
 
+#################################################
+sub getSampleAlleleCounts{
+    my ($gts, $i) = @_;
+    my %counts = ();
+    foreach my $s (keys %$gts){
+        if ( $gts->{$s} =~ /^$i[\/\|]$i$/ ) {
+            $counts{$s} = 2;    #homozygous for this alt allele
+        }elsif ( $gts->{$s} =~ /^([\d+\.][\/\|]$i|$i[\/\|][\d+\.])$/ ) {
+            $counts{$s} = 1;    #het for alt allele
+        }elsif ( $gts->{$s} =~ /^\.[\/\|]\.$/ ) {
+            $counts{$s} = -1;    #no call
+        }else {
+            $counts{$s} = 0;    #does not carry alt allele
+        }
+    }
+    return \%counts;
+}
 
+#################################################
+sub checkBiallelic{
+#For each transcript (i.e. each key of our hash of transcript IDs to arrays of var IDs)
+    foreach my $k (keys %transcript_vars) { 
+        parseAlleles($transcript_vars{$k});
+    }
+}
 
-######CHECK BIALLELIC######
-
-#For each transcript (i.e. each key of our hash of transcript IDs to arrays of var hashes)...
-
-#...get combinations of biallelic alleles for each affected
-
-#...get combinations of biallelic alleles for each unaffected
-
-#...remove biallelic alleles present in unaffecteds from putative biallelic alleles in affecteds
-
+#################################################
+sub parseAlleles{
+    my $var_hash = shift;
+    my %incompatible = (); #key is genotype can't be a pathogenic compound het combo
+    my %biallelic = (); #key is sample, value is array of (putative) biallelic genotypes
+    my @vars = keys (%$var_hash); 
+    #foreach allele
+VAR: for (my $i = 0; $i < @vars; $i ++){ 
+        #check unaffected genotypes...
+        foreach my $r (@reject){
+            #... and skip VAR if homozygous
+            next VAR if $sample_vars{$vars[$i]}->{$r} == 2;
+            if ($sample_vars{$vars[$i]}->{$r} != 1){#reject sample is het...
+            #... find other alleles in same sample - these can't make up biallelic combos
+                for (my $j = $i + 1; $j < @vars; $j++){
+                    if ($sample_vars{$vars[$j]}->{$r} == 1){
+                        $incompatible{"$vars[$i]/$vars[$j]"}++;
+                    }
+                }
+            }
+        }
+        @{ $incompatible{$vars[$i]} } = removeDups(@{ $incompatible{$vars[$i]} });
+        #...get combinations of biallelic alleles for each affected
+SAMPLE: foreach my $s (@samples){
+            next SAMPLE if $sample_vars{$vars[$i]}->{$s} < 1;
+            if ($sample_vars{$vars[$i]}->{$s} == 2){
+                push @{ $biallelic{$s} } , "$vars[$i]/$vars[$i]";
+            }
+            if ($sample_vars{$vars[$i]}->{$s} >= 1){
+                for (my $j = $i + 1; $j < @vars; $j++){
+                    if (not exists $incompatible{"$vars[$i]/$vars[$j]"}){
+                    #...check phase info for any potential compound hets (if available)
+                        if ( checkPhase($i, $j, $s) ){
+                            push @{ $biallelic{$s} } , "$vars[$i]/$vars[$j]";
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    #%biallelic now has a key for every sample with a potential biallelic genotype
+    #Test no. samples with biallelic genotypes against min. no. required matching 
+    # samples or if not specified all samples
+    my $min_matches = scalar(@samples);
+    if ($opts{n}){
+        $min_matches = $opts{n};
+    }
+    #bail out straight away if no. samples less than required;
+    return if keys %biallelic < $min_matches;
+    if ($ped_obj){ #count each family only once if we have a ped file
+        my $matches = 0;
+        my %counted_fam = ();
+        foreach my $s (keys %biallelic){
+            my $f_id;
+            eval {
+                $f_id = $ped_obj->getFamilyId($s);
+            };
+            if ($f_id){
+                $matches++ if not exists $counted_fam{$f_id};
+                $counted_fam{$f_id}++;
+            }else{
+                $matches++;
+            }
+            last if $matches >= $min_matches;
+        }
+        return if $matches < $min_matches;
+    }
+    #TODO               
 #...if using ped files check segregation of putative biallelic combinations for each family and remove those that do not segregate properly
+
+
+}
+
+#################################################
+sub checkPhase{
+#returns 1 if alleles are in trans or if phase unknown
+#returns 0 if alleles in cis
+    #my ($al1, $al2, $sample) = @_;
+    #TODO
+    ...
+}
 #################################################
 sub readClassesFile{
     my $classes_file = "$data_dir/$opts{m}_classes.tsv";
@@ -341,6 +501,24 @@ sub readClassesFile{
 }
 
 #################################################
+sub readBiotypesFile{
+    my $btypes_file = "$data_dir/biotypes.tsv";
+    open (my $BT, $btypes_file) or die 
+"Could not open biotypes file '$btypes_file': $!\n";
+    my %biotypes = (); 
+    while (my $line = <$BT>){
+        next if $line =~ /^#/;
+        $line =~ s/[\r\n]//g; 
+        next if not $line;
+        my @split = split("\t", $line);
+        die "Not enough fields in biotypes file line: $line\n" if @split < 2;
+        $biotypes{lc($split[0])} = lc($split[1]);
+    }
+    close $BT;
+    return %biotypes;
+}
+
+#################################################
 sub getAndCheckClasses{
     my %all_classes = readClassesFile();
     if (not @classes){
@@ -356,8 +534,25 @@ sub getAndCheckClasses{
         die "Error - variant class '$class' not recognised.\n"
           if not exists $all_classes{lc($class)} ;
     }
+    return @classes;
 }
 
+#################################################
+sub getAndCheckBiotypes{
+    return if $opts{no_biotype_filtering}; 
+    my %all_biotypes = readBiotypesFile();
+    if (not @biotypes){
+        @biotypes = grep { $all_biotypes{$_} eq 'filter' } keys %all_biotypes;
+    }
+    @biotypes = map { lc($_) } @biotypes; 
+    @biotypes = removeDups(@biotypes);
+    foreach my $biotyp (@biotypes) {
+        die "Error - biotype '$biotyp' not recognised.\n"
+          if not exists $all_biotypes{lc($biotyp)} ;
+    }
+    return @biotypes;
+}
+    
 #################################################
 sub getAndCheckInSilicoPred{
     return if not @damaging;
@@ -498,6 +693,7 @@ sub getCsqFields{
             feature_type
             consequence
             hgnc
+            biotype
         );
     }else{
         return 
@@ -788,12 +984,306 @@ sub haveVariant{
 }
 
 #################################################
+sub identicalGenotypes{
+    my $gts = shift;
+    my $min_matching = shift;
+    $min_matching = defined $min_matching ? $min_matching : scalar keys %$gts;
+    return 1 if $min_matching < 2;#if only one sample needs to match then no need to check
+    my %matches = (); #keys are genotypes, values are arrays of samples with GT
+    foreach my $s (keys %$gts){
+        if ( $gts->{$s} =~ /^\.[\/\|]\.$/ ){    
+            next;
+        }elsif ( $gts->{$s} =~ /^0[\/\|]0$/ ){
+            next;
+        }
+        (my $current_geno = $gts->{$s}) =~ s/[\|]/\//;
+          #don't let allele divider affect whether a genotype matches or not
+        push @{ $matches{$current_geno} } , $s;
+        if ($min_matching == scalar keys %$gts){
+        #if we require all to match, bail out if there's more than one genotype
+            return 0 if keys %matches > 1;
+        }
+    }
+    foreach my $k (keys %matches){
+        my %family_matches = (); 
+        my $m = 0;
+        foreach my $s (@{$matches{$k}}){
+            if ($opts{f}){
+                my $f_id;
+                eval {
+                    $f_id = $ped_obj->getFamilyId($s);
+                };
+                if ($f_id){
+                    if (not @fams || grep { $f_id eq $_ } @fams){
+                        $family_matches{$f_id}++;
+                    }else{
+                        $m++;
+                    }
+                }else{
+                    $m++;
+                }
+            }else{
+                $m++;
+            }
+        }
+        foreach my $f (keys %family_matches){#only count families once 
+            if ($opts{y}){#min matching per family
+                $m++ if ($family_matches{$f} >= $opts{y});
+            }else{#otherwise need all affecteds from family in VCF to match
+                my @aff, $ped_obj->getAffectedsFromFamily($f);
+                @aff = grep { exists $gts->{$_} } @aff;
+                $m++ if $family_matches{$f} >= scalar @aff; 
+            }
+        }
+        return 1 if $m >= $min_matching - 1;
+    }
+    return 0;
+}
+ 
+#################################################
+sub getAfAnnotations{
+    my $info_fields = shift;
+    my %af_found = ();
+    my @af_fields =  qw ( 
+        AS_CAF
+        AS_G5A
+        AS_G5
+        AS_COMMON
+        EVS_EA_AF
+        EVS_AA_AF
+        EVS_ALL_AF
+    );
+    foreach my $key (keys %$info_fields){
+        my $warning = <<EOT
+[WARNING] Found expected frequency annotation ($key) in INFO fields, but 'Number' field is $info_fields->{$key}->{Number}, expected 'A'. Ignoring this field.
+EOT
+;
+        my $info = <<EOT
+[INFO] Found allele frequency annotation: $key. This will be used for filtering on allele frequency.
+EOT
+;
+        if (grep { $key eq $_ } @af_fields){
+            if ($info_fields->{$key}->{Number} ne 'A'){
+                print STDERR $warning;
+            }else{
+                print STDERR $info;
+                $af_found{$key} = $info_fields->{$key};
+            }
+        }else{
+            if ($key =~ /^FVOV_AF_\S+$/){
+                if ($info_fields->{$key}->{Number} ne 'A'){
+                    print STDERR $warning;
+                }else{
+                    print STDERR $info;
+                    $af_found{$key} = $info_fields->{$key};
+                }
+            }
+        }
+    }
+    return %af_found;
+}
+
+#################################################
+sub alleleAboveMaf{
+    my $i = shift; #1-based index of alt allele to assess
+    my $af_values = shift; #hash ref of INFO fields to their values
+    foreach my $k (keys %{$af_values}){
+        next if not $af_values->{$k};
+        next if $af_values->{$k} eq '.';
+        my @split = split(",", $af_values->{$k}); 
+        next if $split[$i] eq '.';
+        if ($k eq "AS_G5" or $k eq "AS_G5A"){
+            if ($opts{a} <= 0.05 and $split[$i] > 0){
+                return 1;
+            }
+        }elsif ($k eq "AS_COMMON"){
+            if ($opts{a} <= 0.01 and $split[$i] > 0){
+                return 1;
+            }
+        }else{#should be a standard allele freq now
+            if ($af_info_fields{$k}->{Type} eq 'Float' or $k eq 'AS_CAF'){
+                return 1 if $split[$i] >= $opts{a};
+            }else{
+                inform_user("WARNING: Don't know how to parse INFO field: $k.\n");
+            }
+        }
+    }
+    return 0;
+}
+#################################################
+sub getAfInfoValues{
+    my $l = shift;
+    my %values = ();
+    foreach my $k (keys %af_info_fields){
+        $values{$k} = VcfReader::getVariantInfoField($l, $k);
+    }
+    return %values;
+}
+#################################################
+sub getConsequences{
+    my $line = shift; 
+    if ($opts{m} eq 'vep'){
+        return VcfReader::getVepFields
+        ( 
+            line        => $line,
+            field       => \@csq_fields,
+            vep_header  => \%csq_header,
+        );
+    }else{
+        return VcfReader::getSnpEffFields
+        ( 
+            line          => $line,
+            field         => \@csq_fields,
+            snpeff_header => \%csq_header,
+        );
+    }
+}
+
+#################################################
+sub consequenceMatchesClass{
+    my $annot = shift;
+    if ($opts{m}){
+        return consequenceMatchesVepClass($annot);
+    }else{
+        return consequenceMatchesSnpEffClass($annot);
+    }   
+}
+
+#################################################
+sub consequenceMatchesVepClass{
+    my $annot = shift;
+    #skip unwanted biotypes
+    return 0 if (exists $biotype_filters{$annot->{biotype}}) ;
+
+    #skip non-canonical transcripts if --canonical_only selected
+    if ($opts{canonical_only}) {
+        return 0 if ( not $annot->{canonical} );
+    }
+    
+    my @anno_csq = split( /\&/, $annot->{consequence} );
+    #skip NMD transcripts
+    return 0 if ( grep { /NMD_transcript_variant/i } @anno_csq );
+
+ANNO: foreach my $ac (@anno_csq){
+        $ac = lc($ac);#we've already converted %class_filters to all lowercase
+        if ( exists $class_filters{$ac} ){
+            if ($ac eq 'missense_variant' and %in_silico_filters){
+                return 1 if damagingMissenseVep($ac); 
+            }elsif ( lc $ac eq 'splice_region_variant' 
+                     and $opts{consensus_splice_site}){
+                my $consensus = $annot->{splice_consensus};
+                next if not $consensus;
+                if ( $consensus !~ /SPLICE_CONSENSUS\S+/i ) {
+                    inform_user(
+"WARNING: SPLICE_CONSENSUS annotation '$consensus' is not " .
+"recognised as an annotation from the SpliceConsensus VEP plugin.\n");
+                }
+            }else{
+                return 1;
+            }
+        }
+    }
+    return 0;#no annotation matching %class_filters
+}
+
+#################################################
+sub consequenceMatchesSnpEffClass{
+    my $annot = shift;
+    #skip unwanted biotypes
+    return 0 if exists $biotype_filters{lc $annot->{transcript_biotype} };
+    my @anno_csq = split( /\&/, $annot->{annotation} );
+ANNO: foreach my $ac (@anno_csq){
+        $ac = lc($ac);#we've already converted %class_filters to all lowercase
+        if ( exists $class_filters{$ac} ){
+            if ($ac eq 'missense_variant' and %in_silico_filters){
+                return 1 if damagingMissenseSnpEff($ac); 
+            }else{
+                return 1;
+            }
+        }
+    }
+    return 0;#no annotation matching %class_filters
+}
+
+#################################################
+sub damagingMissenseVep{
+    #returns 1 if variant is damaging and should be kept
+    #returns 0  if variant is benign and should be filtered
+    my $anno = shift; 
+    my %filter_matched = ();
+PROG: foreach my $k ( sort keys %in_silico_filters) {
+        my $score = $anno->{ lc $k };
+        if ( not $score or $score =~ /^unknown/i ){ 
+        #don't filter if score is not available for this variant 
+        #unless skip_unpredicted_missense is in effect
+            $filter_matched{$k}++ unless $opts{skip_unpredicted_missense};
+            next;
+        }
+SCORE: foreach my $f ( @{ $in_silico_filters{$k} } ) {
+            if ( $f =~ /^\d(\.\d+)*$/ ) {
+                my $prob;
+                if ( $score =~ /^(\d(\.\d+)*)/ ) {
+                    $prob = $1;
+                }else {
+                    next SCORE
+                      ; #if score not available for this feature ignore and move on
+                }
+                if ( lc $k eq 'polyphen' and $prob >= $f ){
+                    #higher is more damaging for polyphen - damaging
+                    return 1 if $opts{keep_any_damaging};
+                    $filter_matched{$k}++;
+                    next PROG;
+                }elsif( $prob <= $f ){
+                    #lower is more damaging for sift and condel - damaging
+                    return 1 if $opts{keep_any_damaging};
+                    $filter_matched{$k}++;
+                    next PROG;
+                }
+            }else{
+                $score =~ s/\(.*\)//;
+                if ( lc $f eq lc $score ) {    #damaging
+                    return 1 if $opts{keep_any_damaging};
+                    $filter_matched{$k}++;
+                    next PROG;
+                }
+            }
+        }
+
+    }
+    foreach my $k ( keys %in_silico_filters ) {
+        #filter if any of sift/condel/polyphen haven't matched our deleterious settings
+        return 0 if not exists $filter_matched{$k};
+    }
+    return 1;
+}
+
+#################################################
+sub damagingMissenseSnpEff{
+    #returns 1 if variant is damaging and should be kept
+    #returns 0  if variant is benign and should be filtered
+#    my $anno = shift; 
+#    my %filter_matched = ();
+    #TODO!
+    ...
+}
+#################################################
+#################################################
 #################################################
 #################################################
 sub removeDups{
     my %seen = ();
     return grep { ! $seen{$_}++ } @_;
 }
+
+#################################################
+sub updateProgressBar{
+    if ($progressbar) {
+        if ($var_count >= $next_update){
+            $next_update = $progressbar->update( $var_count )
+        }
+    }
+}
+
 #################################################
 sub informUser{
     my $msg = shift;
@@ -805,6 +1295,7 @@ sub informUser{
     }
 }
 
+#################################################
 
 =head1 NAME
 
@@ -824,7 +1315,7 @@ findBiallelic.pl - identify variants that make up potential biallelic variation 
 
 =item B<-i    --input>
 
-VCF file annotated with Ensembl's variant_effect_predictor.pl script.
+VCF file annotated with Ensembl's variant_effect_predictor.pl script or SnpEff.
 
 =item B<-o    --output>
 
