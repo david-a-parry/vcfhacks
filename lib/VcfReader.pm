@@ -892,6 +892,23 @@ sub getVariantField{
     return $split->[$vcf_fields{$field}];
 }
 
+=item B<getMultipleVariantFields>
+
+Retrieves the value for given fields from a given line. The first value passed should be an array reference to a split line and the remaining values should be the names of fields to retrieve (e.g. CHROM, POS, ID, REF, ALT, QUAL, FILTER, INFO, FORMAT). 
+ 
+ my ($QUAL, INFO) = VcfReader::getMultipleVariantFields(\@split_line, 'QUAL', 'INFO');
+
+
+=cut
+sub getMultipleVariantFields{
+    my $split = shift;
+    my @values = ();
+    while (my $field = shift){
+        push @values, getVariantField($split, $field); 
+    }
+    return @values;
+}
+ 
 =item B<getVariantInfoField>
 
 Retrieves the value for a given INFO field from a given line. Returns the value of the INFO field if found and the INFO field has a value, returns 1 if the INFO field is found and is a flag and returns nothing if the INFO field is not found. The first value passed should be an array reference to a split line and the second should be the name of the INFO field to retrieve.
@@ -3611,7 +3628,150 @@ sub _altToVep{
     return @vep_alleles;
 }
 
+=head2 SnpEff Utilities
 
+=item B<readSnpEffHeader>
+
+Reads the header of a VCF and returns a hash of SnpEff consequence fields to their index in output. Only 'ANN' annotations are supported, not old style 'EFF' annotations.
+
+Arguments
+
+=over 16
+
+=item vcf
+
+File name of VCF file to search. This argument or 'header' argument is required.
+
+=item header
+
+Header string or an array of header lines in the same order they appear in a file. Ignored if using 'vcf' argument.
+
+=back 
+
+
+ my %snpeff_header = VcfReader::readSnpEffHeader(vcf => 'file.vcf');
+ 
+ my %snpeff_header = VcfReader::readSnpEffHeader(header => \@header);
+
+=cut
+
+sub readSnpEffHeader{
+    my (%args) = @_;
+    croak "Invalid header " if not checkHeader(%args);
+    my %snpeff_fields = ();
+    my @header = ();
+    if ($args{vcf}){
+        @header = getHeader($args{vcf});
+    }elsif($args{header}){
+        if (ref $args{header} eq 'ARRAY'){
+            @header = @{$args{header}};
+        }else{
+            @header = split("\n", $args{header});
+        }
+    }
+
+    my @info = grep{/^##INFO=<ID=ANN/} @header;
+    if (not @info){
+        croak "Method 'readSnpEffHeader' requires ANN INFO field in meta header (e.g. '##INFO=<ID=ANN,Number...') but no matching lines found ";
+    }
+    carp "Warning - multiple ANN fields found, ignoring all but the most recent field " if @info > 1;
+   my $csq_line = $info[-1] ;#assume last applied SnpEff consequences are what we are looking for 
+   my @csq_fields = ();    
+   if ($csq_line =~ /Description="Functional annotations: '(.+)' ">/){
+       @csq_fields = split(/\s+\|\s+/, $1);
+   }else{
+       croak "Method 'readSnpEffHeader' couldn't properly read the ANN format from the corresponding INFO line: $csq_line ";
+   }
+   if (not @csq_fields){
+       croak "Method 'readSnpEffHeader' didn't find any SnpEff fields from the corresponding ANN INFO line: $csq_line ";
+   }
+   for (my $i = 0; $i < @csq_fields; $i++){
+       $snpeff_fields{lc($csq_fields[$i])} = $i;
+   }
+    return %snpeff_fields;
+}
+
+=item B<getSnpEffFields>
+
+Reads a VEP annotated VCF record and returns the annotations corresponding to either a single or multiple fields as an array or array of hashes respectively. 
+
+Arguments
+
+=over 16
+
+=item line
+
+Array reference to a split line to be passed as the first argument. Required.
+
+=item snpeff_header
+
+Reference to a hash of ANN fields to their index in the output as retrieved using the 'readSnpEffHeader' method. Required.
+
+=item field
+
+Name of an ANN field to retrieve or an array reference to the names of several ANN fields to retrieve. Can also use 'all' to retrieve all ANN fields. Required.
+
+
+=back 
+
+
+ my %snpeff_header = VcfReader::readSnpEffHeader(header => \@header);
+ my @all_genes  = VcfReader::getSnpEffFields
+ (
+    line          => \@split_line,
+    snpeff_header => \%snpeff_header,
+    field         => 'gene',
+ );
+    
+
+ my @all_snpeff = VcfReader::getSnpEffFields
+ (
+    line          => \@split_line,
+    snpeff_header => \%snpeff_header,
+    field         => 'all',
+ );
+
+=cut
+
+sub getSnpEffFields{
+    my (%args) = @_;
+    foreach my $ar (qw / line snpeff_header field / ){
+        croak "Argument $ar is required for getSnpEffFields method.\n" if not exists $args{$ar};
+    }
+    croak "line argument must be an array reference " if ref $args{line} ne 'ARRAY';
+    croak "snpeff_header argument must be a hash reference " if ref $args{snpeff_header} ne 'HASH';
+    my @return;
+    my @fields = ();
+    my $inf_csq = getVariantInfoField($args{line}, 'ANN');
+    croak "No ANN field found in INFO field for line " . join("\t", @{$args{line}}) . "\n" if not $inf_csq;
+    my @csqs = split(",", $inf_csq);
+    foreach my $c (@csqs){#foreach feature (e.g. transcript) 
+        my %t_csq = ();
+        my @v = split(/[\|]/, $c);
+        if (ref $args{field} eq 'ARRAY'){
+            @fields =  @{$args{field}};
+        }elsif (lc($args{field}) eq 'all'){
+            @fields = keys %{$args{snpeff_header}};
+        }else{#if a single field we return an array of values, not hash refs
+            if (not exists $args{snpeff_header} -> {lc($args{field})}){
+                carp "$args{field} feature does not exist in ANN field ";
+            }else{
+                 push @return, $v[ $args{snpeff_header} -> {lc($args{field})} ];
+                 next;
+            }
+        }
+        foreach my $f (@fields){#for multiple fields we return an array of hash refs
+            if (not exists $args{snpeff_header} -> {lc($f)}){
+                carp "$f feature does not exist in ANN field ";
+                next;
+            }
+            $t_csq{lc$f} = $v[ $args{snpeff_header} -> {lc($f)} ];
+        }
+        push @return, \%t_csq;
+    }
+    return @return;
+}
+ 
 =cut
 
 
