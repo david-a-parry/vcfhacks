@@ -5,12 +5,12 @@ use Getopt::Long;
 use Pod::Usage;
 use Term::ProgressBar;
 use Data::Dumper;
+use List::Util qw ( first ) ;
 use POSIX qw/strftime/;
 use FindBin;
 use lib "$FindBin::Bin/lib";
 use ParsePedfile;
 use VcfReader;
-use FindBiallelic;
 
 my $data_dir = "$FindBin::Bin/data";
 my $progressbar;
@@ -347,7 +347,7 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
         foreach my $annot (@a_csq){
             if (consequenceMatchesClass($annot)){
                 #create variant ID for this allele
-                my $var_id = "$chrom:$pos-$alleles[$i]";
+                my $var_id = "$chrom:$pos-$i";
                 #add variant ID to transcript variants
                 push @{$transcript_vars{$annot->{$feature_id}}}, $var_id;
                 #get allele counts per sample for this variant ID if we haven't already
@@ -432,7 +432,7 @@ SAMPLE: foreach my $s (@samples){
                 for (my $j = $i + 1; $j < @vars; $j++){
                     if (not exists $incompatible{"$vars[$i]/$vars[$j]"}){
                     #...check phase info for any potential compound hets (if available)
-                        if ( checkPhase($i, $j, $s) ){
+                        if (! allelesInCis($vars[$i], $vars[$j], $s) ){
                             push @{ $biallelic{$s} } , "$vars[$i]/$vars[$j]";
                         }
                     }
@@ -475,12 +475,46 @@ SAMPLE: foreach my $s (@samples){
 }
 
 #################################################
-sub checkPhase{
-#returns 1 if alleles are in trans or if phase unknown
-#returns 0 if alleles in cis
-    #my ($al1, $al2, $sample) = @_;
-    #TODO
-    ...
+sub allelesInCis{
+#returns 0 if alleles are in trans or if phase unknown
+#returns 1 if alleles in cis
+#alleles to check ($var1 and $var2) are in format "$chrom:$pos-$i";
+    my ($var1, $var2, $sample) = @_;
+    #get corresponding split VCF line for allele
+    my ($line1, $line2) = ($vcf_lines{$var1}, $vcf_lines{$var2});
+    my %format1 = VcfReader::getVariantFormatFields($line1);
+    my %format2 = VcfReader::getVariantFormatFields($line2);
+    my %phase1 = ();
+    my %phase2 = ();
+    foreach my $f (qw / PID PGT / ){
+        return 0 if not exists $format1{$f};
+        return 0 if not exists $format2{$f};
+        $phase1{$f} = VcfReader::getSampleGenotypeField
+        (
+           line => $line1, 
+           field => $f, 
+           sample => $sample, 
+           sample_to_columns => \%sample_to_col
+        );
+        $phase2{$f} = VcfReader::getSampleGenotypeField
+        (
+           line => $line2, 
+           field => $f, 
+           sample => $sample, 
+           sample_to_columns => \%sample_to_col
+        );
+    }
+    if ($phase1{PID} ne $phase2{PID}){
+        return 0;
+    }
+    my $al1 = (split "-", $var1)[1];#ALT allele number from VCF line
+    my $al2 = (split "-", $var2)[1];
+    my @pgt1 = split(/\|/, $phase1{PGT});
+    my @pgt2 = split(/\|/, $phase2{PGT});
+    my $p1 = first { $_ eq $al1 } @pgt1; 
+    my $p2 = first { $_ eq $al2 } @pgt2; 
+    return 1 if $p1 == $p2;
+    return 0;
 }
 #################################################
 sub readClassesFile{
