@@ -177,8 +177,10 @@ if ($opts{check_all_samples}) {
 
 addSamplesFromPed();
 #store ped samples in a hash so we can quickly look up whether we should be checking family IDs
-my %ped_samples = map { $_ => undef } getPedSamples();
-
+my %ped_samples = ();
+if ($opts{f}){
+    %ped_samples = map { $_ => undef } getPedSamples();
+}
 checkSamples(); 
 
 my $min_biallelic = checkMinMatching();
@@ -268,7 +270,6 @@ LINE: while (my $line = <$VCF>){
         #if new chrom check biallelics and clear collected data
         $contigs{$chrom} = scalar(keys%contigs);
         checkBiallelic() if $contigs{$chrom} > 0;
-        #TODO - clear hashes, print lines, store genes
     }
     
     #skip if FILTER != PASS and PASS required
@@ -375,6 +376,8 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
 
 checkBiallelic();
 
+outputGeneList();
+
 
 #################################################
 sub getSampleAlleleCounts{
@@ -402,7 +405,9 @@ sub checkBiallelic{
                 #$lines_to_write{vcfline}->{alt_num}->{2}->{sample} = n  [hom samples] 
                 #$lines_to_write{vcfline}->{alt_num}->{1}->{sample} = n  [het samples] 
     foreach my $k (keys %transcript_vars) { 
-        parseAlleles($transcript_vars{$k}, \%lines_to_write);
+        if (parseAlleles($transcript_vars{$k}, \%lines_to_write)){
+            push @{ $gene_listing{$transcript_to_symbol{$k}} }, $k if $LIST;
+        }
     }
     #get VCF lines with biallelic variants
     my @lines_out = ();
@@ -441,7 +446,7 @@ sub checkBiallelic{
     }
     @lines_out = VcfReader::sortByPos(\@lines_out); 
     foreach my $l (@lines_out){
-        print join("\t", @$l) . "\n";
+        print $OUT join("\t", @$l) . "\n";
     }
     #clear collected data before moving on to next chromosome
     %transcript_vars = ();
@@ -533,6 +538,7 @@ SAMPLE: foreach my $s (@samples){
             }
         }
     }
+    return 1;#transcript has biallelic variants
 }
 
 #################################################
@@ -835,8 +841,9 @@ EOT
 
 #################################################
 sub getCsqFields{
+   my @fields = ();
     if ($opts{m} eq 'vep'){
-        return 
+       @fields =  
         qw(
             allele
             gene
@@ -846,8 +853,11 @@ sub getCsqFields{
             symbol
             biotype
         );
+        if ($opts{consensus_splice_site}){
+            push @fields, "splice_consensus";
+        }
     }else{
-        return 
+        @fields = 
         qw(
             allele
             annotation
@@ -859,6 +869,19 @@ sub getCsqFields{
             transcript_biotype
         );
     }
+    foreach my $f (@fields){
+        if (not exists $csq_header{$f}){
+            if ($f eq 'splice_consensus'){
+                die "Could not find 'splice_consensus' field in header " . 
+                  "- please ensure you use the SpliceConsensus plugin when ".
+                  "running VEP.\n";
+            }
+            die "Could not find '$f' field in $opts{m} consequence header " .
+              "- please ensure you have annotated your file including the appropriate ".
+              "fields.\n";
+        }
+    }
+    return @fields;
 }
 
 #################################################
@@ -1339,6 +1362,8 @@ ANNO: foreach my $ac (@anno_csq){
                     inform_user(
 "WARNING: SPLICE_CONSENSUS annotation '$consensus' is not " .
 "recognised as an annotation from the SpliceConsensus VEP plugin.\n");
+                }else{
+                    return 1;
                 }
             }else{
                 return 1;
@@ -1430,6 +1455,18 @@ sub damagingMissenseSnpEff{
     #TODO!
     ...
 }
+
+#################################################
+sub outputGeneList{
+    return if not $LIST;
+    foreach my $k (sort keys %gene_listing){
+        print $LIST "$k:\t" . join
+        (
+            ",", 
+            @{ $gene_listing{$k} }
+        ) . "\n";
+    }
+}
 #################################################
 sub is_autosome {
     my ($chrom) = @_;
@@ -1438,8 +1475,6 @@ sub is_autosome {
     }
     return 1;
 }
-#################################################
-#################################################
 #################################################
 sub removeDups{
     my %seen = ();
