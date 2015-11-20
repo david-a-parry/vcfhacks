@@ -2618,11 +2618,25 @@ sub sortVariants{
 }
 
 
+=item B<sortByPos>
+
+Sort method to sort variants by position only (useful if you have an array of variants from a single contig).
+
+ @var = VcfReader::sortByPos(\@var);
+
+=cut
+
+sub sortByPos{
+    my $vars = shift;
+    return sort { getVariantField($a, "POS") <=> getVariantField($b, "POS") } @$vars;
+}
+    
+
 =item B<byContigs>
 
 Sort method to sort contigs on a generic order. Contigs will be ordered numerically, then X, Y and MT and any other contigs will be ordered ascibetically.
 
- my @contigs = sort byContigs @contigs;
+ my @contigs = sort VcfReader::byContigs @contigs;
 
 =cut
 sub byContigs{
