@@ -373,8 +373,10 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
     }
     updateProgressBar();  
 }
+close $VCF;
 
 checkBiallelic();
+close $OUT;
 
 outputGeneList();
 
@@ -1466,6 +1468,7 @@ sub outputGeneList{
             @{ $gene_listing{$k} }
         ) . "\n";
     }
+    close $LIST;
 }
 #################################################
 sub is_autosome {
