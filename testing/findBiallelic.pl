@@ -143,13 +143,14 @@ EOT
     }
 }
 
-my $feature_id = $opts{m} eq 'vep' ? "feature" : "feature_id";
-my $symbol_id = $opts{m} eq 'vep' ? "symbol" : "gene_name";
 
-#check VEP/SNPEFF header and get annotation order
+#check VEP/SNPEFF header and get annotation order - will set $opts{m} if not already defined
 my %csq_header = getAndCheckCsqHeader();
   # hash of functional annotations from SnpEff/VEP to their annotation index
     
+my $feature_id = $opts{m} eq 'vep' ? "feature" : "feature_id";
+my $symbol_id = $opts{m} eq 'vep' ? "symbol" : "gene_name";
+
 #set default consequence fields to retrieve 
 my @csq_fields = getCsqFields();#consequence fields to retrieve from VCF
 
@@ -175,10 +176,12 @@ if ($opts{check_all_samples}) {
 # check affected and unaffected samples from ped and specified on commandline
 
 addSamplesFromPed();
+#store ped samples in a hash so we can quickly look up whether we should be checking family IDs
+my %ped_samples = map { $_ => undef } getPedSamples();
 
 checkSamples(); 
 
-checkMinMatching();
+my $min_biallelic = checkMinMatching();
 
 # get available allele frequency annotations if filtering on AF
 # NOTE: we do not use VEP annotations as they do not necessarily match the variant allele
@@ -200,7 +203,7 @@ writeOptionsToHeader();
 my $next_update = 0;
 my $total_vars  = 0; 
 my $var_count   = 0;
-if ($opts{p}) {
+if ($opts{b}) {
     if ( $opts{i} eq "-" ) {
         informUser("Can't use --progress option when input is from STDIN\n");
     }else{
@@ -244,6 +247,7 @@ open (my $VCF, $opts{i}) or die "Cannot open $opts{i} for processing variants: $
 #read line
 LINE: while (my $line = <$VCF>){
     next if $line =~ /^#/;#skip header
+    chomp $line;
     $var_count++;#for progress bar
     my @split = split("\t", $line); 
     my ($chrom, $pos, $filter) = VcfReader::getMultipleVariantFields
@@ -279,7 +283,6 @@ LINE: while (my $line = <$VCF>){
     my %samp_to_gt = VcfReader::getSampleCall
     (
           line              => \@split, 
-          all               => 1,
           sample_to_columns => \%sample_to_col,
           minGQ             => $opts{w},
           multiple          => \@samples,
@@ -296,7 +299,6 @@ LINE: while (my $line = <$VCF>){
     my %reject_to_gt = VcfReader::getSampleCall
     (
           line              => \@split, 
-          all               => 1,
           sample_to_columns => \%sample_to_col,
           minGQ             => $opts{u},
           multiple          => \@reject,
@@ -315,8 +317,8 @@ LINE: while (my $line = <$VCF>){
     if ($opts{m} eq 'vep'){
         @alts_to_vep_allele = VcfReader::altsToVepAllele
         (
-            $alleles[0],
-            [ @alleles[1..$#alleles] ], 
+            ref => $alleles[0],
+            alts => [ @alleles[1..$#alleles] ], 
         );
     }
     #assess each ALT allele (REF is index 0)
@@ -338,7 +340,7 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
         #get all consequences for current allele
         my @a_csq = ();
         if ($opts{m} eq 'vep'){
-            @a_csq = grep { $_->{allele} eq $alts_to_vep_allele[$i] } @csq;
+            @a_csq = grep { $_->{allele} eq $alts_to_vep_allele[$i-1] } @csq;
         }else{
             @a_csq = grep { $_->{allele} eq $alleles[$i] } @csq;
         }
@@ -395,8 +397,51 @@ sub getSampleAlleleCounts{
 #################################################
 sub checkBiallelic{
 #For each transcript (i.e. each key of our hash of transcript IDs to arrays of var IDs)
+    my %lines_to_write = (); #collect vcf lines to write out as keys...
+                            #...with values being a hash of hom and het samples like so:
+                #$lines_to_write{vcfline}->{alt_num}->{2}->{sample} = n  [hom samples] 
+                #$lines_to_write{vcfline}->{alt_num}->{1}->{sample} = n  [het samples] 
     foreach my $k (keys %transcript_vars) { 
-        parseAlleles($transcript_vars{$k});
+        parseAlleles($transcript_vars{$k}, \%lines_to_write);
+    }
+    #get VCF lines with biallelic variants
+    my @lines_out = ();
+    foreach my $v (keys %lines_to_write){
+        #add findBiallelicSamplesHom and findBiallelicSamplesHet INFO fields
+        my @het_string = ();
+        my @hom_string = ();
+        my @sv = split("\t", $v);
+        my @alleles = VcfReader::readAlleles(line => \@sv); 
+        for (my $alt = 1; $alt < @alleles; $alt++){ 
+            if (exists $lines_to_write{$v}->{$alt}->{1}){
+                push @het_string, join("|", keys %{$lines_to_write{$v}->{$alt}->{1}});
+            }else{
+                push @het_string, ".";
+            }
+            if (exists $lines_to_write{$v}->{$alt}->{2}){
+                push @hom_string, join("|", keys %{$lines_to_write{$v}->{$alt}->{2}});
+            }else{
+                push @hom_string, ".";
+            }
+        }
+        
+        my $line_ref = VcfReader::addVariantInfoField
+        (
+            line  => \@sv,
+            id    => "findBiallelicSamplesHom",
+            value => join(",", @hom_string),
+        );
+        $line_ref = VcfReader::addVariantInfoField
+        (
+            line  => \@sv,
+            id    => "findBiallelicSamplesHet",
+            value => join(",", @het_string),
+        );
+        push @lines_out, $line_ref;
+    }
+    @lines_out = VcfReader::sortByPos(\@lines_out); 
+    foreach my $l (@lines_out){
+        print join("\t", @$l) . "\n";
     }
     #clear collected data before moving on to next chromosome
     %transcript_vars = ();
@@ -407,38 +452,39 @@ sub checkBiallelic{
 
 #################################################
 sub parseAlleles{
-    my $var_hash = shift;
+    my $vars = shift;
+    my $output_hash = shift;
     my %incompatible = (); #key is genotype can't be a pathogenic compound het combo
     my %biallelic = (); #key is sample, value is array of (putative) biallelic genotypes
-    my @vars = keys (%$var_hash); 
     #foreach allele
-VAR: for (my $i = 0; $i < @vars; $i ++){ 
+VAR: for (my $i = 0; $i < @$vars; $i ++){ 
         #check unaffected genotypes...
         foreach my $r (@reject){
             #... and skip VAR if homozygous
-            next VAR if $sample_vars{$vars[$i]}->{$r} == 2;
-            if ($sample_vars{$vars[$i]}->{$r} != 1){#reject sample is het...
+            next VAR if $sample_vars{$vars->[$i]}->{$r} == 2;
+            if ($sample_vars{$vars->[$i]}->{$r} == 1){#reject sample is het...
             #... find other alleles in same sample - these can't make up biallelic combos
-                for (my $j = $i + 1; $j < @vars; $j++){
-                    if ($sample_vars{$vars[$j]}->{$r} == 1){
-                        $incompatible{"$vars[$i]/$vars[$j]"}++;
+                for (my $j = $i + 1; $j < @$vars; $j++){
+                    if ($sample_vars{$vars->[$j]}->{$r} == 1){
+                        $incompatible{"$vars->[$i]/$vars->[$j]"}++;
                     }
                 }
             }
         }
-        @{ $incompatible{$vars[$i]} } = removeDups(@{ $incompatible{$vars[$i]} });
+        @{ $incompatible{$vars->[$i]} } = removeDups(@{ $incompatible{$vars->[$i]} });
         #...get combinations of biallelic alleles for each affected
 SAMPLE: foreach my $s (@samples){
-            next SAMPLE if $sample_vars{$vars[$i]}->{$s} < 1;
-            if ($sample_vars{$vars[$i]}->{$s} == 2){
-                push @{ $biallelic{$s} } , "$vars[$i]/$vars[$i]";
+            next SAMPLE if $sample_vars{$vars->[$i]}->{$s} < 1;
+            if ($sample_vars{$vars->[$i]}->{$s} == 2){
+                push @{ $biallelic{$s} } , "$vars->[$i]/$vars->[$i]";
             }
-            if ($sample_vars{$vars[$i]}->{$s} >= 1){
-                for (my $j = $i + 1; $j < @vars; $j++){
-                    if (not exists $incompatible{"$vars[$i]/$vars[$j]"}){
+            next SAMPLE if $opts{z};#move on if -z/--homozygous only
+            if ($sample_vars{$vars->[$i]}->{$s} >= 1){
+                for (my $j = $i + 1; $j < @$vars; $j++){
+                    if (not exists $incompatible{"$vars->[$i]/$vars->[$j]"}){
                     #...check phase info for any potential compound hets (if available)
-                        if (! allelesInCis($vars[$i], $vars[$j], $s) ){
-                            push @{ $biallelic{$s} } , "$vars[$i]/$vars[$j]";
+                        if (! allelesInCis($vars->[$i], $vars->[$j], $s) ){
+                            push @{ $biallelic{$s} } , "$vars->[$i]/$vars->[$j]";
                         }
                     }
                 }
@@ -449,40 +495,99 @@ SAMPLE: foreach my $s (@samples){
     #%biallelic now has a key for every sample with a potential biallelic genotype
     #Test no. samples with biallelic genotypes against min. no. required matching 
     # samples or if not specified all samples
-    my $min_matches = scalar(@samples);
-    if ($opts{n}){
-        $min_matches = $opts{n};
-    }
     #bail out straight away if no. samples less than required;
-    return if keys %biallelic < $min_matches;
-    if ($ped_obj){ #count each family only once if we have a ped file
-        my $matches = 0;
-        my %counted_fam = ();
-        foreach my $s (keys %biallelic){
-            my $f_id;
-            eval {
-                $f_id = $ped_obj->getFamilyId($s);
-            };
-            if ($f_id){
-                if (not @fams || grep { $f_id eq $_ } @fams){
-                    $matches++ if not exists $counted_fam{$f_id};
-                    $counted_fam{$f_id}++;
-                }else{
-                    $matches++;
-                }
-            }else{
-                $matches++;
-            }
-            last if $matches >= $min_matches;
+    return if keys %biallelic < $min_biallelic;
+    if ($ped_obj){ 
+        #check segregation of putative biallelic combinations 
+        #...for each family and remove those that do not segregate/not
+        #...present in all/min affecteds
+        checkSegregation(\%biallelic);
+    } 
+    my $matches = 0;
+    my %counted_fam = ();
+    foreach my $s (keys %biallelic){
+        #count each family only once if we have a ped file
+        if (exists $ped_samples{$s}){
+            my $f_id = $ped_obj->getFamilyId($s);
+            $matches++ if not exists $counted_fam{$f_id};
+            $counted_fam{$f_id}++;
+        }else{
+            $matches++;
         }
-        return if $matches < $min_matches;
+        last if $matches >= $min_biallelic;
     }
-    #TODO               
-#...if using ped files check segregation of putative biallelic combinations for each family and remove those that do not segregate properly
+    return if $matches < $min_biallelic;
 
-
+    # get lines for each allele of biallelic genotypes
+    # and add INFO field for samples with biallelic variants
+    foreach my $s (keys %biallelic){
+        foreach my $gt ( @{ $biallelic{$s} } ){
+            my @alleles = split(/\//, $gt);
+            foreach my $al (@alleles){
+                #add information to output hash reference 
+                my $alt = (split "-", $al)[1];#ALT allele number from VCF line
+                my $line = join("\t", @{$vcf_lines{$al}}); 
+                $output_hash->{$line}->{$alt}->{$sample_vars{$al}->{$s}}->{$s}++;
+                #$output_hash->{vcfline}->{alt_num}->{2}->{sample} = n  [hom samples] 
+                #$output_hash->{vcfline}->{alt_num}->{1}->{sample} = n  [het samples] 
+            }
+        }
+    }
 }
 
+#################################################
+sub checkSegregation{
+    my $bial = shift;#hash of samples to biallelic genotypes
+    #each genotype represented as "$chrom:$pos1-$i/$chrom:$pos2-$j";
+
+    #for each biallelic genotype check all/min affecteds in each family carry genotype
+    foreach my $f ( getPedFamilies() ) {
+        my @checked_gts = ();#genotypes that pass seg test for each family go here
+        my @f_aff = grep { exists $sample_to_col{$_} } $ped_obj->getAffectedsFromFamily($f);
+        my @f_unaff = grep { exists $sample_to_col{$_} } $ped_obj->getUnaffectedsFromFamily($f);
+        my %gt_counts = ();
+        foreach my $s (@f_aff){
+            foreach my $gt (@{ $bial->{$s} }){
+                push @{$gt_counts{$gt}}, $s;
+            }
+        }
+        my $min_matches = $opts{y} ? $opts{y} : scalar(@f_aff);
+GENOTYPE: foreach my $gt (keys %gt_counts){
+            next if @{$gt_counts{$gt}} < $min_matches; 
+            my @alleles = split(/\//, $gt);
+            die "ERROR: Got " . scalar(@alleles) . " alleles in genotype counts!" 
+              if @alleles != 2; 
+            #we should have already rejected any combinations carried by any unaffected
+            #...found in the VCF, so now we just need to check obligate carriers
+            my ($chrom) = (split /\:/, $alleles[0]); 
+            if (not $opts{y} and not $opts{t} and $chrom !~ /^(chr)*X/i){
+                foreach my $aff ( $ped_obj->getAffectedsFromFamily($f) ){
+                    my @par =
+                      grep { exists $sample_to_col{$_} } $ped_obj->getParents($aff);
+                # if no min_matching_per_family and no ignore_carrier_status
+                #...assume we are not entertaining any phenocopies and therefore
+                #...all obligate carriers must carry mutation
+                    foreach my $un (@par) {
+                        if ($sample_vars{$alleles[0]}->{$un} == 0 and
+                            $sample_vars{$alleles[1]}->{$un} == 0){
+                            #parent does not carry either allele
+                            next GENOTYPE;
+                        }
+                    }
+                } 
+            }#if we haven't skipped then genotype should be considered valid
+            push @checked_gts, $gt;    
+        }#end of each genotype
+        foreach my $s (@f_aff){
+            delete  $bial->{$s};    
+            foreach my $gt (@checked_gts){
+                if ( grep {$s eq $_ } @{$gt_counts{$gt}}){
+                    push @{$bial->{$s}}, $gt;
+                }
+            }
+        }
+    }#end of each family
+}
 #################################################
 sub allelesInCis{
 #returns 0 if alleles are in trans or if phase unknown
@@ -518,12 +623,14 @@ sub allelesInCis{
     }
     my $al1 = (split "-", $var1)[1];#ALT allele number from VCF line
     my $al2 = (split "-", $var2)[1];
+    return 0 if $phase1{PGT} eq '.' or $phase2{PGT} eq '.';
     my @pgt1 = split(/\|/, $phase1{PGT});
     my @pgt2 = split(/\|/, $phase2{PGT});
     my $p1 = first { $_ eq $al1 } @pgt1; 
     my $p2 = first { $_ eq $al2 } @pgt2; 
-    return 1 if $p1 == $p2;
-    return 0;
+    return 0 if not defined $p1 or not defined $p2;
+    return 0 if $p1 != $p2;
+    return 1;
 }
 
 #################################################
@@ -654,7 +761,7 @@ sub readInSilicoFile{
         $line =~ s/[\r\n]//g; 
         next if not $line;
         my @split = split("\t", $line);
-        die "Not enough fields in classes file line: $line\n" if @split < 2;
+        die "Not enough fields in classes file line: $line\n" if @split < 3;
         $pred{lc($split[0])}->{lc($split[1])} = lc($split[2]) ;
     }
     close $INS;
@@ -736,7 +843,7 @@ sub getCsqFields{
             feature
             feature_type
             consequence
-            hgnc
+            symbol
             biotype
         );
     }else{
@@ -863,6 +970,8 @@ sub checkSamples{
     #check @samples and @reject and @reject_except exist in file
     my @not_found = ();
     foreach my $s ( @samples, @reject, @reject_except ) {
+        #reject_except may contain a single empty entry
+        next if length($s) == 0;
         if ( not exists $sample_to_col{$s} ) {
             push @not_found, $s;
         }
@@ -900,8 +1009,10 @@ sub checkSamples{
 sub checkMinMatching{
     #'n|num_matching=i',
     #'y|num_matching_per_family=i',
-
-    return if not defined $opts{n} and not defined $opts{y};
+    
+    if (not defined $opts{n} and not defined $opts{y}){
+        return calculateMaxMatching();
+    }
     if (defined $opts{n}){
         if ($opts{n} < 1){
             die "ERROR: -n/--num_matching argument must be greater than 0!\n";
@@ -927,18 +1038,30 @@ sub checkMinMatching{
     }
     #min matching settings are not greater than no. families if using ped
     if ($opts{f}) {
-        my $aff_count =  0; #only count one sample per family for $min_matching_samples
+        my $aff_count =  calculateMaxMatching(); 
+        if ($opts{n} > $aff_count){
+            die
+"ERROR: -n/--num_matching value ($opts{n}) is greater than the number of families "
+      . "with affected members identified in ". $ped_obj->{get_file} . " and --samples identified ($aff_count)\n";
+        }
+    }
+    return $opts{n};
+}
+
+#################################################
+sub calculateMaxMatching{
+    #only count one sample per family for $min_matching_samples
+    if ($opts{f}){
+        my $aff_count = 0;
         foreach my $f ( getPedFamilies() ) {
             $aff_count++ if ( $ped_obj->getAffectedsFromFamily($f) );
         }
         foreach my $s (@samples) {
             $aff_count++ if not grep { $_ eq $s } getPedSamples();
         }
-        if ($opts{n} > $aff_count){
-            die
-"ERROR: -n/--num_matching value ($opts{n}) is greater than the number of families "
-      . "with affected members identified in ". $ped_obj->{get_file} . " and --samples identified ($aff_count)\n";
-        }
+        return $aff_count;
+    }else{
+        return scalar @samples;
     }
 }
 
@@ -1004,7 +1127,9 @@ sub writeOptionsToHeader{
 #################################################
 sub checkChromosome{
     my $chrom = shift;
-    if ($opts{x_linked} == 0){
+    if ( not defined $opts{x_linked} ){
+        return 0 if not is_autosome($chrom);
+    }elsif ($opts{x_linked} == 0){
         return 0 if not is_autosome($chrom);
     }elsif ($opts{x_linked} == 1){
         return 0 if $chrom !~ /^(chr)*X$/i;
@@ -1053,16 +1178,9 @@ sub identicalGenotypes{
         my $m = 0;
         foreach my $s (@{$matches{$k}}){
             if ($opts{f}){
-                my $f_id;
-                eval {
-                    $f_id = $ped_obj->getFamilyId($s);
-                };
-                if ($f_id){
-                    if (not @fams || grep { $f_id eq $_ } @fams){
-                        $family_matches{$f_id}++;
-                    }else{
-                        $m++;
-                    }
+                if (exists $ped_samples{$s}){
+                    my $f_id = $ped_obj->getFamilyId($s);
+                    $family_matches{$f_id}++;
                 }else{
                     $m++;
                 }
@@ -1212,7 +1330,7 @@ ANNO: foreach my $ac (@anno_csq){
         $ac = lc($ac);#we've already converted %class_filters to all lowercase
         if ( exists $class_filters{$ac} ){
             if ($ac eq 'missense_variant' and %in_silico_filters){
-                return 1 if damagingMissenseVep($ac); 
+                return 1 if damagingMissenseVep($annot); 
             }elsif ( lc $ac eq 'splice_region_variant' 
                      and $opts{consensus_splice_site}){
                 my $consensus = $annot->{splice_consensus};
@@ -1266,17 +1384,19 @@ PROG: foreach my $k ( sort keys %in_silico_filters) {
 SCORE: foreach my $f ( @{ $in_silico_filters{$k} } ) {
             if ( $f =~ /^\d(\.\d+)*$/ ) {
                 my $prob;
-                if ( $score =~ /^(\d(\.\d+)*)/ ) {
+                if ( $score =~ /\((\d(\.\d+)*)\)/ ) {
                     $prob = $1;
                 }else {
                     next SCORE
                       ; #if score not available for this feature ignore and move on
                 }
-                if ( lc $k eq 'polyphen' and $prob >= $f ){
+                if ( lc $k eq 'polyphen'){
+                    if ( $prob >= $f ){
                     #higher is more damaging for polyphen - damaging
-                    return 1 if $opts{keep_any_damaging};
-                    $filter_matched{$k}++;
-                    next PROG;
+                        return 1 if $opts{keep_any_damaging};
+                        $filter_matched{$k}++;
+                        next PROG;
+                    }
                 }elsif( $prob <= $f ){
                     #lower is more damaging for sift and condel - damaging
                     return 1 if $opts{keep_any_damaging};
@@ -1311,6 +1431,13 @@ sub damagingMissenseSnpEff{
     ...
 }
 #################################################
+sub is_autosome {
+    my ($chrom) = @_;
+    if ( $chrom =~ /^(chr)*[XYM]/i ) {
+        return 0;
+    }
+    return 1;
+}
 #################################################
 #################################################
 #################################################
