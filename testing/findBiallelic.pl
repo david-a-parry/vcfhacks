@@ -218,7 +218,7 @@ EOT
         if (not $@){
             informUser("Counting variants in input for progress monitoring.\n"); 
             $total_vars = VcfReader::countVariants($opts{i});
-            informUser("INFO: $opts{i} has $total_vars variants.\n");
+            informUser("$opts{i} has $total_vars variants.\n");
             $progressbar = Term::ProgressBar->new(
                 {
                     name  => "Biallelic",
@@ -250,6 +250,7 @@ open (my $VCF, $opts{i}) or die "Cannot open $opts{i} for processing variants: $
 LINE: while (my $line = <$VCF>){
     next if $line =~ /^#/;#skip header
     chomp $line;
+    updateProgressBar();  
     $var_count++;#for progress bar
     my @split = split("\t", $line); 
     my ($chrom, $pos, $filter) = VcfReader::getMultipleVariantFields
@@ -371,9 +372,10 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
             }
         }
     }
-    updateProgressBar();  
 }
 close $VCF;
+
+updateProgressBar();  
 
 checkBiallelic();
 close $OUT;
@@ -1339,9 +1341,10 @@ sub consequenceMatchesClass{
 #################################################
 sub consequenceMatchesVepClass{
     my $annot = shift;
+    #intergenic variants have no feature associated with them - skip
+    return 0 if $annot->{consequence} eq "intergenic_variant";
     #skip unwanted biotypes
     return 0 if (exists $biotype_filters{$annot->{biotype}}) ;
-
     #skip non-canonical transcripts if --canonical_only selected
     if ($opts{canonical_only}) {
         return 0 if ( not $annot->{canonical} );
