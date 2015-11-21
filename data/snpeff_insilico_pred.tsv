@@ -1,0 +1,15 @@
+dbNSFP_MutationAssessor_pred	H	default
+dbNSFP_MutationAssessor_pred	M	default
+dbNSFP_LRT_pred	D	default
+dbNSFP_MutationTaster_pred	A	default
+dbNSFP_MutationTaster_pred	D	default
+dbNSFP_Polyphen2_HVAR_pred	P	default
+dbNSFP_Polyphen2_HVAR_pred	D	default
+dbNSFP_SIFT_pred	D	default
+dbNSFP_MutationAssessor_pred	L	valid
+dbNSFP_MutationAssessor_pred	N	valid
+dbNSFP_LRT_pred	N	valid
+dbNSFP_MutationTaster_pred	N	valid
+dbNSFP_MutationTaster_pred	P	valid
+dbNSFP_Polyphen2_HVAR_pred	B	valid
+dbNSFP_SIFT_pred	T	valid
