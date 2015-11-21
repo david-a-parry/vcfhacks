@@ -1385,6 +1385,8 @@ ANNO: foreach my $ac (@anno_csq){
 sub consequenceMatchesSnpEffClass{
     my $annot = shift;
     my $l = shift;
+    #skip variants with undef features (intergenic variants)
+    return if not defined $annot->{feature_id};
     #skip unwanted biotypes
     return 0 if exists $biotype_filters{lc $annot->{transcript_biotype} };
     my @anno_csq = split( /\&/, $annot->{annotation} );
@@ -1462,7 +1464,12 @@ sub damagingMissenseSnpEff{
     my $l = shift; 
     my %filter_matched = ();
 PROG: foreach my $k ( sort keys %in_silico_filters) {
-        my @scores = split(",", VcfReader::getVariantInfoField($l, $k));
+        my $pred = VcfReader::getVariantInfoField($l, $k);
+        if (not defined $pred){
+            $filter_matched{$k}++ unless $opts{skip_unpredicted_missense};
+            next;
+        }
+        my @scores = split(",", $pred); 
          #snpsift does not annotate properly per allele...
          #... so as a fudge we have to just count any matching value
         foreach my $score (@scores){
@@ -1641,6 +1648,7 @@ VEP:
 
 SnpEff:
 
+
         chromosome
         coding_sequence_variant
         inframe_insertion
@@ -1655,8 +1663,10 @@ SnpEff:
         splice_donor_variant
         splice_region_variant
         stop_lost
+        5_prime_UTR_premature_start_codon_gain_variant
         start_lost
         stop_gained
+        exon_loss
 
 Available classes that can be chosen instead of (or in addition to - see below) these classes can be found in the data/vep_classes.tsv and data/snpeff_classes.tsv files respectively. 
 
