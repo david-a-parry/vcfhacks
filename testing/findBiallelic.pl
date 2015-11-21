@@ -46,12 +46,13 @@ GetOptions(
     'classes=s{,}',
     'add_classes=s{,}',
     'd|damaging=s{,}',
+    'c|cadd_filter=f',
     'canonical_only',
     'biotype_filters=s{,}',
     'no_biotype_filtering',
     'pass_filters',
     'keep_any_damaging',
-    'skip_unpredicted_missense',
+    'skip_unpredicted',
     'a|af=f',
     'x_linked=i', #1 = look for x-linked recessive only, 2= look for x-linked recessive as well
     'check_all_samples',
@@ -118,6 +119,14 @@ else {
     $opts{u} = $opts{q};
 }
 
+#CADD phred score filter is >= 0 (0 means no CADD filtering)
+if (defined $opts{c}){
+    pod2usage(
+        -message => "SYNTAX ERROR: -c/--cadd_filter cannot be a negative value.\n",
+        -exitval => 2
+    ) if $opts{c} < 0;
+}
+    
 #get and check header
 
 my @header = VcfReader::getHeader($opts{i});
@@ -128,6 +137,8 @@ my %sample_to_col = VcfReader::getSamples
     header => \@header,
     get_columns => 1,
 );
+#get available INFO fields from header
+my %info_fields = VcfReader::getInfoFields(header => \@header);
 
 #check mode
 
@@ -190,9 +201,18 @@ my $min_biallelic = checkMinMatching();
 
 my %af_info_fields = (); #check available INFO fields for AF annotations
 if ( defined $opts{a} ) {
-    my %info_fields = VcfReader::getInfoFields(header => \@header);
     %af_info_fields = getAfAnnotations(\%info_fields);   
 }
+
+#if filtering on CADD score check we have a CaddPhredScore header
+if ( $opts{c} ){
+    if (not exists $info_fields{CaddPhredScore}){
+        informUser("WARNING: No 'CaddPhredScore' INFO field found in header ".
+         "- your input probably does not contain annotations for filtering on" . 
+         " CADD score.\n");
+    }
+}
+
 ######PRE-PROCESSING######
 
 #Get filehandle for output (STDOUT or file) and optionally gene list (STDERR or file)
@@ -325,8 +345,29 @@ LINE: while (my $line = <$VCF>){
         );
     }
     #assess each ALT allele (REF is index 0)
+    my @cadd_scores = (); 
+    if ($opts{c}){
+        my $cadd = VcfReader::getVariantInfoField
+        (
+            \@split,
+            'CaddPhredScore',
+        );
+        if ($cadd){
+            @cadd_scores = split(",", $cadd);
+        }
+    }
 ALT: for (my $i = 1; $i < @alleles; $i++){
         next ALT if $alleles[$i] eq '*';
+        #if CADD filtering skip if less than user-specified cadd filter
+        #if no CADD score for allele then we won't skip unless using --
+        if (@cadd_scores){
+            my $score = $cadd_scores[$i - 1];
+            if ($score ne '.'){
+                next ALT if $score < $opts{c};
+            }elsif ($opts{skip_unpredicted}){
+                next ALT;
+            }
+        }
         #skip if homozygous in any unaffected
         next ALT if 
         (  
@@ -334,12 +375,11 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
             map { $reject_to_gt{$_} }
             keys %reject_to_gt
         );
-    
+        
         #filter if AF annotations > MAF
         if (%af_info_fields){ #check for annotateSnps.pl etc. frequencies
            next ALT if ( alleleAboveMaf($i - 1, \%af_info_values) );
         }
-    
         #get all consequences for current allele
         my @a_csq = ();
         if ($opts{m} eq 'vep'){
@@ -723,6 +763,9 @@ sub getAndCheckInSilicoPred{
     foreach my $d (@damaging) {
         $d = lc($d); 
         my ( $prog, $label ) = split( "=", $d );
+        if ($opts{m} eq 'snpeff' and $prog ne 'all'){
+            $prog = "dbnsfp_$prog" if $prog !~ /^dbnsfp_/;
+        }
         if ($prog eq 'all'){
             foreach my $k (keys %pred){
                 foreach my $j ( keys %{$pred{$k}} ){
@@ -1413,8 +1456,8 @@ PROG: foreach my $k ( sort keys %in_silico_filters) {
         my $score = $anno->{ lc $k };
         if ( not $score or $score =~ /^unknown/i ){ 
         #don't filter if score is not available for this variant 
-        #unless skip_unpredicted_missense is in effect
-            $filter_matched{$k}++ unless $opts{skip_unpredicted_missense};
+        #unless skip_unpredicted is in effect
+            $filter_matched{$k}++ unless $opts{skip_unpredicted};
             next;
         }
 SCORE: foreach my $f ( @{ $in_silico_filters{$k} } ) {
@@ -1466,7 +1509,7 @@ sub damagingMissenseSnpEff{
 PROG: foreach my $k ( sort keys %in_silico_filters) {
         my $pred = VcfReader::getVariantInfoField($l, $k);
         if (not defined $pred){
-            $filter_matched{$k}++ unless $opts{skip_unpredicted_missense};
+            $filter_matched{$k}++ unless $opts{skip_unpredicted};
             next;
         }
         my @scores = split(",", $pred); 
@@ -1557,11 +1600,15 @@ findBiallelic.pl - identify variants that make up potential biallelic variation 
 
 =item B<-i    --input>
 
-VCF file annotated with Ensembl's variant_effect_predictor.pl script or SnpEff.
+VCF file annotated with Ensembl's variant_effect_predictor.pl (VEP) script or SnpEff.
 
 =item B<-o    --output>
 
 File to print output (optional). Will print to STDOUT by default.
+
+=item B<-m    --mode>
+
+This program will attempt to detect the format of your input automatically by looking for VEP or SnpEff annotations, but you may specify either 'vep' or 'snpeff' with this option to select the mode employed by the script if you have a file with both VEP and SnpEff annotations. By default, if both annotations are present and the program is run without this option, VEP annotations will be used.
 
 =item B<-l    --list>
 
@@ -1627,7 +1674,7 @@ This script will ignore any lines in a PED file starting with '#' to allow users
 
 One or more mutation classes to retrieve. By default only variants labelled with one of the following classes will count towards biallelic variants:
 
-VEP:
+B<VEP:>
 
         TFBS_ablation
         TFBS_amplification
@@ -1646,8 +1693,7 @@ VEP:
         transcript_ablation
         transcript_amplification
 
-SnpEff:
-
+B<SnpEff:>
 
         chromosome
         coding_sequence_variant
@@ -1676,15 +1722,21 @@ Specify one or more classes, separated by spaces, to add to the default mutation
 
 =item B<--consensus_splice_site>
 
-Use this flag in order to keep splice_region_variant classes only if they are in a splice consensus region as defined by the SpliceConsensus VEP plugin. You do not need to specify 'splice_region_variant' using --classes or --add_classes options when using this flag. You B<MUST> have used the SpliceConsensus plugin when running the VEP for this option to work correctly.
+Use this flag in order to keep splice_region_variant classes only if they are in a splice consensus region as defined by the SpliceConsensus VEP plugin. You do not need to specify 'splice_region_variant' using --classes or --add_classes options when using this flag. You B<MUST> have used the SpliceConsensus plugin when running the VEP for this option to work correctly. This option is only used when running on VEP annotations. 
 
 =item B<--canonical_only>
 
-Only consider canonical transcripts.
+Only consider canonical transcripts (VEP annotations only). 
+
+=item B<-c    --cadd_filter>
+
+If you have annotated CADD phred scores for alleles using rankOnCaddScore.pl you may use this option to specify a CADD phred score threshold for variants. Any alleles that have a CADD phred score below the value specified here will be filtered. Variants without a CADD phred score will not be filtered unless using the --skip_unpredicted option. You should have run rankOnCaddScore.pl with the --do_not_sort option to maintain chromosome order of your variants if you use this option or else you will need to sort your VCF before running findBiallelic.pl.
 
 =item B<-d    --damaging>
 
-Specify SIFT, PolyPhen or Condel labels or scores to filter on. Add the names of the programs you want to use, separated by spaces, after the --damaging option. By default SIFT will keep variants labelled as 'deleterious', Polyphen will keep variants labelled as 'possibly_damaging' or 'probably_damaging' and  Condel will keep variants labelled as 'deleterious'.
+Specify in silico prediction scores to filter on. If running on VEP annotations PolyPhen, SIFT and Condel scores given by VEP will be used. If running on SnpEff annotations scores given by running SnpSift's 'dbnsfp' mode will be used.  
+
+B<VEP mode:> Specify SIFT, PolyPhen or Condel labels or scores to filter on. Add the names of the programs you want to use, separated by spaces, after the --damaging option. By default SIFT will keep variants labelled as 'deleterious', Polyphen will keep variants labelled as 'possibly_damaging' or 'probably_damaging' and  Condel will keep variants labelled as 'deleterious'.
 
 If you want to filter on custom values specify values after each program name in the like so: 'polyphen=probably_damaging'. Seperate multiple values with commas - e.g. 'polyphen=probably_damaging,possibly_damaging,unknown'. You may specify scores between 0 and 1 to filter on scores rather than labels - e.g. 'sift=0.3'. For polyphen, variants with scores lower than this score are considered benign and filtered, for SIFT and Condel higher scores are considered benign.
 
@@ -1694,20 +1746,47 @@ Valid labels for Polyphen: probably_damaging, possibly_damaging, benign, unknown
 
 Valid labels for Condel : deleterious, neutral
 
-
 To use default values for all three programs use 'all' (i.e. '--damaging all').
 
 The default behaviour is to only keep variants predicted as damaging by ALL programs specified, although if the value is not available for one or more programs than that program will be ignored for filtering purposes.
 
+B<SnpEff mode:> Specify one of the following annotations provided by dbNSFP (your input must have been annotated using SnpSift's dbnsfp mode): 
+
+    dbNSFP_LRT_pred
+    dbNSFP_MutationAssessor_pred
+    dbNSFP_MutationTaster_pred
+    dbNSFP_Polyphen2_HVAR_pred
+    dbNSFP_SIFT_pred
+
+You may omit the 'dbNSFP_' from the beginning if you wish. As with the VEP scores, you may specify 'all' to use the default values for all programs. Choosing custom values is also performed in the same way as for VEP annotations (e.g. dbNSFP_MutationAssessor_pred=H,M,L). 
+
+The default scores considered 'damaging' are the following:
+
+    dbNSFP_LRT_pred=D
+    dbNSFP_MutationAssessor_pred=H,M
+    dbNSFP_MutationTaster_pred=A,D
+    dbNSFP_Polyphen2_HVAR_pred=P,D
+    dbNSFP_SIFT_pred=D
+
+Other valid scores, not used by default:
+
+    dbNSFP_LRT_pred=N
+    dbNSFP_MutationAssessor_pred=L,N
+    dbNSFP_MutationTaster_pred=N,P
+    dbNSFP_Polyphen2_HVAR_pred=B
+    dbNSFP_SIFT_pred=T
+
+The default behaviour is to only keep variants predicted as damaging by ALL programs specified, although if the value is not available for one or more programs than that program will be ignored for filtering purposes.
+
+B<WARNING:> At the time of writing, SnpSift (latest version - SnpSift version 4.1l, build 2015-10-03) does not properly annotate the prediction values per allele. Multiple scores for the same allele are separated by commas, as are values per allele, therefore it is not possible to determine if a prediction is for a particular allele. For this reason, findBiallelic.pl will use the highest present prediction value found for a variant in order to decide whether or not to filter an allele when using SnpEff/SnpSift annotations.
 
 =item B<-k    --keep_any_damaging>
 
 If using multiple programs for filters for --damaging argument use this flag to keep variants predicted to be damaging according to ANY of these programs.
 
-=item B<--skip_unpredicted_missense>
+=item B<--skip_unpredicted>
 
-Skip variants that do not have a score from one or more programs specified by the --damaging argument. The --keep_any_damaging argument will override this behaviour if any of the available predictions are considered damaging.
-
+Skip alleles that do not have a score from one or more programs specified by the -d/--damaging argument or if using the -c/--cadd_filter option and an allele has no CADD phred score. The --keep_any_damaging argument will override this behaviour for -d/--damaging predictions if any of the available predictions are considered damaging.
 
 =item B<--af    --allele_frequency>
 
@@ -1808,7 +1887,7 @@ While related samples will be most useful in filtering using the --reject argume
 
 David A. Parry
 
-University of Leeds
+University of Edinburgh
 
 =head1 COPYRIGHT AND LICENSE
 
