@@ -838,6 +838,19 @@ sub getFileLengthFromIndex{
     return $idx{last_line};
 }
 
+=item B<openVcf>
+
+Convenience method to return a filehandle for reading a VCF. Requires a filename as the only input. If the filename ends in '.bgz' or '.gz' it will be opened via IO::Uncompress::Gunzip.
+
+ my $FH = VcfReader::openVcf('file.vcf');
+
+=cut
+
+sub openVcf{
+    my $vcf = shift;
+    croak "openVcf method requires a filename as an argument" if not $vcf;
+    return _openFileHandle($vcf);
+}
 
 sub _openFileHandle{
     my $vcf = shift;
