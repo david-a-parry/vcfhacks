@@ -1,0 +1,8 @@
+sift	deleterious	default
+sif	tolerated	valid
+polyphen	probably_damaging	default
+polyphen	possibly_damaging	default	
+polyphen	benign	valid
+polyphen	unknown	valid
+condel	deleterious	valid
+condel	neutral	valid
