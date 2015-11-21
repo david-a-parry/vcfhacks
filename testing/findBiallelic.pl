@@ -632,8 +632,8 @@ sub allelesInCis{
     return 0 if $phase1{PGT} eq '.' or $phase2{PGT} eq '.';
     my @pgt1 = split(/\|/, $phase1{PGT});
     my @pgt2 = split(/\|/, $phase2{PGT});
-    my $p1 = first { $_ eq $al1 } @pgt1; 
-    my $p2 = first { $_ eq $al2 } @pgt2; 
+    my $p1 = first { $pgt1[$_] eq $al1 } 0 .. $#pgt1;
+    my $p2 = first { $pgt2[$_] eq $al2 } 0 .. $#pgt2;
     return 0 if not defined $p1 or not defined $p2;
     return 0 if $p1 != $p2;
     return 1;
