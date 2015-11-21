@@ -349,7 +349,7 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
         
         #skip if VEP/SNPEFF annotation is not the correct class (or not predicted damaging if using that option)
         foreach my $annot (@a_csq){
-            if (consequenceMatchesClass($annot)){
+            if (consequenceMatchesClass($annot, \@split)){
                 #create variant ID for this allele
                 my $var_id = "$chrom:$pos-$i";
                 #add variant ID to transcript variants
@@ -720,6 +720,7 @@ sub getAndCheckInSilicoPred{
     my %pred = readInSilicoFile(); 
     my %filters = (); 
     foreach my $d (@damaging) {
+        $d = lc($d); 
         my ( $prog, $label ) = split( "=", $d );
         if ($prog eq 'all'){
             foreach my $k (keys %pred){
@@ -1331,10 +1332,11 @@ sub getConsequences{
 #################################################
 sub consequenceMatchesClass{
     my $annot = shift;
+    my $l = shift;
     if ($opts{m}){
         return consequenceMatchesVepClass($annot);
     }else{
-        return consequenceMatchesSnpEffClass($annot);
+        return consequenceMatchesSnpEffClass($annot, $l);
     }   
 }
 
@@ -1381,6 +1383,7 @@ ANNO: foreach my $ac (@anno_csq){
 #################################################
 sub consequenceMatchesSnpEffClass{
     my $annot = shift;
+    my $l = shift;
     #skip unwanted biotypes
     return 0 if exists $biotype_filters{lc $annot->{transcript_biotype} };
     my @anno_csq = split( /\&/, $annot->{annotation} );
@@ -1388,7 +1391,7 @@ ANNO: foreach my $ac (@anno_csq){
         $ac = lc($ac);#we've already converted %class_filters to all lowercase
         if ( exists $class_filters{$ac} ){
             if ($ac eq 'missense_variant' and %in_silico_filters){
-                return 1 if damagingMissenseSnpEff($ac); 
+                return 1 if damagingMissenseSnpEff($l); 
             }else{
                 return 1;
             }
@@ -1455,10 +1458,28 @@ SCORE: foreach my $f ( @{ $in_silico_filters{$k} } ) {
 sub damagingMissenseSnpEff{
     #returns 1 if variant is damaging and should be kept
     #returns 0  if variant is benign and should be filtered
-#    my $anno = shift; 
-#    my %filter_matched = ();
-    #TODO!
-    ...
+    my $l = shift; 
+    my %filter_matched = ();
+PROG: foreach my $k ( sort keys %in_silico_filters) {
+        my @scores = split(",", VcfReader::getVariantInfoField($l, $k));
+         #snpsift does not annotate properly per allele...
+         #... so as a fudge we have to just count any matching value
+        foreach my $score (@scores){
+            next if ( not $score or $score eq '.' );
+            foreach my $f ( @{ $in_silico_filters{$k} } ) {
+                if ( lc $f eq lc $score ) {    #damaging
+                    return 1 if $opts{keep_any_damaging};
+                    $filter_matched{$k}++;
+                    next PROG;
+                }
+            }
+        }
+    }
+    foreach my $k ( keys %in_silico_filters ) {
+        #filter if any of sift/condel/polyphen haven't matched our deleterious settings
+        return 0 if not exists $filter_matched{$k};
+    }
+    return 1;
 }
 
 #################################################
@@ -1473,6 +1494,7 @@ sub outputGeneList{
     }
     close $LIST;
 }
+
 #################################################
 sub is_autosome {
     my ($chrom) = @_;
