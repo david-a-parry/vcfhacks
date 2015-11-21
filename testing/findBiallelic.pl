@@ -244,7 +244,8 @@ my %transcript_to_symbol = ();
  #transcript ID to gene symbol
 my %gene_listing = ();
  #gene symbols => transcripts with biallelic variants
-open (my $VCF, $opts{i}) or die "Cannot open $opts{i} for processing variants: $!\n";
+
+my $VCF = VcfReader::openVcf($opts{i}); 
 
 #read line
 LINE: while (my $line = <$VCF>){
