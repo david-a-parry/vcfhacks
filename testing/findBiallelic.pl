@@ -1246,26 +1246,26 @@ sub getAfAnnotations{
     );
     foreach my $key (keys %$info_fields){
         my $warning = <<EOT
-[WARNING] Found expected frequency annotation ($key) in INFO fields, but 'Number' field is $info_fields->{$key}->{Number}, expected 'A'. Ignoring this field.
+WARNING: Found expected frequency annotation ($key) in INFO fields, but 'Number' field is $info_fields->{$key}->{Number}, expected 'A'. Ignoring this field.
 EOT
 ;
         my $info = <<EOT
-[INFO] Found allele frequency annotation: $key. This will be used for filtering on allele frequency.
+Found allele frequency annotation: $key. This will be used for filtering on allele frequency.
 EOT
 ;
         if (grep { $key eq $_ } @af_fields){
             if ($info_fields->{$key}->{Number} ne 'A'){
-                print STDERR $warning;
+                informUser($warning);
             }else{
-                print STDERR $info;
+                informUser($info);
                 $af_found{$key} = $info_fields->{$key};
             }
         }else{
             if ($key =~ /^FVOV_AF_\S+$/){
                 if ($info_fields->{$key}->{Number} ne 'A'){
-                    print STDERR $warning;
+                    informUser($warning);
                 }else{
-                    print STDERR $info;
+                    informUser($info);
                     $af_found{$key} = $info_fields->{$key};
                 }
             }
@@ -1334,7 +1334,7 @@ sub getConsequences{
 sub consequenceMatchesClass{
     my $annot = shift;
     my $l = shift;
-    if ($opts{m}){
+    if ($opts{m} eq 'vep'){
         return consequenceMatchesVepClass($annot);
     }else{
         return consequenceMatchesSnpEffClass($annot, $l);
