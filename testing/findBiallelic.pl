@@ -1597,61 +1597,45 @@ This script will ignore any lines in a PED file starting with '#' to allow users
 
 One or more mutation classes to retrieve. By default only variants labelled with one of the following classes will count towards biallelic variants:
 
-        transcript_ablation
-        splice_donor_variant
-        splice_acceptor_variant
-        stop_gained
-        frameshift_variant
-        stop_lost
-        initiator_codon_variant
-        inframe_insertion
-        inframe_deletion
-        missense_variant
-        protein_altering_variant
-        transcript_amplification
+VEP:
+
         TFBS_ablation
         TFBS_amplification
-        regulatory_region_ablation
-        regulatory_region_amplification
-
-The user can specify one or more of the following classes instead: 
-
-        transcript_ablation
-        splice_donor_variant
-        splice_acceptor_variant
-        stop_gained
         frameshift_variant
-        stop_lost
-        initiator_codon_variant
-        inframe_insertion
         inframe_deletion
+        inframe_insertion
+        initiator_codon_variant
         missense_variant
         protein_altering_variant
+        regulatory_region_ablation
+        regulatory_region_amplification
+        splice_acceptor_variant
+        splice_donor_variant
+        stop_gained
+        stop_lost
+        transcript_ablation
         transcript_amplification
-        splice_region_variant
-        incomplete_terminal_codon_variant
-        synonymous_variant
-        stop_retained_variant
+
+SnpEff:
+
+        chromosome
         coding_sequence_variant
-        mature_miRNA_variant
-        5_prime_UTR_variant
-        3_prime_UTR_variant
-        intron_variant
-        NMD_transcript_variant
-        non_coding_exon_variant
-        nc_transcript_variant
-        upstream_gene_variant
-        downstream_gene_variant
-        TFBS_ablation
-        TFBS_amplification
-        TF_binding_site_variant
-        regulatory_region_variant
-        regulatory_region_ablation
-        regulatory_region_amplification
-        feature_elongation
-        feature_truncation
-        intergenic_variant
+        inframe_insertion
+        disruptive_inframe_insertion
+        inframe_deletion
+        disruptive_inframe_deletion
+        exon_loss_variant
+        frameshift_variant
+        missense_variant
+        rare_amino_acid_variant
+        splice_acceptor_variant
+        splice_donor_variant
+        splice_region_variant
+        stop_lost
+        start_lost
+        stop_gained
 
+Available classes that can be chosen instead of (or in addition to - see below) these classes can be found in the data/vep_classes.tsv and data/snpeff_classes.tsv files respectively. 
 
 =item B<-a    --add_classes>
 
@@ -1659,7 +1643,7 @@ Specify one or more classes, separated by spaces, to add to the default mutation
 
 =item B<--consensus_splice_site>
 
-Use this flag in order to keep splice_region_variant classes only if they are in a splice consensus region as defined by the SpliceConsensus plugin. You do not need to specify 'splice_region_variant' using --classes or --add_classes options when using this flag. You B<MUST> have used the SpliceConsensus plugin when running the VEP for this option to work correctly.
+Use this flag in order to keep splice_region_variant classes only if they are in a splice consensus region as defined by the SpliceConsensus VEP plugin. You do not need to specify 'splice_region_variant' using --classes or --add_classes options when using this flag. You B<MUST> have used the SpliceConsensus plugin when running the VEP for this option to work correctly.
 
 =item B<--canonical_only>
 
@@ -1691,13 +1675,12 @@ If using multiple programs for filters for --damaging argument use this flag to 
 
 Skip variants that do not have a score from one or more programs specified by the --damaging argument. The --keep_any_damaging argument will override this behaviour if any of the available predictions are considered damaging.
 
-=item B<-g    --gmaf>
 
-Use a value between 0.00 and 0.50 to specify global minor allele frequencey filtering. If GMAF is available for variant it will be filtered if equal to or greater than the value specfied here.
+=item B<--af    --allele_frequency>
 
-=item B<--maf>
+Use a value between 0.00 and 0.50 to specify allele frequencey filtering for annotations from annotateSnps.pl, filterOnEvsMaf.pl or filterVcfOnVcf.pl if you've previously run these programs to annotate your VCF. If an allele frequency is available for an allele it will be filtered if equal to or greater than the value specfied here. 
 
-Like gmaf but filter on any population specific minor allele frequency annotated by the VEP as well as the GMAF.
+Note: allele frequencies added by VEP are not used for filtering as they check the allele frequency at the site, not of the specific alleles in your variant call.
 
 =item B<-q    --quality>
 
@@ -1743,7 +1726,7 @@ Show a progress bar while working.
 
 Only consider homozygous variants, ignore potential compound heterozygotes (i.e. if autozygosity is assumed). 
 
-=item B<-h    ---help>
+=item B<-h    --help>
 
 Show the program's help message.
 
@@ -1760,7 +1743,7 @@ Show the program's manual page.
     findBiallelic.pl -i <variants.vcf> -s <sample1> <sample2> -r <sample3> <sample4>  -o output.vcf -l genelist.txt
     #find genes with biallelic variants in two unrelated samples but not in two unaffected samples. 
 
-    findBiallelic.pl -i <variants.vcf> -s <sample1> <sample2> -r <sample3> <sample4> -d polyphen --maf 0.01 -o output.vcf -l genelist.txt
+    findBiallelic.pl -i <variants.vcf> -s <sample1> <sample2> -r <sample3> <sample4> -d polyphen --af 0.01 -o output.vcf -l genelist.txt
     #as above but only consider missense variants predicted damaging by polyphen and with a minor allele frequency less than 1%. 
 
     findBiallelic.pl -i <variants.vcf> -s <sample1> <sample2> -e -o output.vcf -l genelist.txt
@@ -1801,4 +1784,5 @@ Copyright 2012, 2013, 2014, 2015, David A. Parry
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 =cut
+
 
