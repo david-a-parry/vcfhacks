@@ -79,7 +79,8 @@ pod2usage( -message => "SYNTAX ERROR: input is required.", exitval => 2 )
   if not $opts{i};
 pod2usage(
     -message =>
-"SYNTAX ERROR: please specify samples to analyze using --samples (-s), --check_all_samples or --family (-f) arguments.",
+"SYNTAX ERROR: please specify samples to analyze using --samples (-s), " .
+"--check_all_samples or --family (-f) arguments.",
     exitval => 2
   )
   if not @samples
@@ -89,7 +90,8 @@ pod2usage(
 #af is >0 and <= 0.5
 pod2usage(
     -message =>
-"SYNTAX ERROR: --af option requires a value between 0.00 and 0.50 to filter on global minor allele frequency.\n",
+"SYNTAX ERROR: --af option requires a value between 0.00 and 0.50 to ".
+"filter on global minor allele frequency.\n",
     -exitval => 2
 ) if ( defined $opts{a} && ( $opts{a} < 0 or $opts{a} > 0.5 ) );
 
@@ -155,7 +157,8 @@ EOT
 }
 
 
-#check VEP/SNPEFF header and get annotation order - will set $opts{m} if not already defined
+#check VEP/SNPEFF header and get annotation order 
+# - will set $opts{m} if not already defined
 my %csq_header = getAndCheckCsqHeader();
   # hash of functional annotations from SnpEff/VEP to their annotation index
     
@@ -286,7 +289,9 @@ LINE: while (my $line = <$VCF>){
         #require chroms to be ordered together
         if ($contigs{$chrom} != scalar(keys %contigs) - 1){
             die
-"Encountered a variant for contig $chrom with at least one variant for a different contig inbetween. Your VCF input must be sorted such that all contigs are kept together - please sort your input and try again.\n";
+"Encountered a variant for contig $chrom with at least one variant for a ".
+"different contig inbetween. Your VCF input must be sorted such that all contigs".
+" are kept together - please sort your input and try again.\n";
         }
     }else{
         #if new chrom check biallelics and clear collected data
@@ -388,7 +393,8 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
             @a_csq = grep { $_->{allele} eq $alleles[$i] } @csq;
         }
         
-        #skip if VEP/SNPEFF annotation is not the correct class (or not predicted damaging if using that option)
+        #skip if VEP/SNPEFF annotation is not the correct class 
+        # (or not predicted damaging if using that option)
         foreach my $annot (@a_csq){
             if (consequenceMatchesClass($annot, \@split)){
                 #create variant ID for this allele
@@ -866,10 +872,8 @@ sub getAndCheckCsqHeader{
                 $opts{m} = 'snpeff';
                 informUser("Found SnpEff header - using SnpEff 'ANN' annotations.\n");
             }else{
-                die <<EOT 
-ERROR: Could not find VEP or SnpEff headers in input. Please annotate your input with either program and try again.
-EOT
-;
+                die "ERROR: Could not find VEP or SnpEff headers in input. ".
+                    "Please annotate your input with either program and try again.\n";
             }
         }
     }else{
@@ -1114,7 +1118,8 @@ sub checkMinMatching{
         if ($opts{n} > $aff_count){
             die
 "ERROR: -n/--num_matching value ($opts{n}) is greater than the number of families "
-      . "with affected members identified in ". $ped_obj->{get_file} . " and --samples identified ($aff_count)\n";
+  . "with affected members identified in ". $ped_obj->{get_file} 
+  . " and --samples identified ($aff_count)\n";
         }
     }
     return $opts{n};
@@ -1190,9 +1195,14 @@ sub writeOptionsToHeader{
     
     #add INFO fields 
     print $OUT
-    "##INFO=<ID=findBiallelicSamplesHom,Number=A,Type=String,Description=\"For each allele a list of samples that were found to meet findBiallelic.pl's criteria for constituting a homozygous variant.\">\n";
+    "##INFO=<ID=findBiallelicSamplesHom,Number=A,Type=String,Description=".
+      "\"For each allele a list of samples that were found to meet " .
+      "findBiallelic.pl's criteria for constituting a homozygous variant.\">\n";
     print $OUT
-    "##INFO=<ID=findBiallelicSamplesHet,Number=A,Type=String,Description=\"For each allele a list of samples that were found to meet findBiallelic.pl's criteria for constituting a potential compound heterozygous variant.\">\n";
+    "##INFO=<ID=findBiallelicSamplesHet,Number=A,Type=String,Description=".
+      "\"For each allele a list of samples that were found to meet " . 
+      "findBiallelic.pl's criteria for constituting a potential compound ".
+      "heterozygous variant.\">\n";
     print $OUT "$header[-1]\n";
 }
 
@@ -1288,14 +1298,11 @@ sub getAfAnnotations{
         EVS_ALL_AF
     );
     foreach my $key (keys %$info_fields){
-        my $warning = <<EOT
-WARNING: Found expected frequency annotation ($key) in INFO fields, but 'Number' field is $info_fields->{$key}->{Number}, expected 'A'. Ignoring this field.
-EOT
-;
-        my $info = <<EOT
-Found allele frequency annotation: $key. This will be used for filtering on allele frequency.
-EOT
-;
+        my $warning = "WARNING: Found expected frequency annotation ($key) in ". 
+          "INFO fields, but 'Number' field is $info_fields->{$key}->{Number}, ".
+          "expected 'A'. Ignoring this field.\n";
+        my $info = "Found allele frequency annotation: $key. ".
+          "This will be used for filtering on allele frequency.";
         if (grep { $key eq $_ } @af_fields){
             if ($info_fields->{$key}->{Number} ne 'A'){
                 informUser($warning);
