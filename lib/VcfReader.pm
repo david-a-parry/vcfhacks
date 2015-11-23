@@ -3618,32 +3618,41 @@ sub altsToVepAllele{
 sub _altToVep{
     my ($alt_array, $ref) = @_;
     my @vep_alleles = ();
-    my $is_snv_or_mnv = 0;
+    my $start_differs = 0;
     my $is_indel = 0; 
+    my $is_snv = 0;
+    my $is_mnv = 0;
     foreach my $alt (@$alt_array){
         next if $alt eq '*';
-        if (length($alt) == length($ref)){
-            $is_snv_or_mnv++;
+        if (length($alt) == 1 and length($ref) == 1){
+            $is_snv = 1;
+        }elsif (length($alt) == length($ref) ){
+            $is_mnv++;
         }else{
             $is_indel++;
         }
     }
-    if ($is_snv_or_mnv and $is_indel){
+    if ($is_snv or ($is_mnv and not $is_indel) ){
         #in this situation VEP does not trim any variant alleles
         foreach my $alt (@$alt_array){
             push @vep_alleles, $alt;
         }
     }else{
+        my $refstart = substr($ref, 0, 1); 
+        foreach my $alt (@$alt_array){
+            next if $alt eq '*';
+            my $altstart = substr($alt, 0, 1); 
+            if ($altstart ne $refstart){
+                $start_differs++; 
+                last;
+            }
+        }
         foreach my $alt (@$alt_array){
             if ($alt eq '*'){
                 push @vep_alleles, $alt;
-                next;
-            }
-            if (length($alt) == length($ref)){
-                push @vep_alleles,  $alt;
-            }elsif(length($alt) > length($ref)){#insertion - VEP trims first base
-                push @vep_alleles,  substr($alt, 1);
-            }else{#deletion - VEP trims first base or gives '-' if ALT is only 1 nt long
+            }elsif ($start_differs){#no trimming if the first base differs for any ALT
+                push @vep_alleles, $alt;
+            }else{#VEP trims first base or gives '-' if ALT is only 1 nt long
                 if (length($alt) > 1){
                     push @vep_alleles,  substr($alt, 1);
                 }else{
