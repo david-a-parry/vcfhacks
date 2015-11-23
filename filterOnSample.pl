@@ -643,6 +643,7 @@ sub filter_on_sample {
             minGQ => $unaff_genotype_quality,
             line  => $vcf_line,
         );
+        $total_reject = 2 * (keys %sample_to_col);
     }
     if ( not @samples ) {
         for ( my $i = 1 ; $i < @ref_alt ; $i++ ) {
