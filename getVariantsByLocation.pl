@@ -259,7 +259,7 @@ sub process_regions{
     @gene_ids = grep { ! $seen{$_}++} @gene_ids;
     foreach my $g (@gene_ids){
         my $region = get_region_from_gene($g);
-        push @regions, $region;
+        push @regions, $region if defined $region;
     }
     
     print STDERR "[$time] Preparing regions... " unless $opts{q};
@@ -513,7 +513,7 @@ sub get_region_from_gene{
     if (not $opts{q}){
         print STDERR "For gene ID '$id', found gene " . 
           $gene_hash->{display_name} . "/" . $gene_hash->{id} .
-          " with coordintes $r\n";
+          " with coordintes $r ($gene_hash->{assembly_name})\n";
     }
     return $r;
 }
