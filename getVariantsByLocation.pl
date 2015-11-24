@@ -252,10 +252,11 @@ sub process_regions{
         open (my $GENES, $opts{l}) or die "Could not open --gene_list '$opts{l}' for reading: $!\n";
         while (my $line = <$GENES>){
             my @s = split(/\s+/, $line); 
-            my $region = get_region_from_gene($s[0]);
-            push @regions, $region;
+            push @gene_ids, $s[0];
         }
     }
+    my %seen = ();
+    @gene_ids = grep { ! $seen{$_}++} @gene_ids;
     foreach my $g (@gene_ids){
         my $region = get_region_from_gene($g);
         push @regions, $region;
@@ -508,7 +509,13 @@ sub get_region_from_gene{
     my $chrom = $gene_hash->{seq_region_name};
     my $start = $gene_hash->{start};
     my $end = $gene_hash->{end};
-    return "$chrom:$start-$end";
+    my $r = "$chrom:$start-$end";
+    if (not $opts{q}){
+        print STDERR "For gene ID '$id', found gene " . 
+          $gene_hash->{display_name} . "/" . $gene_hash->{id} .
+          " with coordintes $r\n";
+    }
+    return $r;
 }
 
 #########################################################
