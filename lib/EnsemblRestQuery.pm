@@ -203,5 +203,5 @@ sub useGRCh37Server{
 ##################################################
 sub useDefaultServer{
     my $self = shift;
-_   $self->{_server} = $self->{_default_server};
+    $self->{_server} = $self->{_default_server};
 }
