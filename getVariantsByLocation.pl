@@ -30,6 +30,22 @@ Bed file containing regions to filter on (required unless using --regions argume
 
 Specify one or more regions to filter on seperated with spaces in format "X:1-2000" or (for single coordinates) "X:2000". Can be used in conjunction with or instead of --bed argument.
 
+=item B<-g    --gene_ids>
+
+One or more gene symbols or IDs to use to identify regions. This method uses Ensembl's REST server to identify coordinates of genes, by default using the GRCh37 reference.
+
+=item B<-l    --gene_list>
+
+A list of gene symbols or IDs to use to identify regions. 
+
+=item B<-s    --species>
+
+If you want to use a species other than human to identify matching genes, specify the species name here.
+
+=item B<-d    --defaultRestServer>
+
+Use this option if you want to use the default Ensembl REST server for gene queries (if you want to use GRCh38 rather than GRCh37, for example).
+
 =item B<-v    --vcf_filter> 
 
 A VCF file to use to find variants overlapping variants from your input. By default, variants from your input file will be printed if their coordinates overlap with any variants in these VCF files and variants are not checked to see whether they share the same alleles. To only print variants with matching alleles use the --matching argument. 
@@ -81,6 +97,12 @@ Show this script's manual page.
  getVariantsByLocation.pl -i [vars.vcf] -b [regions.bed] -r 1:2000000-50000000 -o [filtered.vcf]
  #get variants from vars.vcf that lie within regions in bedfile regions.bed or the region 1:2000000-50000000 and output to file filtered.vcf
 
+ getVariantsByLocation.pl -i [vars.vcf] -g SMG1 -o [filtered.vcf]
+ #get variants from vars.vcf that lie within the SMG1 gene (coordinates from GRCh37) and output to file filtered.vcf
+ 
+ getVariantsByLocation.pl -i [vars.vcf] -g SMG1 -d -o [filtered.vcf]
+ #get variants from vars.vcf that lie within the SMG1 gene using the current Ensembl genome build and output to file filtered.vcf
+ 
  getVariantsByLocation.pl -i [vars.vcf] -v [other.vcf]
  #get variants from vars.vcf that overlap any variant in other.vcf 
    
@@ -123,25 +145,34 @@ use IdParser;
 
 my @bedfile;
 my @reg;
+my @gene_ids;
+my $restQuery ;
+my $id_parser = new IdParser();
 
 my %opts = 
 (
     r => \@reg,
     b => \@bedfile,
+    g => \@gene_ids,
 );
 
 GetOptions
 (
-    'e|exclude',
+    \%opts,
+   # 'exclude', not implmented
     'r|regions=s{,}',
     'o|output=s',
     'n|no_header',
     'i|input=s',
     'b|bed=s{,}',
     'v|vcf_filter=s',
+    'l|gene_list=s',
+    'g|gene_ids=s{,}',
     'e|matching',
     'q|quiet',
     's|silent',
+    'species',
+    'd|defaultRestServer',
     'h|?|help',
     'm|manual',
 ) or pod2usage( -message => "Syntax error.", -exitval => 2 );
@@ -150,7 +181,7 @@ pod2usage( -verbose => 2 ) if ($opts{m});
 pod2usage( -verbose => 1 ) if ($opts{h});
 
 pod2usage( -message => "Syntax error.", -exitval => 2 )
-  if ( not $opts{i} or ( not @bedfile and not $opts{l} and not @reg and not $opts{v}) );
+  if ( not $opts{i} or ( not @bedfile and not @reg and not @gene_ids and not $opts{v}  and not $opts{l} ) );
 
 pod2usage( -message => "ERROR: --vcf_filter option can not be used in conjunction with --bed or --region arguments.", -exitval => 2 )
   if ( (@bedfile or @reg) and $opts{v} );
@@ -158,7 +189,14 @@ pod2usage( -message => "ERROR: --vcf_filter option can not be used in conjunctio
 if ($opts{e} and not $opts{v}){
     print STDERR "WARNING: redundant use of --matching argument without --vcf_filter argument.\n" unless $opts{s};
 }
+
 $opts{q}++ if $opts{s};
+$opts{species} ||= 'human'; 
+
+if (lc($opts{species}) !~  /^human|homo sapiens|h_sapiens|homo|enshs|hsap|9606|homsap|hsapiens$/){
+    $opts{d}++;#always use default server if not querying human
+}
+
 my $time = strftime( "%H:%M:%S", localtime );
 print STDERR "Time started: $time\n" unless $opts{q};
 my $total_variants;
@@ -198,9 +236,31 @@ if (exists $sargs{file_handle}){
 }
 close $OUT;
 
+#########################################################
 sub process_regions{
     $time = strftime( "%H:%M:%S", localtime );
     my @regions = ();
+    if ($opts{l} or @gene_ids){
+    #make EnsemblRestQuery modules non-essential if not using genes
+        eval "use EnsemblRestQuery; 1 " or die "Missing required module " . 
+          "for --gene_list based queries. Please install the module indicated below " .
+          "and try again:\n\n$@\n"; 
+        $restQuery = new EnsemblRestQuery();
+        $restQuery->useGRCh37Server() unless $opts{d};
+    }
+    if ($opts{l}){
+        open (my $GENES, $opts{l}) or die "Could not open --gene_list '$opts{l}' for reading: $!\n";
+        while (my $line = <$GENES>){
+            my @s = split(/\s+/, $line); 
+            my $region = get_region_from_gene($s[0]);
+            push @regions, $region;
+        }
+    }
+    foreach my $g (@gene_ids){
+        my $region = get_region_from_gene($g);
+        push @regions, $region;
+    }
+    
     print STDERR "[$time] Preparing regions... " unless $opts{q};
     if (@bedfile) {
         foreach my $bedfile (@bedfile) {
@@ -329,6 +389,7 @@ sub process_regions{
     $reg_obj->DESTROY();
 }
 
+#########################################################
 sub process_vcf_filter{
     my $VCF = VcfReader::_openFileHandle( $opts{v} );
     open_output();
@@ -372,14 +433,85 @@ sub process_vcf_filter{
         $prev_chrom = $chrom;
     }
 }
-sub getRegionFromGene{
-    my $l = shift;
-    my @s = split(/\s+/, $l); 
-    
-    my $parser = new IdParser();
-    
-    
+
+#########################################################
+sub geneFromEnst{
+    if (not $opts{q}){
+        print STDERR "Identifying parent gene from Ensembl transcript...\n";
+    }
+    my $id = shift;
+    return $restQuery->getParent($id, 1);
 }
+
+#########################################################
+sub geneFromEnsp{
+    if (not $opts{q}){
+        print STDERR "Identifying parent gene from Ensembl protein...\n";
+    }
+    my $id = shift;
+    my $par = $restQuery->getParent($id);
+    if ($par){
+        if (exists $par->{id}){
+            return geneFromEnst($par->{id});
+        }
+    }
+}
+
+#########################################################
+sub get_region_from_gene{
+    my $id = shift;
+    $id_parser->parseId($id);
+    my $gene_hash; 
+    if (not $opts{q}){
+        print STDERR "Interpretting ID \"$id\" as of type \"" . 
+          $id_parser->get_identifierType() . "\"...\n";
+    }
+    if ($id_parser->get_isEnsemblId()){
+        if ( $id_parser->get_isTranscript() ){
+            $gene_hash = geneFromEnst($id);
+        }elsif( $id_parser->get_isProtein() ) {
+            $gene_hash = geneFromEnsp($id);
+        }else{
+            $gene_hash = $restQuery->lookUpEnsId($id, 1);
+        }
+    }elsif($id_parser->get_isTranscript()  or $id_parser->get_isProtein() ) {
+        if (not $opts{q}){
+            print STDERR "Identifying Ensembl gene via transcript cross-reference...\n";
+        }
+        my $transcript = $restQuery->getTranscriptViaXreg($id, $opts{species});
+        if ($transcript and ref $transcript eq 'HASH'){
+            if (exists $transcript->{id}){
+                $gene_hash = geneFromEnst($transcript->{id});
+            }
+        }else{
+            if (not $opts{s}){
+                print STDERR "WARNING: No transcript identified for ID \"$id\"\n";
+            }
+        }
+    }else{
+        if (not $opts{q}){
+            print STDERR "Identifying Ensembl gene via gene cross-reference...\n";
+        }
+        my $gene = $restQuery->getGeneViaXreg($id, $opts{species});
+        if (ref $gene eq 'ARRAY'){
+            if ($gene->[0]->{id}){
+                $gene_hash = $restQuery->lookUpEnsId($gene->[0]->{id}, 1);
+            }
+        }
+    }
+    if (not $gene_hash){
+        if (not $opts{s}){
+            print STDERR "WARNING: Could not identify gene for ID \"$id\"\n";
+            return;
+        }
+    }
+    my $chrom = $gene_hash->{seq_region_name};
+    my $start = $gene_hash->{start};
+    my $end = $gene_hash->{end};
+    return "$chrom:$start-$end";
+}
+
+#########################################################
 sub open_output{
     if ($opts{o}) {
         open( $OUT, ">$opts{o}" ) || die "Can't open $opts{o} for writing: $!";
@@ -389,6 +521,7 @@ sub open_output{
     }
 }
 
+#########################################################
 sub write_header{
     if ($opts{n}){
         return ;
