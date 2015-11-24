@@ -119,67 +119,53 @@ use FindBin;
 use lib "$FindBin::Bin/lib";
 use SortGenomicCoordinates;
 use VcfReader;
+use IdParser;
 
-my $help;
-my $manual;
-my $vcf;
-my $outfile;
 my @bedfile;
-my $vcf_filter;
-my $matching;
 my @reg;
-my $offset;
-my $exclude;
-my $total_lines = 0;
-my $no_header;
-my $quiet;
-my $silent;
 
-my %opts = (
-    regions    => \@reg,
-    no_header  => \$no_header,
-    output     => \$outfile,
-    input      => \$vcf,
-    bed        => \@bedfile,
-    vcf_filter => \$vcf_filter,
-    matching   => \$matching,
-    quiet      => \$quiet,
-    silent     => \$silent,
-    help       => \$help,
-    manual     => \$manual
+my %opts = 
+(
+    r => \@reg,
+    b => \@bedfile,
 );
-GetOptions(
-    'exclude'         => \$exclude,
-    'regions=s{,}'    => \@reg,
-    'output=s'        => \$outfile,
-    'no_header'       => \$no_header,
-    'input=s'         => \$vcf,
-    'bed=s{,}'        => \@bedfile,
-    'vcf_filter=s'    => \$vcf_filter,
-    'e|matching'      => \$matching,
-    'quiet'           => \$quiet,
-    'silent'          => \$silent,
-    'help'            => \$help,
-    'm|manual'        => \$manual
+
+GetOptions
+(
+    'e|exclude',
+    'r|regions=s{,}',
+    'o|output=s',
+    'n|no_header',
+    'i|input=s',
+    'b|bed=s{,}',
+    'v|vcf_filter=s',
+    'e|matching',
+    'q|quiet',
+    's|silent',
+    'h|?|help',
+    'm|manual',
 ) or pod2usage( -message => "Syntax error.", -exitval => 2 );
-pod2usage( -verbose => 2 ) if ($manual);
-pod2usage( -verbose => 1 ) if ($help);
+
+pod2usage( -verbose => 2 ) if ($opts{m});
+pod2usage( -verbose => 1 ) if ($opts{h});
+
 pod2usage( -message => "Syntax error.", -exitval => 2 )
-  if ( not $vcf or ( not @bedfile and not @reg and not $vcf_filter) );
+  if ( not $opts{i} or ( not @bedfile and not $opts{l} and not @reg and not $opts{v}) );
+
 pod2usage( -message => "ERROR: --vcf_filter option can not be used in conjunction with --bed or --region arguments.", -exitval => 2 )
-  if ( (@bedfile or @reg) and $vcf_filter );
-if ($matching and not $vcf_filter){
-    print STDERR "WARNING: redundant use of --matching argument without --vcf_filter argument.\n" unless $silent;
+  if ( (@bedfile or @reg) and $opts{v} );
+
+if ($opts{e} and not $opts{v}){
+    print STDERR "WARNING: redundant use of --matching argument without --vcf_filter argument.\n" unless $opts{s};
 }
-$quiet++ if $silent;
+$opts{q}++ if $opts{s};
 my $time = strftime( "%H:%M:%S", localtime );
-print STDERR "Time started: $time\n" unless $quiet;
-$offset = 0 if not $offset;
+print STDERR "Time started: $time\n" unless $opts{q};
 my $total_variants;
-print STDERR "[$time] Initializing input VCF... " unless $quiet;
-die "Header not ok for input ($vcf) "
-  if not VcfReader::checkHeader( vcf => $vcf );
-my %sargs = VcfReader::getSearchArguments($vcf);
+print STDERR "[$time] Initializing input VCF... " unless $opts{q};
+die "Header not ok for input ($opts{i}) "
+  if not VcfReader::checkHeader( vcf => $opts{i} );
+my %sargs = VcfReader::getSearchArguments($opts{i});
 my %contigs = ();
 if (exists $sargs{contig_order}){ 
     foreach my $k (keys %{$sargs{contig_order}}){
@@ -188,25 +174,25 @@ if (exists $sargs{contig_order}){
         }
     }
 }else{
-    %contigs = VcfReader::getContigOrder($vcf);
+    %contigs = VcfReader::getContigOrder($opts{i});
 }
 
 $time = strftime( "%H:%M:%S", localtime );
-print STDERR "\n[$time] Finished initializing input VCF\n" unless $quiet;
+print STDERR "\n[$time] Finished initializing input VCF\n" unless $opts{q};
 my $printed      = 0;
 my $OUT;
 my %potential_overlaps = ();
 my $prev_chrom = '';
 
-if ($vcf_filter){
+if ($opts{v}){
     process_vcf_filter();
 }else{
     process_regions();
 }
 
 $time = strftime( "%H:%M:%S", localtime );
-print STDERR "Time finished: $time\n" unless $quiet;
-print STDERR "$printed variants retained.\n" unless $quiet;
+print STDERR "Time finished: $time\n" unless $opts{q};
+print STDERR "$printed variants retained.\n" unless $opts{q};
 if (exists $sargs{file_handle}){
     close $sargs{file_handle};
 }
@@ -214,8 +200,8 @@ close $OUT;
 
 sub process_regions{
     $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "[$time] Preparing regions... " unless $quiet;
     my @regions = ();
+    print STDERR "[$time] Preparing regions... " unless $opts{q};
     if (@bedfile) {
         foreach my $bedfile (@bedfile) {
             open( BED, $bedfile ) || die "can't open $bedfile: $!";
@@ -247,7 +233,7 @@ sub process_regions{
             close BED;
 
             warn "$invalid invalid region(s) found in $bedfile\n" 
-                if $invalid and not $silent;
+                if $invalid and not $opts{s};
         }
     }
     if (@reg) {
@@ -266,6 +252,8 @@ sub process_regions{
             }
         }
     }
+    
+
     my $reg_obj;
     if (%contigs){
         my %invalid_contigs = ();
@@ -279,7 +267,7 @@ sub process_regions{
         }
         if (@indices_to_remove){
             my $inv_contigs = keys %invalid_contigs;
-            warn "$inv_contigs contigs in regions not found in VCF (". scalar(@indices_to_remove)." regions).\n" unless $silent;
+            warn "$inv_contigs contigs in regions not found in VCF (". scalar(@indices_to_remove)." regions).\n" unless $opts{s};
             foreach my $i (@indices_to_remove){
                 splice(@regions, $i, 1);
             }
@@ -302,7 +290,7 @@ sub process_regions{
 
     my $region_ref = $reg_obj->prep();
     $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "\n[$time] Finished preparing regions.\n" unless $quiet;
+    print STDERR "\n[$time] Finished preparing regions.\n" unless $opts{q};
     open_output();
     write_header();
     foreach my $r (@$region_ref) {
@@ -342,7 +330,7 @@ sub process_regions{
 }
 
 sub process_vcf_filter{
-    my $VCF = VcfReader::_openFileHandle( $vcf_filter );
+    my $VCF = VcfReader::_openFileHandle( $opts{v} );
     open_output();
     write_header();
     my $prev_start = 0;
@@ -368,7 +356,7 @@ sub process_vcf_filter{
             my @split = split("\t", $h);
             my $span = VcfReader::getSpan(\@split);
             if (not exists $potential_overlaps{$h}){
-                if ($matching){
+                if ($opts{e}){
                     if (VcfReader::variantsHaveMatchingAlleles(\@split, \@filter_split)){
                         print $OUT "$h\n";
                         $printed++;
@@ -384,10 +372,17 @@ sub process_vcf_filter{
         $prev_chrom = $chrom;
     }
 }
-
+sub getRegionFromGene{
+    my $l = shift;
+    my @s = split(/\s+/, $l); 
+    
+    my $parser = new IdParser();
+    
+    
+}
 sub open_output{
-    if ($outfile) {
-        open( $OUT, ">$outfile" ) || die "Can't open $outfile for writing: $!";
+    if ($opts{o}) {
+        open( $OUT, ">$opts{o}" ) || die "Can't open $opts{o} for writing: $!";
     }
     else {
         $OUT = *STDOUT;
@@ -395,10 +390,10 @@ sub open_output{
 }
 
 sub write_header{
-    if ($no_header){
+    if ($opts{n}){
         return ;
     }
-    my $meta_head    = VcfReader::getMetaHeader($vcf);
+    my $meta_head    = VcfReader::getMetaHeader($opts{i});
     print $OUT "$meta_head\n";
     print $OUT "##getVariantsByLocation.pl=\"";
     my @opt_string = ();
@@ -424,6 +419,6 @@ sub write_header{
             }
         }
     }
-    my $col_header = VcfReader::getColumnHeader($vcf);
+    my $col_header = VcfReader::getColumnHeader($opts{i});
     print $OUT join( " ", @opt_string ) . "\"\n" . $col_header . "\n";
 }
