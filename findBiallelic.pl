@@ -11,6 +11,7 @@ use FindBin;
 use lib "$FindBin::Bin/lib";
 use ParsePedfile;
 use VcfReader;
+use VcfhacksUtils;
 
 my $data_dir = "$FindBin::Bin/data";
 my $progressbar;
@@ -1166,43 +1167,35 @@ sub openOutput{
 
 #################################################
 sub writeOptionsToHeader{
-    my @opt_string = ();
-    #get options into an array
-    foreach my $k ( sort keys %opts ) {
-        if ( not ref $opts{$k} ) {
-            push @opt_string, "$k=$opts{$k}";
-        }
-        elsif ( ref $opts{$k} eq 'SCALAR' ) {
-            if ( defined ${ $opts{$k} } ) {
-                push @opt_string, "$k=${$opts{$k}}";
-            }
-            else {
-                push @opt_string, "$k=undef";
-            }
-        }
-        elsif ( ref $opts{$k} eq 'ARRAY' ) {
-            if ( @{ $opts{$k} } ) {
-                push @opt_string, "$k=" . join( ",", @{ $opts{$k} } );
-            }
-            else {
-                push @opt_string, "$k=undef";
-            }
-        }
-    }
+    #print meta header lines
     print $OUT join("\n", grep { /^##/ } @header);
-    print $OUT "##findBiallelicVep.pl\"";
-    print $OUT join( " ", @opt_string ) . "\"\n";
+
+    #add header line detailing program options
+    print $OUT VcfhacksUtils::getOptsVcfHeader(%opts) . "\n"; 
     
     #add INFO fields 
-    print $OUT
-    "##INFO=<ID=findBiallelicSamplesHom,Number=A,Type=String,Description=".
-      "\"For each allele a list of samples that were found to meet " .
-      "findBiallelic.pl's criteria for constituting a homozygous variant.\">\n";
-    print $OUT
-    "##INFO=<ID=findBiallelicSamplesHet,Number=A,Type=String,Description=".
-      "\"For each allele a list of samples that were found to meet " . 
-      "findBiallelic.pl's criteria for constituting a potential compound ".
-      "heterozygous variant.\">\n";
+    my %hom_info = 
+    (
+        ID          => "findBiallelicSamplesHom",
+        Number      => "A",
+        Type        => "String",
+        Description => "For each ALT allele, a list of samples that were found to ".
+                       "meet findBiallelic.pl's criteria for constituting a ".
+                       "homozygous variant.",
+    ); 
+
+    my %het_info = 
+    (
+        ID          => "findBiallelicSamplesHet",
+        Number      => "A",
+        Type        => "String",
+        Description => "For each ALT allele, a list of samples that were found to ".
+                       "meet findBiallelic.pl's criteria for constituting a ".
+                       "potential compound heterozygous variant.",
+    ); 
+
+    print $OUT VcfhacksUtils::getInfoHeader(%hom_info) . "\n"; 
+    print $OUT VcfhacksUtils::getInfoHeader(%het_info) . "\n"; 
     print $OUT "$header[-1]\n";
 }
 
@@ -1302,7 +1295,7 @@ sub getAfAnnotations{
           "INFO fields, but 'Number' field is $info_fields->{$key}->{Number}, ".
           "expected 'A'. Ignoring this field.\n";
         my $info = "Found allele frequency annotation: $key. ".
-          "This will be used for filtering on allele frequency.";
+          "This will be used for filtering on allele frequency.\n";
         if (grep { $key eq $_ } @af_fields){
             if ($info_fields->{$key}->{Number} ne 'A'){
                 informUser($warning);
