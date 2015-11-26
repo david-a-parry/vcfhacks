@@ -21,6 +21,7 @@ my @classes = ();
 my @add_classes = ();
 my @damaging = ();
 my @biotypes = ();
+my @custom_af = ();
 
 my %opts = (
     s               => \@samples,
@@ -30,6 +31,7 @@ my %opts = (
     add_classes     => \@add_classes,
     d               => \@damaging,
     biotype_filters => \@biotypes,
+    j               => \@custom_af,
 );
 
 
@@ -49,6 +51,7 @@ GetOptions(
     'f|family=s', # ped file
     'h|?|help',
     'i|input=s' ,
+    'j|custom_af=s{,}',
     'keep_any_damaging',
     'lenient',
     'l|list:s', 
@@ -1082,7 +1085,7 @@ sub openOutput{
 #################################################
 sub writeOptionsToHeader{
     #print meta header lines
-    print $OUT join("\n", grep { /^##/ } @header);
+    print $OUT join("\n", grep { /^##/ } @header) . "\n";
 
     #add header line detailing program options
     print $OUT VcfhacksUtils::getOptsVcfHeader(%opts) . "\n"; 
