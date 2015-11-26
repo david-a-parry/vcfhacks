@@ -2321,7 +2321,7 @@ For a given line as the first argument, and allele index (0 for ref, 1 for first
 
 sub calculateAlleleGindexes{
     my ($line, $allele) = @_;
-    my @alts = VcfReader::readAlleles(line => $line);
+    my @alts = readAlleles(line => $line);
     my @idx = (); 
     for (my $y = 0; $y < @alts; $y++){
         my ($i, $j) = sort {$a <=>$b} ($allele, $y); 
@@ -2341,7 +2341,7 @@ For a given line as the first argument, and allele index (0 for ref, 1 for first
 
 sub calculateOtherAlleleGindexes{
     my ($line, $allele) = @_;
-    my @alts = VcfReader::readAlleles(line => $line);
+    my @alts = readAlleles(line => $line);
     my @others = grep { $_ != $allele } 0 .. $#alts;
     my @idx = (); 
     for (my $i = 0; $i < @others; $i++){
