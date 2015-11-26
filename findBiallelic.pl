@@ -1699,11 +1699,44 @@ If using multiple programs for filters for --damaging argument use this flag to 
 
 Skip alleles that do not have a score from one or more programs specified by the -d/--damaging argument or if using the -c/--cadd_filter option and an allele has no CADD phred score. The --keep_any_damaging argument will override this behaviour for -d/--damaging predictions if any of the available predictions are considered damaging.
 
+=item B<--biotype_filters>
+
+By default features/transcripts with the following biotypes are ignored:
+
+    IG_C_pseudogene
+    IG_J_pseudogene
+    IG_V_pseudogene
+    nonsense_mediated_decay
+    non_stop_decay
+    processed_pseudogene
+    pseudogene
+    retained_intron
+    transcribed_processed_pseudogene
+    transcribed_unprocessed_pseudogene
+    TR_J_pseudogene
+    TR_V_pseudogene
+    unitary_pseudogene
+    unprocessed_pseudogene
+
+You may override this filter by specifying biotypes to filter with this option or prevent biotype filtering using the --no_biotype_filtering option (see below). 
+
+Filtering will not occur if any non-filtered biotype contains a 'functional' variant. For example, with the default settings, if a splice_donor_variant only affects a 'pseudogene' transcript then this variant will be filtered, but if it also affects a 'protein_coding' transcript then it will not be filtered. 
+
+The 'data/biotypes.tsv' file contains a list of valid biotypes and the default behaviour of this program (i.e. 'keep' or 'filter'). 
+
+=item B<--no_biotype_filtering>
+
+Use this flag to consider consequences affecting ALL biotypes.
+
 =item B<--af    --allele_frequency>
 
-Use a value between 0.00 and 0.50 to specify allele frequencey filtering for annotations from annotateSnps.pl, filterOnEvsMaf.pl or filterVcfOnVcf.pl if you've previously run these programs to annotate your VCF. If an allele frequency is available for an allele it will be filtered if equal to or greater than the value specfied here. 
+Use a value between 0.00 and 1.00 to specify allele frequencey filtering for annotations from annotateSnps.pl, filterOnEvsMaf.pl or filterVcfOnVcf.pl if you've previously run these programs to annotate your VCF. If an allele frequency is available for an allele it will be filtered if equal to or greater than the value specfied here. 
 
 Note: allele frequencies added by VEP are not used for filtering as they check the allele frequency at the site, not of the specific alleles in your variant call.
+
+=item B<-j    --custom_af>
+
+If using the --af/--allele_frequency option and your data contains allele frequency fields from sources not recognised by this program, you may give the name of these allele frequency INFO fields here and they will be used for filtering in addition to the default fields. Note that these annotations must contain an annotation per ALT allele (i.e. the INFO field header must specify 'Number=A') to work properly and the allele frequency should be expressed as a number between 0.00 and 1.00 in order to be compatible with the default allele frequency fields recognised by this program.
 
 =item B<-q    --quality>
 
