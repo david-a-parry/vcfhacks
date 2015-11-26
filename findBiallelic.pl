@@ -93,10 +93,10 @@ pod2usage(
 #af is >0 and <= 0.5
 pod2usage(
     -message =>
-"SYNTAX ERROR: --af option requires a value between 0.00 and 0.50 to ".
+"SYNTAX ERROR: --af option requires a value between 0.00 and 1.00 to ".
 "filter on global minor allele frequency.\n",
     -exitval => 2
-) if ( defined $opts{a} && ( $opts{a} < 0 or $opts{a} > 0.5 ) );
+) if ( defined $opts{a} && ( $opts{a} < 0 or $opts{a} > 1.0 ) );
 
 #GQs are >= 0
 $opts{q} = defined $opts{q} ? $opts{q} : 20;
