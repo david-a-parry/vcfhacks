@@ -13,7 +13,6 @@ use ParsePedfile;
 use VcfReader;
 use VcfhacksUtils;
 
-my $data_dir = "$FindBin::Bin/data";
 my $progressbar;
 my @samples = ();
 my @reject = ();
@@ -36,40 +35,40 @@ my %opts = (
 
 GetOptions(
     \%opts,
-    'i|input=s' ,
-    'o|output=s',
-    'l|list:s', 
-    's|samples=s{,}',  
-    'r|reject=s{,}',    
-    'x|reject_all_except:s{,}',
-    'f|family=s', # ped file
-    'm|mode=s',
-    'classes=s{,}',
     'add_classes=s{,}',
-    'd|damaging=s{,}',
-    'c|cadd_filter=f',
-    'canonical_only',
-    'biotype_filters=s{,}',
-    'no_biotype_filtering',
-    'pass_filters',
-    'keep_any_damaging',
-    'skip_unpredicted',
     'a|af=f',
-    'x_linked=i', #1 = look for x-linked recessive only, 2= look for x-linked recessive as well
-    'check_all_samples',
-    'e|equal_genotypes',
-    'q|quality=i',
-    'w|aff_quality=i',
-    'u|un_quality=i',
-    'n|num_matching=i',
-    'y|num_matching_per_family=i',
-    't|ignore_carrier_status',
+    'biotype_filters=s{,}',
     'b|progress',
-    'z|homozygous_only',
+    'canonical_only',
+    'check_all_samples',
+    'classes=s{,}',
     'consensus_splice_site',
-    'lenient',
+    'c|cadd_filter=f',
+    'd|damaging=s{,}',
+    'e|equal_genotypes',
+    'f|family=s', # ped file
     'h|?|help',
+    'i|input=s' ,
+    'keep_any_damaging',
+    'lenient',
+    'l|list:s', 
     'manual'
+    'm|mode=s',
+    'no_biotype_filtering',
+    'n|num_matching=i',
+    'o|output=s',
+    'pass_filters',
+    'q|quality=i',
+    'r|reject=s{,}',    
+    'skip_unpredicted',
+    's|samples=s{,}',  
+    't|ignore_carrier_status',
+    'u|un_quality=i',
+    'w|aff_quality=i',
+    'x_linked=i', #1 = look for x-linked recessive only, 2= look for x-linked recessive as well
+    'x|reject_all_except:s{,}',
+    'y|num_matching_per_family=i',
+    'z|homozygous_only',
 ) or pod2usage( -message => "SYNTAX ERROR", exitval => 2 );
 
 pod2usage( -verbose => 2 ) if $opts{manual};
@@ -528,7 +527,10 @@ VAR: for (my $i = 0; $i < @$vars; $i ++){
                 }
             }
         }
-        @{ $incompatible{$vars->[$i]} } = removeDups(@{ $incompatible{$vars->[$i]} });
+        @{ $incompatible{$vars->[$i]} } = VcfhacksUtils::removeDups
+          (
+            @{ $incompatible{$vars->[$i]} }
+          );
         #...get combinations of biallelic alleles for each affected
 SAMPLE: foreach my $s (@samples){
             next SAMPLE if $sample_vars{$vars->[$i]}->{$s} < 1;
@@ -692,44 +694,13 @@ sub allelesInCis{
 }
 
 #################################################
-sub readClassesFile{
-    my $classes_file = "$data_dir/$opts{m}_classes.tsv";
-    open (my $CLASS, $classes_file) or die 
-"Could not open $opts{m} effect classes file '$classes_file': $!\n";
-    my %classes = (); 
-    while (my $line = <$CLASS>){
-        next if $line =~ /^#/;
-        $line =~ s/[\r\n]//g; 
-        next if not $line;
-        my @split = split("\t", $line);
-        die "Not enough fields in classes file line: $line\n" if @split < 2;
-        $classes{lc($split[0])} = lc($split[1]);
-    }
-    close $CLASS;
-    return %classes;
-}
-
-#################################################
-sub readBiotypesFile{
-    my $btypes_file = "$data_dir/biotypes.tsv";
-    open (my $BT, $btypes_file) or die 
-"Could not open biotypes file '$btypes_file': $!\n";
-    my %biotypes = (); 
-    while (my $line = <$BT>){
-        next if $line =~ /^#/;
-        $line =~ s/[\r\n]//g; 
-        next if not $line;
-        my @split = split("\t", $line);
-        die "Not enough fields in biotypes file line: $line\n" if @split < 2;
-        $biotypes{lc($split[0])} = lc($split[1]);
-    }
-    close $BT;
-    return %biotypes;
-}
-
-#################################################
 sub getAndCheckClasses{
-    my %all_classes = readClassesFile();
+    my %all_classes = ();
+    if ($opts{m} eq 'vep'){
+        %all_classes =  VcfhacksUtils::readVepClassesFile();
+    }else{
+        %all_classes =  VcfhacksUtils::readSnpEffClassesFile();
+    }
     if (not @classes){
         @classes = grep { $all_classes{$_} eq 'default' } keys %all_classes;
     }
@@ -738,7 +709,7 @@ sub getAndCheckClasses{
         push @classes, "splice_region_variant" ;
     }
     @classes = map { lc($_) } @classes; 
-    @classes = removeDups(@classes);
+    @classes = VcfhacksUtils::removeDups(@classes);
     foreach my $class (@classes) {
         die "Error - variant class '$class' not recognised.\n"
           if not exists $all_classes{lc($class)} ;
@@ -749,12 +720,12 @@ sub getAndCheckClasses{
 #################################################
 sub getAndCheckBiotypes{
     return if $opts{no_biotype_filtering}; 
-    my %all_biotypes = readBiotypesFile();
+    my %all_biotypes = VcfhacksUtils::readBiotypesFile();
     if (not @biotypes){
         @biotypes = grep { $all_biotypes{$_} eq 'filter' } keys %all_biotypes;
     }
     @biotypes = map { lc($_) } @biotypes; 
-    @biotypes = removeDups(@biotypes);
+    @biotypes = VcfhacksUtils::removeDups(@biotypes);
     foreach my $biotyp (@biotypes) {
         die "Error - biotype '$biotyp' not recognised.\n"
           if not exists $all_biotypes{lc($biotyp)} ;
@@ -765,70 +736,13 @@ sub getAndCheckBiotypes{
 #################################################
 sub getAndCheckInSilicoPred{
     return if not @damaging;
-    my %pred = readInSilicoFile(); 
-    my %filters = (); 
-    foreach my $d (@damaging) {
-        $d = lc($d); 
-        my ( $prog, $label ) = split( "=", $d );
-        if ($opts{m} eq 'snpeff' and $prog ne 'all'){
-            $prog = "dbnsfp_$prog" if $prog !~ /^dbnsfp_/;
-        }
-        if ($prog eq 'all'){
-            foreach my $k (keys %pred){
-                foreach my $j ( keys %{$pred{$k}} ){
-                    push @{ $filters{$k} }, $j if $pred{$k}->{$j} eq 'default';
-                }
-            }
-        }elsif ( exists $pred{$prog} ){
-            if (not $label){
-                foreach my $j ( keys %{$pred{$prog}} ){
-                    push @{ $filters{$prog} }, $j if $pred{$prog}->{$j} eq 'default';
-                }
-            }else{
-                if ($label =~ /^\d+(\.\d+)*$/){#add scores
-                    push @{ $filters{$prog} } , $label;
-                }else{
-                    if (not exists $pred{$prog}->{lc($label)}){
-                        die <<EOT;
-ERROR: Unrecognised filter ('$label') for $prog passed to --damaging argument.
-See --help/--manual for more info.
-EOT
-;
-                    }
-                    push @{ $filters{$prog} } , lc($label);
-                }
-            }
-        }else{
-            die <<EOT
-ERROR: Unrecognised value ($d) passed to --damaging argument. 
-See --help/--manual for more info.
-EOT
-;
-        }
-    }
+    my %filters = VcfhacksUtils::getAndCheckInSilicoPred($opts{m}, \@damaging);
     if ($opts{m} eq 'vep'){#VEP prediction results will be in CSQ field
         push @csq_fields, keys %filters;
     }#SnpEff predictions will be added via SnpSift
     return %filters;
 }
     
-#################################################
-sub readInSilicoFile{
-    my $insilico_file = "$data_dir/$opts{m}_insilico_pred.tsv";
-    open (my $INS, $insilico_file) or die 
-"Could not open $opts{m} effect classes file '$insilico_file': $!\n";
-    my %pred = (); 
-    while (my $line = <$INS>){
-        next if $line =~ /^#/;
-        $line =~ s/[\r\n]//g; 
-        next if not $line;
-        my @split = split("\t", $line);
-        die "Not enough fields in classes file line: $line\n" if @split < 3;
-        $pred{lc($split[0])}->{lc($split[1])} = lc($split[2]) ;
-    }
-    close $INS;
-    return %pred;
-}
 
 #################################################
 sub checkPedAndFamilies{
@@ -1070,8 +984,8 @@ sub checkSamples{
     }
 
     #remove any duplicate samples in @samples or @reject
-    @reject  = removeDups(@reject); 
-    @samples = removeDups(@samples);
+    @reject  = VcfhacksUtils::removeDups(@reject); 
+    @samples = VcfhacksUtils::removeDups(@samples);
     #make sure no samples appear in both @samples and @reject
     my %dup = map { $_ => undef } @samples;
     foreach my $s (@samples) {
@@ -1554,12 +1468,6 @@ sub is_autosome {
     }
     return 1;
 }
-#################################################
-sub removeDups{
-    my %seen = ();
-    return grep { ! $seen{$_}++ } @_;
-}
-
 #################################################
 sub updateProgressBar{
     if ($progressbar) {
