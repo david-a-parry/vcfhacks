@@ -3,7 +3,6 @@ use strict;
 use warnings;
 use Getopt::Long;
 use Pod::Usage;
-use Term::ProgressBar;
 use Data::Dumper;
 use List::Util qw ( first ) ;
 use POSIX qw/strftime/;
@@ -55,7 +54,7 @@ GetOptions(
     'keep_any_damaging',
     'lenient',
     'l|list:s', 
-    'manual'
+    'manual',
     'm|mode=s',
     'no_biotype_filtering',
     'n|num_matching=i',
