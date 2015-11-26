@@ -7,9 +7,9 @@ getVariantsByLocation.pl - print variants from a vcf file that lie within a list
 
 =head1 SYNOPSIS
  
-getVariantsByLocation.pl -i [vars.vcf] -b [regions.bed] -o [output.vcf]
-getVariantsByLocation.pl -i [vars.vcf] -r [regions] -o [output.vcf]
-getVariantsByLocation.pl -i [vars.vcf] -v [other.vcf] -o [output.vcf]
+        getVariantsByLocation.pl -i vars.vcf -r chr1:100000-200000 [options]
+        getVariantsByLocation.pl -h (display help message)
+        getVariantsByLocation.pl -m (display manual page)
 
 =cut
 
@@ -113,7 +113,9 @@ Show this script's manual page.
 
 =head1 DESCRIPTION
 
-Takes a bed file and/or a list of regions/coordinates and outputs variants from a VCF file that lie within/overlap these regions. The VCF input must be sorted in coordinate order but can be either uncompressed (a .vridx index file will be created if it does not exist) or bgzip compressed (a tabix index will be created if it does not exist). Use with bgzip compressed VCFs requires Tabix.pm to be installed and tabix index creation requires the tabix executable to be installed and in your PATH. 
+Outputs variants from a VCF that overlap given regions. Regions can be specified on the commandline or in a BED file. Alternatively, another VCF file can be supplied in order to output overlapping or matching variants or gene IDs can be supplied to output variants that lie withing those genes.
+ 
+The VCF input must be sorted in coordinate order but can be either uncompressed (a .vridx index file will be created if it does not exist) or bgzip compressed (a tabix index will be created if it does not exist). Use with bgzip compressed VCFs requires Tabix.pm to be installed and tabix index creation requires the tabix executable to be installed and in your PATH.
 
 
 =cut
@@ -180,10 +182,22 @@ GetOptions
 pod2usage( -verbose => 2 ) if ($opts{m});
 pod2usage( -verbose => 1 ) if ($opts{h});
 
-pod2usage( -message => "Syntax error.", -exitval => 2 )
-  if ( not $opts{i} or ( not @bedfile and not @reg and not @gene_ids and not $opts{v}  and not $opts{l} ) );
+pod2usage
+(
+     -message => "ERROR: -i/--input argument is required.\n", 
+     -exitval => 2 
+) if ( not $opts{i}); 
 
-pod2usage( -message => "ERROR: --vcf_filter option can not be used in conjunction with --bed or --region arguments.", -exitval => 2 )
+pod2usage
+(
+     -message => "ERROR: A regions argument must be supplied. ".
+                 "See -r/--regions, -b/--bed, -g/--gene_ids, ".
+                 "-l/--gene_list and -v/--vcf_filter arguments in ". 
+                 "the  help or manual documentation of this program.\n", 
+     -exitval => 2 
+) if ( not @bedfile and not @reg and not @gene_ids and not $opts{v}  and not $opts{l} ) ;
+
+pod2usage( -message => "ERROR: --vcf_filter option can not be used in conjunction with --bed or --region arguments.\n", -exitval => 2 )
   if ( (@bedfile or @reg) and $opts{v} );
 
 if ($opts{e} and not $opts{v}){
