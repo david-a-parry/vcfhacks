@@ -2291,9 +2291,28 @@ sub variantsHaveMatchingAlleles{
     return 0;
 }
 
+=item B<calculateGenotypeGindex>
+
+For a given genotype (e.g. "0/1") as the only argument, the index of the position of any occurences of the genotype in a FORMAT/INFO field with one entry per genotype ( i.e. "Number=G"). Phased genotypes (e.g. "1|0") will be converted to unphased (e.g. "0/1") for the purpose of this method.
+
+ my $idx = VcfReader::calculateGenotypeGindex("1/1");
+ 
+=cut
+
+
+sub calculateGenotypeGindex{
+    my ($gt) = @_;
+    if ($gt !~ /^\d+[\/\|]\d+$/){
+        carp "calculateGenotypeGindexes method only works on biallelic ".
+             "genotypes. Genotype '$gt' is invalid.\n";
+    }
+    my @alts = sort {$a <=> $b} split(/[\/\|]/, $gt); 
+    return ($alts[1]*($alts[1]+1)/2)+$alts[0];
+}
+
 =item B<calculateAlleleGindexes>
 
-For a given line as the first argument, and allele index (0 for ref, 1 for first ALT, 2 for second ALT etc.) as the second argument, an array of indexes will be returned indicating the position of any occurences of the allele in a FORMAT/INFO field with one entry per genotype (Number=G). 
+For a given line as the first argument, and allele index (0 for ref, 1 for first ALT, 2 for second ALT etc.) as the second argument, an array of indexes will be returned indicating the position of any occurences of the allele in a FORMAT/INFO field with one entry per genotype (i.e. "Number=G"). 
 
  my @idxs = VcfReader::calculateAlleleGindexes(\@line, 1); 
  
@@ -2311,23 +2330,26 @@ sub calculateAlleleGindexes{
     return @idx;
 }
 
-=item B<calculateGenotypeGindex>
+=item B<calculateOtherAlleleGindexes>
 
-For a given genotype (e.g. "0/1") as the only argument, the index of the position of any occurences of the genotype in a FORMAT/INFO field with one entry per genotype (Number=G). Phased genotypes (e.g. "1|0") will be converted to unphased (e.g. "0/1") for the purpose of this method.
+For a given line as the first argument, and allele index (0 for ref, 1 for first ALT, 2 for second ALT etc.) as the second argument, an array of indexes will be returned indicating the position of genotypes that DO NOT include the given allele in a FORMAT/INFO field with one entry per genotype (i.e. "Number=G"). That is, it returns all genotype indexes not given by the calculateAlleleGindexes method.
 
- my $idx = VcfReader::calculateGenotypeGindex("1/1");
+ my @idxs = VcfReader::calculateOtherAlleleGindexes(\@line, 1); 
  
 =cut
 
 
-sub calculateGenotypeGindex{
-    my ($gt) = @_;
-    if ($gt !~ /^\d+[\/\|]\d+$/){
-        carp "calculateGenotypeGindexes method only works on biallelic ".
-             "genotypes. Genotype '$gt' is invalid.\n";
+sub calculateOtherAlleleGindexes{
+    my ($line, $allele) = @_;
+    my @alts = VcfReader::readAlleles(line => $line);
+    my @others = grep { $_ != $allele } 0 .. $#alts;
+    my @idx = (); 
+    for (my $i = 0; $i < @others; $i++){
+        for (my $j = 0; $j <= $i; $j++){
+            push @idx , ($others[$i]*($others[$i]+1)/2)+$others[$j];
+        }
     }
-    my @alts = sort {$a <=> $b} split(/[\/\|]/, $gt); 
-    return ($alts[1]*($alts[1]+1)/2)+$alts[0];
+    return @idx;
 }
 
 
