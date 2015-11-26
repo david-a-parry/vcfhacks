@@ -2291,6 +2291,49 @@ sub variantsHaveMatchingAlleles{
     return 0;
 }
 
+=item B<calculateAlleleGindexes>
+
+For a given line as the first argument, and allele index (0 for ref, 1 for first ALT, 2 for second ALT etc.) as the second argument, an array of indexes will be returned indicating the position of any occurences of the allele in a FORMAT/INFO field with one entry per genotype (Number=G). 
+
+ my @idxs = VcfReader::calculateAlleleGindexes(\@line, 1); 
+ 
+=cut
+
+
+sub calculateAlleleGindexes{
+    my ($line, $allele) = @_;
+    my @alts = VcfReader::readAlleles(line => $line);
+    my @idx = (); 
+    for (my $y = 0; $y < @alts; $y++){
+        my ($i, $j) = sort {$a <=>$b} ($allele, $y); 
+        push @idx , ($j*($j+1)/2)+$i;
+    }
+    return @idx;
+}
+
+=item B<calculateGenotypeGindex>
+
+For a given genotype (e.g. "0/1") as the only argument, the index of the position of any occurences of the genotype in a FORMAT/INFO field with one entry per genotype (Number=G). Phased genotypes (e.g. "1|0") will be converted to unphased (e.g. "0/1") for the purpose of this method.
+
+ my $idx = VcfReader::calculateGenotypeGindex("1/1");
+ 
+=cut
+
+
+sub calculateGenotypeGindex{
+    my ($gt) = @_;
+    if ($gt !~ /^\d+[\/\|]\d+$/){
+        carp "calculateGenotypeGindexes method only works on biallelic ".
+             "genotypes. Genotype '$gt' is invalid.\n";
+    }
+    my @alts = sort {$a <=> $b} split(/[\/\|]/, $gt); 
+    return ($alts[1]*($alts[1]+1)/2)+$alts[0];
+}
+
+
+
+=head2 String Conversion Utilities
+
 =item B<convertTextForInfo>
 
 Takes a string it's only argument and returns a new string with characters not compatible with VCF format converted to characters that will not break VCF format. Specifically, the following characters are replaced as indicated:
