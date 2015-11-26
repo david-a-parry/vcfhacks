@@ -21,23 +21,23 @@ my @cadd_dirs = ();
 my %opts = (cadd_file => \@cadd_files, dir => \@cadd_dirs);
 GetOptions(
         \%opts,
-        "input=s",
-        "output=s",
+        "input|i=s",
+        "output|o=s",
         "cadd_file|c=s{,}",
         "dir|r=s{,}",
-        "not_found=s",
+        "not_found|n=s",
         "do_not_rank|d",
-        "filter=f",
-        "progress",
-        "help",
-        "manual",
+        "filter|f=f",
+        "progress|p",
+        "help|h",
+        "manual|m",
         ) or pod2usage(-message => "Syntax Error.", exitval => 2);
 
 pod2usage(-verbose => 2) if $opts{manual};
 pod2usage(-verbose => 1) if $opts{help};
-pod2usage(-message => "--input argument is required", exitval => 2) if not $opts{input};
-pod2usage(-message => "--cadd_file or --dir argument is required", exitval => 2) if not @{$opts{cadd_file}} and not @{$opts{dir}};
-pod2usage(-message => "--filter argument cannot be less than 0", exitval => 2) if defined $opts{filter} && $opts{filter} < 0;
+pod2usage(-message => "-i/--input argument is required", exitval => 2) if not $opts{input};
+pod2usage(-message => "Either -c/--cadd_file or -r/--dir argument is required", exitval => 2) if not @{$opts{cadd_file}} and not @{$opts{dir}};
+pod2usage(-message => "-f/--filter argument cannot be less than 0", exitval => 2) if defined $opts{filter} && $opts{filter} < 0;
 
 my $sortex;
 if (not $opts{do_not_rank}){
