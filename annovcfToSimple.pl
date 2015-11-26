@@ -406,7 +406,7 @@ if (@ped_samples){
     push @samples, @sample_found;
 }
 #check samples or get them if none specified
-if (not @samples){
+if (not @samples and $summarise_counts ne 'all'){
     eval{
     @samples = $vcf_obj->getSampleNames();
     };
@@ -682,7 +682,7 @@ sub get_simplified_fields{
         push @vcf_values, join(";", @gt_count_string);
         push @vcf_values, join(";", @sample_var_string) if defined $summarise_samples_with_variants;
     }
-    if (not defined $summarise_counts or (defined $summarise_counts and $summarise_counts eq 'all')){
+    if (not defined $summarise_counts or (defined $summarise_counts and $summarise_counts eq 'all' and @samples)){
         my @sample_calls = ();
         my @sample_allele_depths = ();
         my @sample_genotype_quality = ();
@@ -826,7 +826,7 @@ sub get_header{
                 push @head, "Samples with variant";
             }
         }
-        if (not defined $summarise_counts or (defined $summarise_counts and $summarise_counts eq 'all')){
+        if (not defined $summarise_counts or (defined $summarise_counts and $summarise_counts eq 'all' )){
             foreach my $sample (@samples){
                 push @head, $sample;
             }
