@@ -299,10 +299,10 @@ LINE: while (my $line = <$VCF>){
     next LINE if not haveVariant(\%samp_to_gt);
     
     #skip if not identical GTs in all affecteds and identical variants required
-    my $matched_gt; 
+    my @matched_gts = (); 
     if ($opts{e}){
-        my $matched_gt = identicalGenotypes(\%samp_to_gt, $opts{n});
-        next LINE if not $matched_gt;
+        push @matched_gts, identicalGenotypes(\%samp_to_gt, $opts{n});
+        next LINE if not @matched_gts;
     }
 
     #get Allele frequency annotations if they exist and we're filtering on AF
@@ -339,10 +339,17 @@ LINE: while (my $line = <$VCF>){
 ALT: for (my $i = 1; $i < @alleles; $i++){
         push @matched_samples, '.'; #add placeholder for matched INFO field
         next ALT if $alleles[$i] eq '*';
-        if ($matched_gt){
-            #if require equal genotypes skip if this is not a matched allele
-            my @m = split("/", $matched_gt); 
-            next ALT if  not first { $_ eq $i } @m ;
+        if (@matched_gts ){
+            my $i_match ;
+            foreach my $matched_gt( @matched_gts ){
+                #if require equal genotypes skip if this is not a matched allele
+                my @m = split("/", $matched_gt); 
+                if (first { $_ eq $i } @m ){#first is ok cos we never touch allele 0
+                    $i_match++; 
+                    last; 
+                }
+            }
+            next ALT if not $i_match;
         }
         #if CADD filtering skip if less than user-specified cadd filter
         #if no CADD score for allele then we won't skip unless using --
@@ -374,11 +381,18 @@ CSQ:    foreach my $annot (@a_csq){
                 if (defined $opts{f}){# if looking for matching genes 
                     my @samp = ();
                     foreach my $s (keys %samp_to_gt){
-                        if($matched_gt){
+                        if (@matched_gts){
+                            next if ( $samp_to_gt{$s} =~ /^\.[\/\|]\.$/ );
                             (my $gt = $samp_to_gt{$s}) =~ s/[\|]/\//;
                               #don't let allele divider affect whether a genotype matches
-                            if (checkGtPl($gt, $s, \@split)){
-                                push @samp, $s if $matched_gt eq $gt;
+                            if ($opts{pl}){
+                                if (checkGtPl(\@matched_gts, $s, \@split )){
+                                    push @samp, $s;
+                                }
+                            }else{
+                                if ( first { $_ eq $gt } @matched_gts ){
+                                    push @samp, $s ;
+                                }
                             }
                         }elsif ($samp_to_gt{$s} =~ /^($i[\/\|]\d+|\d+[\/\|]$i)$/){
                             if (checkAllelePl($i, $s, \@split)){
@@ -438,8 +452,6 @@ sub checkAllelePl{
         sample_to_columns => \%sample_to_col,
     );
     my @pls = split(",", $pl);
-    
-    my @idxs1 = VcfReader::calculateAlleleGindexes($line, $allele); #testing only
     my @idxs = VcfReader::calculateOtherAlleleGindexes($line, $allele); 
     foreach my $i (@idxs){
         if ($i > $#pls){
@@ -463,10 +475,9 @@ sub checkAllelePl{
 
 #################################################
 sub checkGtPl{
-    #returns 0 if PL for any genotype other than $gt
+    #returns 0 if PL for any genotype other than those in @$gts
     # is lower than $opts{pl}. Otherwise returns 1.
-    return 1 if not $opts{pl} ;
-    my ($gt, $sample, $line) = @_;
+    my ($gts, $sample, $line) = @_;
     my $pl = VcfReader::getSampleGenotypeField
     (
         line => $line, 
@@ -475,23 +486,30 @@ sub checkGtPl{
         sample_to_columns => \%sample_to_col,
     );
     my @pls = split(",", $pl); 
-    my $idx = VcfReader::calculateGenotypeGindex($gt);
-    if ($idx > $#pls){
-        my ($chrom, $pos) = VcfReader::getMultipleVariantFields
-        (
-            $line,
-            'CHROM', 
-            'POS'
-        );
-        informUser
-        ( 
-            "WARNING: Not enough PL scores ($pl) for genotype ".
-            "'$gt', sample $sample at $chrom:$pos. Your VCF may be malformed.\n"
-        );
-        return 1;
+    my @idxs = ();
+    foreach my $gt (@$gts){
+        push @idxs,  VcfReader::calculateGenotypeGindex($gt);
     }
+    foreach my $idx (@idxs){
+        if ($idx > $#pls){
+            my ($chrom, $pos) = VcfReader::getMultipleVariantFields
+            (
+                $line,
+                'CHROM', 
+                'POS'
+            );
+            informUser
+            ( 
+                "WARNING: Not enough PL scores ($pl) for genotypes '".
+                join(", ", @$gts) . "', sample $sample at $chrom:$pos.".
+                " Your VCF may be malformed.\n"
+            );
+            return 1;
+        }
+    }
+
     for (my $i = 0; $i < @pls; $i ++){
-        next if $i == $idx;
+        next if grep {$_ == $i} @idxs;
         return 0 if $pls[$i] < $opts{pl};
     }
     return 1;
@@ -740,6 +758,7 @@ sub identicalGenotypes{
     my $gts = shift;
     my $min_matching = shift;
     $min_matching = defined $min_matching ? $min_matching : scalar keys %$gts;
+    my @matched = (); 
     my %matches = (); #keys are genotypes, values are arrays of samples with GT
     foreach my $s (keys %$gts){
         if ( $gts->{$s} =~ /^\.[\/\|]\.$/ ){    
@@ -760,9 +779,9 @@ sub identicalGenotypes{
         foreach my $s (@{$matches{$k}}){
             $m++;
         }
-        return $k if $m >= $min_matching - 1;
+        push @matched, $k if $m >= $min_matching;
     }
-    return 0;
+    return @matched;
 }
  
 #################################################
