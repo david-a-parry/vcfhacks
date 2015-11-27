@@ -1413,14 +1413,16 @@ sub getSampleCall{
 #returns './.' for samples below $args{minGQ}
 #use return_alleles_only => 1 to only return allele codes, not genotypes (always returns an array)
     my (%args) = @_;
-    croak "\"line\" argument must be passed to getSampleCall " if not defined $args{line};
-    carp "WARNING Both multiple and sample arguments supplied to getSampleCall method - only multiple argument will be used " if (defined $args{multiple} and defined $args{sample});
+    croak "\"line\" argument must be passed to getSampleCall " 
+        if not defined $args{line};
+    carp "WARNING Both multiple and sample arguments supplied to ".
+         "getSampleCall method - only multiple argument will be used " 
+            if (defined $args{multiple} and defined $args{sample});
     if (defined $args{sample_to_columns}){
         if (ref $args{sample_to_columns} ne 'HASH'){
-            croak "\"sample_to_columns\" argument passed to getSampleCall must be a hash reference ";
+            croak "\"sample_to_columns\" argument passed to getSampleCall ".
+                  "must be a hash reference ";
         }
-#    }elsif(defined $args{sample} or $args{multiple}){
-#        croak "\"multiple\" and \"sample\" arguments can only be used in conjunction with \"sample_to_columns\" option for getSampleCall method ";
     }
     my $var; 
     my %calls = ();
@@ -2041,14 +2043,17 @@ sub _getGenotype{
     my ($line, $col, $min_gq) = @_;
     $col = 9 if not $col;
     $min_gq = 0 if not $min_gq;
-    my $mvar = getSampleVariant( $line,
-                                 $col,
-                                 );
+    my $mvar = getSampleVariant
+    ( 
+        $line,
+        $col,
+    );
     if ($min_gq > 0){
-        my $gq = getSampleGenotypeField(
-                        line => $line, 
-                        column=>$col,
-                        field=>'GQ',
+        my $gq = getSampleGenotypeField
+        (
+            line => $line, 
+            column=>$col,
+            field=>'GQ',
         );
         if (not defined $gq){
             #no GQ field - return no call (the above generally means that the call is './.' anyway)
@@ -2061,7 +2066,8 @@ sub _getGenotype{
             return './.';
         }
     }
-    my $call = getSampleGenotypeField(
+    my $call = getSampleGenotypeField
+    (
         line => $line, 
         column => $col, 
         field=>'GT'
@@ -2279,6 +2285,28 @@ sub calculateGenotypeGindex{
     my @alts = sort {$a <=> $b} split(/[\/\|]/, $gt); 
     return ($alts[1]*($alts[1]+1)/2)+$alts[0];
 }
+
+=item B<calculateGenotypeFromGindex>
+
+For a given index of an entry per genotype field ( i.e. "Number=G"), returns the genotype call represented by it. So, passing 0 to this function returns "0/0", passing 1 returns "0/1" and so on.
+
+ my $gt = VcfReader::calculateGenotypeFromGindex(2);
+ 
+=cut
+
+sub calculateGenotypeFromGindex{
+    my $n = shift;
+    my $m = 0;
+    for (my $i = 0; $i <= $n; $i++){
+        for (my $j = 0; $j <= $i; $j++){
+            if ($m == $n){
+                return "$j/$i";
+            }
+            $m++;
+        }
+    }
+}
+
 
 =item B<calculateAlleleGindexes>
 
