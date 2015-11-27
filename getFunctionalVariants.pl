@@ -94,7 +94,7 @@ if (defined $opts{f}){
 }
 
 #GQs are >= 0
-$opts{v} = defined $opts{v} ? $opts{v} : 20;
+$opts{v} = defined $opts{v} ? $opts{v} : 0;
 pod2usage(
     -message => "SYNTAX ERROR: variant quality scores (-v/--var_quality)".
                 " must be 0 or greater.\n",
