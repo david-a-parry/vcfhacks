@@ -86,9 +86,9 @@ if (defined $opts{gmaf} && ($opts{gmaf} < 0 or $opts{gmaf} > 1.0)){
 if (defined $opts{f}){
     pod2usage   
     (
-    -message => "--find_shared_genes option requires at least one sample to " . 
-                "be specified with the --samples argument.\n", 
-    -exitval => 2
+        -message => "--find_shared_genes option requires at least one " . 
+                    "sample to be specified with the --samples argument.\n", 
+        -exitval => 2
     ) if not @samples;
 }
 
@@ -101,13 +101,11 @@ pod2usage(
 ) if ( $opts{v} < 0 );
 
 $opts{g} = defined $opts{g} ? $opts{g} : 20;
-if ( defined $opts{g} ) {
-    pod2usage(
-        -message => "SYNTAX ERROR: Genotype quality (-g/--gq) ".
-                    "scores must be 0 or greater.\n",
-        -exitval => 2
-    ) if $opts{g} < 0;
-}
+pod2usage(
+    -message => "SYNTAX ERROR: Genotype quality (-g/--gq) ".
+                "scores must be 0 or greater.\n",
+    -exitval => 2
+) if $opts{g} < 0;
 
 #CADD phred score filter is >= 0 (0 means no CADD filtering)
 if (defined $opts{c}){
