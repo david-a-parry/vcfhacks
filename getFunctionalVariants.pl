@@ -744,6 +744,7 @@ sub updateProgressBar{
 
 #################################################
 sub haveVariant{
+    return if not @samples;
     my $gts = shift;
     foreach my $k (keys %$gts){
         if ($gts->{$k} =~ /(\d+)[\/\|](\d+)/){
