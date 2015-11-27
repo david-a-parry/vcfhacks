@@ -55,6 +55,7 @@ GetOptions(
     "n|num_matching=i",
     "o|output=s" ,
     "pass" ,
+    "pl=f",
     "s|samples=s{,}",
     "unpredicted_missense" ,
     'biotype_filters=s{,}',
@@ -106,6 +107,14 @@ pod2usage(
                 "scores must be 0 or greater.\n",
     -exitval => 2
 ) if $opts{g} < 0;
+
+if (defined $opts{pl}){
+    pod2usage(
+        -message => "SYNTAX ERROR: Genotype quality (--pl) ".
+                    "scores must be 0 or greater.\n",
+        -exitval => 2
+    ) if $opts{pl} < 0;
+}
 
 #CADD phred score filter is >= 0 (0 means no CADD filtering)
 if (defined $opts{c}){
@@ -368,9 +377,13 @@ CSQ:    foreach my $annot (@a_csq){
                         if($matched_gt){
                             (my $gt = $samp_to_gt{$s}) =~ s/[\|]/\//;
                               #don't let allele divider affect whether a genotype matches
-                            push @samp, $s if $matched_gt eq $gt;
+                            if (checkGtPl($gt, $s, \@split)){
+                                push @samp, $s if $matched_gt eq $gt;
+                            }
                         }elsif ($samp_to_gt{$s} =~ /^($i[\/\|]\d+|\d+[\/\|]$i)$/){
-                            push @samp, $s;
+                            if (checkAllelePl($i, $s, \@split)){
+                                push @samp, $s;
+                            }
                         }
                     }
                     shift @matched_samples; #remove '.' placeholder
@@ -410,6 +423,79 @@ close $VCF;
 updateProgressBar();  
 outputGeneList();
 close $OUT;
+
+#################################################
+sub checkAllelePl{
+    #returns 0 if PL for any genotype that does not include $allele
+    # is lower than $opts{pl}. Otherwise returns 1.
+    return 1 if not $opts{pl} ;
+    my ($allele, $sample, $line) = @_;
+    my $pl = VcfReader::getSampleGenotypeField
+    (
+        line => $line, 
+        field => "PL",
+        sample => $sample, 
+        sample_to_columns => \%sample_to_col,
+    );
+    my @pls = split(",", $pl);
+    
+    my @idxs1 = VcfReader::calculateAlleleGindexes($line, $allele); #testing only
+    my @idxs = VcfReader::calculateOtherAlleleGindexes($line, $allele); 
+    foreach my $i (@idxs){
+        if ($i > $#pls){
+            my ($chrom, $pos) = VcfReader::getMultipleVariantFields
+            (
+                $line,
+                'CHROM', 
+                'POS'
+            );
+            informUser
+            ( 
+                "WARNING: Not enough PL scores ($pl) for allele " .
+                "'$i', sample $sample at $chrom:$pos. Your VCF may be malformed.\n"
+            );
+            return 1;
+        }
+        return 0 if $pls[$i] < $opts{pl};
+    }
+    return 1;
+}
+
+#################################################
+sub checkGtPl{
+    #returns 0 if PL for any genotype other than $gt
+    # is lower than $opts{pl}. Otherwise returns 1.
+    return 1 if not $opts{pl} ;
+    my ($gt, $sample, $line) = @_;
+    my $pl = VcfReader::getSampleGenotypeField
+    (
+        line => $line, 
+        field => "PL",
+        sample => $sample, 
+        sample_to_columns => \%sample_to_col,
+    );
+    my @pls = split(",", $pl); 
+    my $idx = VcfReader::calculateGenotypeGindex($gt);
+    if ($idx > $#pls){
+        my ($chrom, $pos) = VcfReader::getMultipleVariantFields
+        (
+            $line,
+            'CHROM', 
+            'POS'
+        );
+        informUser
+        ( 
+            "WARNING: Not enough PL scores ($pl) for genotype ".
+            "'$gt', sample $sample at $chrom:$pos. Your VCF may be malformed.\n"
+        );
+        return 1;
+    }
+    for (my $i = 0; $i < @pls; $i ++){
+        next if $i == $idx;
+        return 0 if $pls[$i] < $opts{pl};
+    }
+    return 1;
+}
 
 #################################################
 sub outputGeneList{
