@@ -89,7 +89,7 @@ sub getInfoHeader{
             return;
         }
     }
-    return "##INFO=<ID=ID=$info{ID},Number=$info{Number},".
+    return "##INFO=<ID=$info{ID},Number=$info{Number},".
       "Type=$info{Type},Description=\"$info{Description}\">";
 }
 
