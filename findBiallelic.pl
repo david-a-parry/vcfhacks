@@ -60,6 +60,7 @@ GetOptions(
     'n|num_matching=i',
     'o|output=s',
     'pass_filters',
+    "pl=f",
     'q|quality=i',
     'r|reject=s{,}',    
     'skip_unpredicted',
@@ -409,6 +410,7 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
                     (
                         {%samp_to_gt, %reject_to_gt}, 
                         $i,
+                        \@split,
                     );
                 }
                 #store VCF line for this variant ID for printing out later
@@ -434,22 +436,101 @@ outputGeneList();
 
 #################################################
 sub getSampleAlleleCounts{
-    my ($gts, $i) = @_;
+    my ($gts, $i, $line) = @_;
     my %counts = ();
     foreach my $s (keys %$gts){
-        if ( $gts->{$s} =~ /^$i[\/\|]$i$/ ) {
-            $counts{$s} = 2;    #homozygous for this alt allele
-        }elsif ( $gts->{$s} =~ /^([\d+\.][\/\|]$i|$i[\/\|][\d+\.])$/ ) {
-            $counts{$s} = 1;    #het for alt allele
-        }elsif ( $gts->{$s} =~ /^\.[\/\|]\.$/ ) {
+        if ( $gts->{$s} =~ /^\.([\/\|]\.){0,1}$/ ) {
             $counts{$s} = -1;    #no call
-        }else {
-            $counts{$s} = 0;    #does not carry alt allele
+        }else{
+            if (checkGenotypePl($gts, $s, $i, $line)){   
+                if ( $gts->{$s} =~ /^$i[\/\|]$i$/ ) {
+                    $counts{$s} = 2;    #homozygous for this alt allele
+                }elsif ( $gts->{$s} =~ /^([\d+\.][\/\|]$i|$i[\/\|][\d+\.])$/ ) {
+                    $counts{$s} = 1;    #het for alt allele
+                }else {
+                    $counts{$s} = 0;    #does not carry alt allele
+                }
+            }else{
+                $counts{$s} = -1;    #no call
+            }
         }
     }
     return \%counts;
 }
 
+#################################################
+sub checkGenotypePl{
+    #returns 0 if PL for any other genotype than $gt->{$sample} is 
+    # lower than $opts{pl}
+    #returns 1 if we should count this genotype
+    return 1 if not $opts{pl} ;
+    my ($gts, $sample, $allele, $line) = @_;
+    my $pl = VcfReader::getSampleGenotypeField
+    (
+        line => $line, 
+        field => "PL",
+        sample => $sample, 
+        sample_to_columns => \%sample_to_col,
+    );
+    my @pls = split(",", $pl); 
+    my $idx = VcfReader::calculateGenotypeGindex($gts->{$sample});
+    
+    if ($idx > $#pls){
+        my ($chrom, $pos) = VcfReader::getMultipleVariantFields
+        (
+            $line,
+            'CHROM', 
+            'POS'
+        );
+        informUser
+        ( 
+            "WARNING: Not enough PL scores ($pl) for genotype '".
+            $gts->{$sample} . "', sample $sample at $chrom:$pos.".
+            " Your VCF may be malformed.\n"
+        );
+        return 1;
+    }
+    my $is_het;
+    my $is_hom;
+    if ( $gts->{$sample} =~ /^$allele[\/\|]$allele$/ ) {
+        $is_hom = 1;
+    }elsif ( $gts->{$sample} =~ /^([\d+\.][\/\|]$allele|$allele[\/\|][\d+\.])$/ ) {
+        $is_het = 1;
+    }
+
+    #genotype may or may not contain $allele (i.e. our allele of interest)
+    #if it does and is het than we do not exclude hets which contain $allele even if 
+    # below our $opts{pl} threshold
+    #if it does not contain $allele than we do not exclude genotypes below 
+    # $opts{pl} if they do not contain $allele
+
+    for (my $i = 0; $i < @pls; $i++){
+        next if $i == $idx;
+        if ($pls[$i] < $opts{pl}){
+            if($is_hom){
+            #if homozygous the only compatible genotype is represented by $idx
+                return 0;
+            }
+            my $i_gt =  VcfReader::calculateGenotypeFromGindex($i);
+            if ($is_het){
+            #if is het only return 0 if $pls[$i] is for a 
+            #gt that is not het for $allele
+                if ( $i_gt !~ 
+                    /^($allele[\/\|][^$allele]|[^$allele][\/\|]$allele)$/ ) {
+                    #is not het for $allele
+                    return 0;
+                }
+            }else{#$gts->{$sample} does not carry $allele
+                #return 0 if a genotype below $opts{pl} contains $allele
+                if ($i_gt =~ /^([\d+\.][\/\|]$allele|$allele[\/\|][\d+\.])$/){
+                    return 0;
+                }
+            }
+        }
+    }
+    return 1;
+}
+ 
 #################################################
 sub checkBiallelic{
 #For each transcript (i.e. each key of our hash of transcript IDs to arrays of var IDs)
@@ -542,8 +623,11 @@ SAMPLE: foreach my $s (@samples){
             next SAMPLE if $opts{z};#move on if -z/--homozygous only
             if ($sample_vars{$vars->[$i]}->{$s} >= 1){
                 for (my $j = $i + 1; $j < @$vars; $j++){
+                    #is allele het/hom for $vars->[$j]?
+                    next if $sample_vars{$vars->[$j]}->{$s} < 1;
                     if (not exists $incompatible{"$vars->[$i]/$vars->[$j]"}){
                     #...check phase info for any potential compound hets (if available)
+                    # before adding to potential biallelic vars
                         if (! allelesInCis($vars->[$i], $vars->[$j], $s) ){
                             push @{ $biallelic{$s} } , "$vars->[$i]/$vars->[$j]";
                         }
@@ -1206,6 +1290,14 @@ sub getAfAnnotations{
         EVS_AA_AF
         EVS_ALL_AF
     );
+    foreach my $c (@custom_af){
+        if (not exists $info_fields->{$c}){
+            informUser( "WARNING: User specified custom allele frequency ".
+                "(-j/--custom_af) field '$c' not found in VCF header. This ".
+                "field may not exist in your VCF.\n");
+        }
+    }
+    push @af_fields, @custom_af;
     foreach my $key (keys %$info_fields){
         my $warning = "WARNING: Found expected frequency annotation ($key) in ". 
           "INFO fields, but 'Number' field is $info_fields->{$key}->{Number}, ".
