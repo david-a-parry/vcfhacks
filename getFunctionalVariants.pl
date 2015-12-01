@@ -37,32 +37,32 @@ GetOptions(
     \%opts,
     "add_classes=s{,}" ,
     "a|af=f" ,
+    "biotype_filters=s{,}",
     "b|progress" ,
     "canonical_only" ,
     "classes=s{,}" ,
     "consensus_splice_site",
+    "c|cadd_filter=f",
     "d|damaging=s{,}" ,
     "e|equal_genotypes",
     "f|find_shared_genes:s", 
+    "g|gq=i",
     "h|?|help" ,
     "i|input=s" ,
-    'j|custom_af=s{,}',
-    "keep_any_damaging" ,
-    #"l|list=s{,}",
+    "j|custom_af=s{,}",
+    "k|keep_any_damaging" ,
     "maf=f" ,
     "manual" ,
     "m|mode" ,
+    "no_biotype_filtering",
     "n|num_matching=i",
     "o|output=s" ,
     "pass" ,
     "pl=f",
     "s|samples=s{,}",
-    "unpredicted_missense" ,
-    'biotype_filters=s{,}',
-    'c|cadd_filter=f',
-    'no_biotype_filtering',
-    'g|gq=i',
-    'v|var_quality=i',
+    "skip_unpredicted" ,
+    "v|var_quality=i",
+    #"l|list=s{,}",
 ) or pod2usage(-message => "Syntax error", -exitval => 2);
 pod2usage(-verbose => 2) if ($opts{manual});
 pod2usage(-verbose => 1) if ($opts{h});
@@ -988,20 +988,20 @@ SCORE: foreach my $f ( @{ $in_silico_filters{$k} } ) {
                 if ( lc $k eq 'polyphen'){
                     if ( $prob >= $f ){
                     #higher is more damaging for polyphen - damaging
-                        return 1 if $opts{keep_any_damaging};
+                        return 1 if $opts{k};
                         $filter_matched{$k}++;
                         next PROG;
                     }
                 }elsif( $prob <= $f ){
                     #lower is more damaging for sift and condel - damaging
-                    return 1 if $opts{keep_any_damaging};
+                    return 1 if $opts{k};
                     $filter_matched{$k}++;
                     next PROG;
                 }
             }else{
                 $score =~ s/\(.*\)//;
                 if ( lc $f eq lc $score ) {    #damaging
-                    return 1 if $opts{keep_any_damaging};
+                    return 1 if $opts{k};
                     $filter_matched{$k}++;
                     next PROG;
                 }
@@ -1035,7 +1035,7 @@ PROG: foreach my $k ( sort keys %in_silico_filters) {
             next if ( not $score or $score eq '.' );
             foreach my $f ( @{ $in_silico_filters{$k} } ) {
                 if ( lc $f eq lc $score ) {    #damaging
-                    return 1 if $opts{keep_any_damaging};
+                    return 1 if $opts{k};
                     $filter_matched{$k}++;
                     next PROG;
                 }
