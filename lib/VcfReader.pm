@@ -1929,7 +1929,7 @@ sub countGenotypes{
 
 =item B<countAlleles>
 
-Returns a hash where keys are alleles and values are the counts for each allele for a given line. The counts are per chromosome assuming diploidy, such that a homozygous call will count as two copies of an allele and het calls will count as one of each allele. WARNIGN - this method will obviously NOT BE ACCURATE for sex chromosomes.
+Returns a hash where keys are alleles and values are the counts for each allele for a given line. The counts are per chromosome assuming diploidy, such that a homozygous call will count as two copies of an allele and het calls will count as one of each allele. WARNING - this method will obviously NOT BE ACCURATE for sex chromosomes.
 
 Arguments:
 
