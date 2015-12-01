@@ -64,7 +64,7 @@ GetOptions(
     'g|gq=i',
     'v|var_quality=i',
 ) or pod2usage(-message => "Syntax error", -exitval => 2);
-pod2usage(-verbose => 2) if ($opts{m});
+pod2usage(-verbose => 2) if ($opts{manual});
 pod2usage(-verbose => 1) if ($opts{h});
 
 if (not $opts{i}){
