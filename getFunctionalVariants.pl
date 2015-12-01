@@ -62,6 +62,7 @@ GetOptions(
     "s|samples=s{,}",
     "skip_unpredicted" ,
     "v|var_quality=i",
+    "u|max_sample_allele_frequency=f",
     #"l|list=s{,}",
 ) or pod2usage(-message => "Syntax error", -exitval => 2);
 pod2usage(-verbose => 2) if ($opts{manual});
@@ -75,20 +76,41 @@ if (not $opts{i}){
     );
 }
 
-if (defined $opts{gmaf} && ($opts{gmaf} < 0 or $opts{gmaf} > 1.0)){
+if (defined $opts{af} && ($opts{af} < 0 or $opts{af} > 1.0)){
     pod2usage
     (
-        -message =>  "--gmaf option requires a value between 0.00 and 1.00 to ".
-                     "filter on global minor allele frequency.\n", 
+        -message =>  "-a/--af option requires a value between 0.00 and 1.00 to ".
+                     "filter on allele frequency.\n", 
         -exitval => 2
     );
+}
+
+if (defined $opts{u} ){
+    if ($opts{u} < 0 or $opts{u} > 1.0){
+        pod2usage
+        (
+            -message =>  "-u/--max_sample_allele_frequency option requires a ". 
+                         "value between 0.00 and 1.00 to filter on allele ".
+                         "frequency.\n", 
+            -exitval => 2
+        );
+    }
+    if (not @samples){
+        pod2usage
+        (
+            -message =>  "-u/--max_sample_allele_frequency option requires ". 
+                         "samples to be specified with the -s/--samples ".
+                         "argument.\n", 
+            -exitval => 2
+        );
+    }
 }
 
 if (defined $opts{f}){
     pod2usage   
     (
         -message => "--find_shared_genes option requires at least one " . 
-                    "sample to be specified with the --samples argument.\n", 
+                    "sample to be specified with the -s/--samples argument.\n", 
         -exitval => 2
     ) if not @samples;
 }
@@ -311,6 +333,17 @@ LINE: while (my $line = <$VCF>){
         %af_info_values = getAfInfoValues(\@split);
     }
     
+    # get allele frequencies in  @samples is using -u/--max_sample_allele_frequency
+    my %s_allele_counts = ();
+    my $allele_count;
+    if ($opts{u}){
+        %s_allele_counts = VcfReader::countAlleles
+        (
+            minGQ => $opts{g},
+            line  => \@split,
+        );
+        map { $allele_count += $s_allele_counts{$_} } keys %s_allele_counts;
+    }
     #get alleles and consequences for each allele
     my @alleles = VcfReader::readAlleles(line => \@split);
     my @csq = getConsequences(\@split);
@@ -366,6 +399,15 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
         if (%af_info_fields){ #check for annotateSnps.pl etc. frequencies
            next ALT if ( alleleAboveMaf($i - 1, \%af_info_values) );
         }
+
+        # filter if frequency in @samples is greater or equal to 
+        # -u/--max_sample_allele_frequency
+        if ($opts{u} and $allele_count > 0){
+            #my $freq = $s_allele_counts{$i}/(@samples*2);
+            my $freq = $s_allele_counts{$i}/$allele_count;
+            next ALT if $freq >= $opts{u}; 
+        }
+
         #get all consequences for current allele
         my @a_csq = ();
         if ($opts{m} eq 'vep'){
@@ -376,34 +418,40 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
         
         #skip if VEP/SNPEFF annotation is not the correct class 
         # (or not predicted damaging if using that option)
+        my @samp_with_allele = ();
 CSQ:    foreach my $annot (@a_csq){
             if (consequenceMatchesClass($annot, \@split)){
                 if (defined $opts{f}){# if looking for matching genes 
-                    my @samp = ();
-                    foreach my $s (keys %samp_to_gt){
+                    if (not @samp_with_allele){
+                    #only need to add samples once per allele
                         if (@matched_gts){
-                            next if ( $samp_to_gt{$s} =~ /^\.[\/\|]\.$/ );
-                            (my $gt = $samp_to_gt{$s}) =~ s/[\|]/\//;
-                              #don't let allele divider affect whether a genotype matches
-                            if ($opts{pl}){
-                                if (checkGtPl(\@matched_gts, $s, \@split )){
-                                    push @samp, $s;
-                                }
-                            }else{
-                                if ( first { $_ eq $gt } @matched_gts ){
-                                    push @samp, $s ;
-                                }
-                            }
-                        }elsif ($samp_to_gt{$s} =~ /^($i[\/\|]\d+|\d+[\/\|]$i)$/){
-                            if (checkAllelePl($i, $s, \@split)){
-                                push @samp, $s;
-                            }
+                            addSamplesWithGt
+                            (
+                                \@samp_with_allele, 
+                                \%samp_to_gt, 
+                                \@matched_gts,
+                                \@split,
+                            );
+                        }else{
+                            addSamplesWithAllele
+                            (
+                                \@samp_with_allele, 
+                                \%samp_to_gt, 
+                                $i,
+                                \@split,
+                            );
+                        }
+                        if (@samp_with_allele){
+                            pop @matched_samples; #remove '.' placeholder
+                            push @matched_samples, join("|", @samp_with_allele);
                         }
                     }
-                    shift @matched_samples; #remove '.' placeholder
-                    push @matched_samples, join("|", @samp);
-                    push @{ $matched_transcript{ $annot->{$feature_id} } }, @samp;
-                    $transcript_to_symbol{$annot->{$feature_id}} = $annot->{$symbol_id};
+                    if (@samp_with_allele){
+                        push @{ $matched_transcript{ $annot->{$feature_id} } }, 
+                                                             @samp_with_allele;
+                        $transcript_to_symbol{$annot->{$feature_id}} = 
+                                                          $annot->{$symbol_id};
+                    }
                 }else{#if not checking matching genes can print and bail out now
                     print $OUT "$line\n";
                     next LINE; 
@@ -437,6 +485,37 @@ close $VCF;
 updateProgressBar();  
 outputGeneList();
 close $OUT;
+
+#################################################
+sub addSamplesWithGt{
+    my ($samp_ar, $gts, $matched, $line) = @_; 
+    foreach my $s ( keys %{$gts} ){
+        next if ($gts->{$s} =~ /^\.[\/\|]\.$/ );
+        (my $gt = $gts->{$s}) =~ s/[\|]/\//;
+          #don't let allele divider affect whether a genotype matches
+        if ($opts{pl}){
+            if (checkGtPl(\$matched, $s, $line )){
+                push @$samp_ar, $s;
+            }
+        }else{
+            if ( first { $_ eq $gt } @$matched ){
+                push @$samp_ar, $s ;
+            }
+        }
+    }
+}
+
+#################################################
+sub addSamplesWithAllele{
+    my ($samp_ar, $gts, $allele, $line) = @_; 
+    foreach my $s ( keys %{$gts} ){
+        if ($gts->{$s} =~ /^($allele[\/\|]\d+|\d+[\/\|]$allele)$/){
+            if (checkAllelePl($allele, $s, $line)){
+                push @$samp_ar, $s;
+            }
+        }
+    }
+}
 
 #################################################
 sub checkAllelePl{
@@ -1252,6 +1331,10 @@ Note: allele frequencies added by VEP are not used for filtering as they check t
 =item B<-j    --custom_af>
 
 If using the --af/--allele_frequency option and your data contains allele frequency fields from sources not recognised by this program, you may give the name of these allele frequency INFO fields here and they will be used for filtering in addition to the default fields. Note that these annotations must contain an annotation per ALT allele (i.e. the INFO field header must specify 'Number=A') to work properly and the allele frequency should be expressed as a number between 0.00 and 1.00 in order to be compatible with the default allele frequency fields recognised by this program.
+
+=item B<-u  --max_sample_allele_frequency>
+
+If -s/--samples argument is specified, use this option to specify an allele frequency (between 0.00 and 1.00) for filtering alleles. Alleles present at this frequency or higher in your samples of interest will be filtered.
 
 =item B<-v    --var_qual>
 
