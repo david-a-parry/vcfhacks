@@ -5,7 +5,6 @@ use Getopt::Long;
 use Pod::Usage;
 use POSIX qw/strftime/;
 use Data::Dumper;
-use FindBin;
 use List::Util qw ( first ) ;
 use FindBin;
 use lib "$FindBin::Bin/lib";
