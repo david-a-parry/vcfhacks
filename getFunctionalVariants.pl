@@ -52,7 +52,7 @@ GetOptions(
     "k|keep_any_damaging" ,
     "maf=f" ,
     "manual" ,
-    "m|mode" ,
+    "m|mode=s" ,
     "no_biotype_filtering",
     "n|num_matching=i",
     "o|output=s" ,
