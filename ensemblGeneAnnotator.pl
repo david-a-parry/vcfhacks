@@ -26,55 +26,53 @@ use lib "$FindBin::Bin/lib";
 use lib "$FindBin::Bin/lib/Bioperl";
 use lib "$FindBin::Bin/lib/BioASN1EntrezGene/lib";
 use VcfhacksUtils;
-use ParseVCF;
+use VcfReader; 
 
-my $genedir;
-my $help;
-my $man;
-my $out;
-my $vcf;
-my $prep;
-my $downdb;
-my $repair;
-my @classes;
-my @add;
-my $progress; 
-my $functional;
+my @add_classes;
 my @annotations;
-my $snpEff_mode;
+my @biotypes;
+my @classes;
 my $rest_server = "http://grch37.rest.ensembl.org" ;
 my %entid_cache = (); #store results of ENTREZ ID searches here
-my $no_rest_queries;
-my $list_mode;
+my %opts = (
+    a   => \@add_classes,
+    b   => \@biotypes,
+    c   => \@classes,
+    g   => \@annotations,
+); 
+
 GetOptions(
-    "input=s"                   => \$vcf,
-    "directory=s"               => \$genedir,
-    "output=s"                  => \$out,
-    "rest_server=s{,}"          => \$rest_server,
-    "no_rest_queries"           => \$no_rest_queries,
-    "snpEff"                    => \$snpEff_mode,
-    "functional"                => \$functional,
-    "classes=s{,}"              => \@classes,
-    "add=s{,}"                  => \@add,
-    "gene_annotations=s{,}"     => \@annotations,
-    "list_mode"                 => \$list_mode,
-    "progress"                  => \$progress, 
-    "PREPARE"                   => \$prep,
-    "DOWNLOAD_NEW"              => \$downdb,
-    "REPAIR"                    => \$repair,
-    "help"                      => \$help,
-    "manual"                    => \$man
+    \%opts,
+    "D|DOWNLOAD_NEW",
+    "P|PREPARE",
+    "R|REPAIR",
+    "a|add=s{,}",
+    "b|biotype_filters=s{,}",
+    "c|classes=s{,}",
+    "d|directory=s",
+    "f|functional",
+    "g|gene_annotations=s{,}",
+    "h|?|help",
+    "i|input=s",
+    "l|list_mode",
+    "manual", 
+    "m|mode=s",
+    "n|no_rest_queries",
+    "no_biotype_filtering",
+    "o|output=s",
+    "p|progress", 
+    "r|rest_server=s{,}" => \$rest_server,
 ) or pod2usage( -message => "Syntax error", -exitval => 2 );
-pod2usage( -verbose => 2, ) if $man;
-pod2usage( -verbose => 1, ) if $help;
+pod2usage( -verbose => 2, ) if $opts{manual};
+pod2usage( -verbose => 1, ) if $opts{h};
 pod2usage( -exitval => 2, -message => "--input is required", )
-  if not $vcf
-  and not $downdb
-  and not $prep
-  and not $repair;
+  if not $opts{i}
+  and not $opts{D}
+  and not $opts{P}
+  and not $opts{R};
 
 my $http;
-if (not $no_rest_queries){
+if (not $opts{n}){
     if (eval "use HTTP::Tiny; 1"){
         if (eval "use JSON; 1"){
             $http = HTTP::Tiny->new();
@@ -85,7 +83,7 @@ if (not $no_rest_queries){
                 "queries to find missing ENTREZ IDs. If you want to ".
                 "use this feature please install this module using CPAN.\n"
             );  
-            $no_rest_queries = 1;
+            $opts{n} = 1;
         }
     }else{
         informUser
@@ -94,16 +92,32 @@ if (not $no_rest_queries){
             "find missing ENTREZ IDs. If you want to use this feature please ".
             "install this module using CPAN.\n"
         );  
-        $no_rest_queries = 1;
+        $opts{n} = 1;
     }
 }
 
+#check mode
+if ($opts{m}){
+    if ( lc($opts{m}) ne 'vep' and lc($opts{m}) ne 'snpeff' ){
+        die <<EOT
+SYNTAX ERROR: Unrecognised value for --mode: '$opts{m}'. 
+
+Valid values are 'vep' or 'snpeff'. 
+
+EOT
+;
+    }
+    $opts{m} = lc($opts{m}); 
+}
+
+
+
 my ( $script, $script_dir ) = fileparse($0);
-$genedir = "$RealBin/ensAnnotatorDb" if ( not $genedir );
-$genedir =~ s/\/$//;
+$opts{d} = "$RealBin/ensAnnotatorDb" if ( not $opts{d} );
+$opts{d} =~ s/\/$//;
 my $OUT;
-if ($out) {
-    open( $OUT, ">$out" ) or die "Can't open $out for writing: $!\n";
+if ($opts{o}) {
+    open( $OUT, ">$opts{o}" ) or die "Can't open $opts{o} for writing: $!\n";
 }
 else {
     $OUT = \*STDOUT;
@@ -111,7 +125,7 @@ else {
 my %file_lengths = ();
 my %database     = (
     ensemblToEntrez => {
-        localfile => "$genedir/ensemblToEntrez",
+        localfile => "$opts{d}/ensemblToEntrez",
         col       => 0,
         delimiter => "\t",
         url       => undef,
@@ -120,7 +134,7 @@ my %database     = (
     },    #create this one on the fly from human_summary
 
 #    gene2refseq => {
-#        localfile => "$genedir/gene2refseq",
+#        localfile => "$opts{d}/gene2refseq",
 #        col       => 3,
 #        delimiter => "\t",
 #        url       => "ftp.ncbi.nlm.nih.gov",
@@ -131,7 +145,7 @@ my %database     = (
 #    to reduce the filesize (filter on taxonomy and throwaway entries without nucleotide IDs)
 
     human_summary => {
-        localfile => "$genedir/Homo_sapiens_ncbi_gene_all_summaries.txt",
+        localfile => "$opts{d}/Homo_sapiens_ncbi_gene_all_summaries.txt",
         col       => 0,
         delimiter => "\t",
         url       => "ftp.ncbi.nlm.nih.gov",
@@ -139,7 +153,7 @@ my %database     = (
         file      => "Homo_sapiens.ags.gz"
     },
     mouse_phenotype_desc => {
-        localfile => "$genedir/VOC_MammalianPhenotype.rpt",
+        localfile => "$opts{d}/VOC_MammalianPhenotype.rpt",
         col       => 0,
         delimiter => "\t",
         url       => "ftp.informatics.jax.org",
@@ -147,7 +161,7 @@ my %database     = (
         file      => "VOC_MammalianPhenotype.rpt"
     },
     mgi2entrez => {
-        localfile => "$genedir/HMD_HumanPhenotype.rpt",
+        localfile => "$opts{d}/HMD_HumanPhenotype.rpt",
         col       => 1,
         delimiter => "\t",
         url       => "ftp.informatics.jax.org",
@@ -155,7 +169,7 @@ my %database     = (
         file      => "HMD_HumanPhenotype.rpt"
     },
     mim_morbid => {
-        localfile => "$genedir/morbidmap",
+        localfile => "$opts{d}/morbidmap",
         col       => 2,
         delimiter => "\\|",
         url       => "ftp.omim.org",
@@ -163,7 +177,7 @@ my %database     = (
         file      => "morbidmap"
     },
     biogrid    => {
-        localfile => "$genedir/BIOGRID-ALL-3.4.128.tab2.txt",
+        localfile => "$opts{d}/BIOGRID-ALL-3.4.128.tab2.txt",
         col       => 1,
         delimiter => "\t",
         url       => "http://thebiogrid.org",
@@ -182,13 +196,13 @@ my @missing = ();
 foreach (@ref_files) {
     push( @missing, $_ ) if not -e $_->{localfile};
 }
-if ($downdb) {
+if ($opts{D}) {
     prepare_database( \%database );
-    exit if not $vcf;
+    exit if not $opts{i};
 }
-elsif ($repair) {
+elsif ($opts{R}) {
     prepare_database( \%database, "repair" );
-    exit if not $vcf;
+    exit if not $opts{i};
 }
 else {
     my @missing_files = ();
@@ -202,7 +216,7 @@ else {
         join( "\n", @missing_files ) . "\n"
     ) if @missing;
 }
-if ($prep) {
+if ($opts{P}) {
     prepare_files( \@ref_files, \%database );
     exit;
 }
@@ -256,7 +270,7 @@ if (@annotations){
 }
 
 my $pre_progressbar;
-if ($progress){
+if ($opts{p}){
     $pre_progressbar = Term::ProgressBar->new(
         {
             name  => "Parsing database",
@@ -283,7 +297,7 @@ foreach my $k ( keys %database ) {
       "Can't open reference index file $database{$k}->{localfile}.idx: $!\n";
     binmode $database{$k}->{idx};
     $pre_progress++;
-    if ($progress){
+    if ($opts{p}){
         $next_update = $pre_progressbar->update($pre_progress)
             if $pre_progress >= $next_update;
     }
@@ -291,7 +305,7 @@ foreach my $k ( keys %database ) {
 
 my $progressbar; 
 my %symbol_to_id = ();
-if ($list_mode){
+if ($opts{l}){
     parseAsList(); 
 }else{
     parseAsVcf();
@@ -325,7 +339,7 @@ sub getSymbolsToIds{
 
 ######################################################
 sub parseAsList{
-    open (my $LIST, $vcf) or die "Could not open input ($vcf): $!\n";
+    open (my $LIST, $opts{i}) or die "Could not open input ($opts{i}): $!\n";
     print $OUT join(",", @annotations) . "\n";
     while (my $line = <$LIST>){
         next if $line =~ /^#/;
@@ -391,34 +405,29 @@ sub parseAsList{
 ######################################################
 sub parseAsVcf{
     print STDERR "Initialising input VCF...\n";
-    my $vcf_obj = ParseVCF->new( file => $vcf );
-    if ($snpEff_mode){
-        my $snp_eff_header = $vcf_obj->readSnpEffHeader();
-        die "No 'Effect' field identified in header for file $vcf - " .
-        "please annotate with SnpEff.\n" if (not exists $snp_eff_header->{Effect});
-        checkAndParseSnpEffClasses(\@classes, \@add);
-    }else{
-        my $vep_header = $vcf_obj->readVepHeader();
-        die "No 'GENE' field identified in header for file $vcf - "
-        . "please annotate with Ensembl's variant_effect_precictor.pl script.\n"
-        if ( not exists $vep_header->{gene} );
-        if ( @classes or @add ) {
-            $functional = 1;
-        }
-        checkAndParseVepClasses();
-    }
-
-    if ($progress){
+    my @header = VcfReader::getHeader($opts{i});
+    die "ERROR: Invalid VCF header in $opts{i}\n" 
+      if not VcfReader::checkHeader(header => \@header);
+    
+    my %csq_header = getAndCheckCsqHeader(\@header);
+    my @csq_fields = getCsqFields(\%csq_header);#consequence fields to retrieve from VCF
+    my %class_filters = map { $_ => undef } getAndCheckClasses();
+    my %biotype_filters = map { $_ => undef } getAndCheckBiotypes();
+    
+    my $total_vars  = 0; 
+    my $vcf_line = 0;
+    $next_update = 0;
+    if ($opts{p}){
+        informUser("Counting variants in input for progress monitoring.\n"); 
+        $total_vars = VcfReader::countVariants($opts{i});
+        informUser("$opts{i} has $total_vars variants.\n");
         $progressbar = Term::ProgressBar->new(
         {
             name  => "Annotating",
-            count => $vcf_obj->get_totalLines,
+            count => $total_vars,
             ETA   => "linear",
         });
     }
-    my $vcf_line = 0;
-    $next_update = 0;
-    print $OUT join( "", @{ $vcf_obj->get_metaHeader() } );
     my %gene_inf = 
     (
         ID          => "GeneAnno",
@@ -434,43 +443,56 @@ sub parseAsVcf{
                        "Format: " . join("|", @annotations) 
     );
 
+    print $OUT join("\n", grep { /^##/ } @header) . "\n";
+    #add header line detailing program options
     print $OUT VcfhacksUtils::getInfoHeader(%gene_inf) . "\n"; 
-    my $header = $vcf_obj->getHeader(1);
-    print $OUT $header;
-    my $gene_field = "gene";#if using VEP annotations we get Gene ID from this key
-    if ($snpEff_mode){
-        $gene_field = "Gene_Name";#if using SnpEff annotations we get Gene ID from this key
-    }
+    print $OUT VcfhacksUtils::getOptsVcfHeader(%opts) . "\n"; 
+    print $OUT "$header[-1]\n";
 
-    LINE: while ( my $line = $vcf_obj->readLine ) {
+    my $gene_field = "gene";#if using VEP annotations we get Gene ID from this key
+    if ($opts{m} eq 'snpeff'){
+        $gene_field = "gene_id";#if using SnpEff annotations we get Gene ID from this key
+    }
+    
+    my $VCF = VcfReader::openVcf($opts{i}); 
+LINE: while ( my $line = <$VCF> ) {
+        next if $line =~ /^#/;#skip header
+        chomp $line;
         $vcf_line++;
+        my @split = split("\t", $line); 
         my @entrez_ids = ();
-        my @csq = ();
+        my @csq = getConsequences(\@split, \@csq_fields, \%csq_header);
+    
         my %gene_annot = ();
-        if ($snpEff_mode){
-            @csq = $vcf_obj->getSnpEffFields
-            (
-                [ "Effect", "Gene_Name", "Transcript_BioType" ] 
-            ); #returns array of hashes 
-               #e.g. $csq[0]->{Gene_Name} = 'ABCA1' ; $csq[0]->{EFFECT} = 'DOWNSTREAM'
-            die "No consequence field found for line:\n$line\nPlease annotate ".
-                "your VCF file with SnpEff before running this program with " .
-                "the --snpEff_mode option.\n" if not @csq;
-        }else{
-            @csq = $vcf_obj->getVepFields( [ "Gene", "Consequence" ] );
-            die "No consequence field found for line:\n$line\nPlease annotate ".
-                " your VCF file with ensembl's variant effect precictor before".
-                "running this program.\n" if not @csq;
-        }
+        die "No consequence field found for line:\n$line\nPlease annotate ".
+            " your VCF file with ensembl's variant effect precictor or SnpEff ".
+            "before running this program.\n" if not @csq;
         foreach my $c (@csq) {
-            if ($functional) {
-                next if ( not check_consequence( $c ) );
+            if ($opts{f}) {
+                next if ( not check_consequence
+                    ( 
+                        $c, 
+                        \%biotype_filters, 
+                        \%class_filters 
+                    ) 
+                );
             }
             if ($c->{$gene_field} =~ /^ENS/){
                 my $ensid = $c->{$gene_field};
-                push @entrez_ids, search_ensembl_id($ensid); 
+                if ($ensid =~ /ENS[A-Z]*\d+-ENS/){
+                    my @e = split("-", $ensid); 
+                    foreach my $id (@e){
+                        push @entrez_ids, search_ensembl_id($id);
+                    }
+                }else{ 
+                    push @entrez_ids, search_ensembl_id($ensid); 
+                }
             }elsif($c->{$gene_field} =~ /^\d+$/){
-                push @entrez_ids, $c->{$gene_field} ; 
+                if ($c->{$gene_field} =~ /\d+-\d/){
+                    push @entrez_ids, split("-", $c->{$gene_field}); 
+                }else{ 
+                    push @entrez_ids, $c->{$gene_field} ; 
+                }
             }elsif($c->{$gene_field} =~ /^[NX][MR]_\d+$/){
                 #not implemented unless we decide to include gene2refseq in database
                # push @entrez_ids, search_refseq_id($c, $gene_field); 
@@ -482,9 +504,13 @@ sub parseAsVcf{
 
         if ( not keys %gene_annot) {
             my $ens_annot = "|" x @annotations;
-            my $new_line = $vcf_obj->addVariantInfoField('GeneAnno', $ens_annot);
-            #print $OUT "-\t-\t-\t-\t-\t-\t-\t-\t$line\n";
-            print $OUT "$new_line\n";
+            my $new_line = VcfReader::addVariantInfoField
+            (
+                line  => \@split, 
+                id    => 'GeneAnno', 
+                value => $ens_annot
+            );
+            print $OUT join("\t", @$new_line) . "\n";
             next LINE;
         }
         my @gene_anno = ();
@@ -517,27 +543,177 @@ sub parseAsVcf{
             push @gene_anno, join("|", @single_anno);
         }
         my $ens_annot = join(",", @gene_anno);
-        my $new_line = $vcf_obj->addVariantInfoField('GeneAnno', $ens_annot);
-        print $OUT "$new_line\n";
-        if ($progress){
+        my $new_line = VcfReader::addVariantInfoField
+        (
+            line  => \@split, 
+            id    => 'GeneAnno', 
+            value => $ens_annot
+        );
+        print $OUT join("\t", @$new_line) . "\n";
+        if ($opts{p}){
             $next_update = $progressbar->update($vcf_line) 
               if $vcf_line >= $next_update;
         }
     }
-    if ($progress){
-        $progressbar->update( $vcf_obj->get_totalLines )
-            if $vcf_obj->get_totalLines >= $next_update;
+    close $VCF;
+    close $OUT;
+    if ($opts{p}){
+        $progressbar->update( $total_vars )
+            if $total_vars >= $next_update;
     }
     for my $k ( keys %database ) {
         close $database{$k}->{fh};
         close $database{$k}->{idx};
     }
     print STDERR "\nAnnotation finished.\n";
-    $vcf_obj -> DESTROY();
 
 }
 
+#################################################
+sub getCsqFields{
+    my $csq_header = shift;
+    my @fields = ();
+    if ($opts{m} eq 'vep'){
+       @fields =  
+        qw(
+            allele
+            gene
+            feature
+            feature_type
+            consequence
+            symbol
+            biotype
+        );
+    }else{
+        @fields = 
+        qw(
+            allele
+            annotation
+            gene_name
+            gene_id
+            feature_type
+            feature_id
+            transcript_biotype
+        );
+    }
+    foreach my $f (@fields){
+        if (not exists $csq_header->{$f}){
+            die "Could not find '$f' field in $opts{m} consequence header " .
+              "- please ensure you have annotated your file including the appropriate ".
+              "fields.\n";
+        }
+    }
+    return @fields;
+}
 
+#################################################
+sub getConsequences{
+    my ($line, $csq_fields, $csq_head) = @_;
+    if ($opts{m} eq 'vep'){
+        return VcfReader::getVepFields
+        ( 
+            line        => $line,
+            field       => $csq_fields,
+            vep_header  => $csq_head,
+        );
+    }else{
+        return VcfReader::getSnpEffFields
+        ( 
+            line          => $line,
+            field         => $csq_fields,
+            snpeff_header => $csq_head,
+        );
+    }
+}
+
+#################################################
+
+
+sub getAndCheckCsqHeader{
+    my $head = shift;
+    my %csq_head = ();
+    if (not $opts{m}){
+        eval { 
+            %csq_head = VcfReader::readVepHeader
+            (
+                header => $head
+            ); 
+        } ;
+        if (not $@){
+            $opts{m} = 'vep';
+            informUser("Found VEP header - using VEP 'CSQ' annotations.\n");
+        }else{
+            informUser("No VEP header found. Trying SnpEff...\n");
+            eval { 
+                %csq_head = VcfReader::readSnpEffHeader
+                (
+                    header => $head
+                ); 
+            } ;
+            if (not $@){
+                $opts{m} = 'snpeff';
+                informUser("Found SnpEff header - using SnpEff 'ANN' annotations.\n");
+            }else{
+                die "ERROR: Could not find VEP or SnpEff headers in input. ".
+                    "Please annotate your input with either program and try again.\n";
+            }
+        }
+    }else{
+        if ($opts{m} eq 'vep'){
+            %csq_head = VcfReader::readVepHeader
+                (
+                    header => $head
+                ); 
+        }else{
+            %csq_head = VcfReader::readSnpEffHeader
+            (
+                header => $head
+            ); 
+        }
+    }
+    return %csq_head;
+}
+
+#################################################
+sub getAndCheckClasses{
+    my %all_classes = ();
+    if ($opts{m} eq 'vep'){
+        %all_classes =  VcfhacksUtils::readVepClassesFile();
+    }else{
+        %all_classes =  VcfhacksUtils::readSnpEffClassesFile();
+    }
+    if (not @classes){
+        @classes = grep { $all_classes{$_} eq 'default' } keys %all_classes;
+    }
+    push @classes, @add_classes if (@add_classes);
+    if ($opts{m} eq 'vep' and $opts{consensus_splice_site}){
+        push @classes, "splice_region_variant" ;
+    }
+    @classes = map { lc($_) } @classes; 
+    @classes = VcfhacksUtils::removeDups(@classes);
+    foreach my $class (@classes) {
+        die "Error - variant class '$class' not recognised.\n"
+          if not exists $all_classes{lc($class)} ;
+    }
+    return @classes;
+}
+
+#################################################
+sub getAndCheckBiotypes{
+    return if $opts{no_biotype_filtering}; 
+    my %all_biotypes = VcfhacksUtils::readBiotypesFile();
+    if (not @biotypes){
+        @biotypes = grep { $all_biotypes{$_} eq 'filter' } keys %all_biotypes;
+    }
+    @biotypes = map { lc($_) } @biotypes; 
+    @biotypes = VcfhacksUtils::removeDups(@biotypes);
+    foreach my $biotyp (@biotypes) {
+        die "Error - biotype '$biotyp' not recognised.\n"
+          if not exists $all_biotypes{lc($biotyp)} ;
+    }
+    return @biotypes;
+}
+ 
 ######################################################
 sub searchWithEntrezId{ 
     #USE ENTREZ IDs TO SEARCH DATABSE FILES
@@ -779,7 +955,7 @@ sub search_ensembl_id{
         $database{ensemblToEntrez}->{col}
     );
     if ( $i < 1 ){
-        return query_rest_ensid($ensid) if (not $no_rest_queries);
+        return query_rest_ensid($ensid) if (not $opts{n});
         return;
     }
             
@@ -838,131 +1014,7 @@ sub search_ensembl_id{
     return @ids;
 }
 
-########################################
-sub checkAndParseSnpEffClasses{
 
-    my @valid = qw (INTERGENIC
-                UPSTREAM
-                UTR_5_PRIME
-                UTR_5_DELETED
-                START_GAINED
-                SPLICE_SITE_ACCEPTOR
-                SPLICE_SITE_DONOR
-                START_LOST
-                SYNONYMOUS_START
-                CDS
-                GENE
-                TRANSCRIPT
-                EXON
-                EXON_DELETED
-                NON_SYNONYMOUS_CODING
-                SYNONYMOUS_CODING
-                FRAME_SHIFT
-                CODON_CHANGE
-                CODON_INSERTION
-                CODON_CHANGE_PLUS_CODON_INSERTION
-                CODON_DELETION
-                CODON_CHANGE_PLUS_CODON_DELETION
-                STOP_GAINED
-                SYNONYMOUS_STOP
-                STOP_LOST
-                INTRON               
-                UTR_3_PRIME
-                UTR_3_DELETED
-                DOWNSTREAM
-                INTRON_CONSERVED
-                INTERGENIC_CONSERVED
-                INTRAGENIC
-                RARE_AMINO_ACID
-                NON_SYNONYMOUS_START);
-
-    if (not @classes){
-        @classes = qw (
-                UTR_5_DELETED
-                SPLICE_SITE_ACCEPTOR
-                SPLICE_SITE_DONOR
-                START_LOST
-                EXON_DELETED
-                NON_SYNONYMOUS_CODING
-                FRAME_SHIFT
-                CODON_INSERTION
-                CODON_CHANGE_PLUS_CODON_INSERTION
-                CODON_DELETION
-                CODON_CHANGE_PLUS_CODON_DELETION
-                STOP_GAINED
-                STOP_LOST
-                UTR_3_DELETED
-                RARE_AMINO_ACID
-                );
-    }
-    push (@classes, @add) if (@add);
-    foreach my $class (@classes){
-        die "Error - variant class '$class' not recognised.\n" if not grep {/^$class$/i} @valid;
-    }
-}
-########################################
-sub checkAndParseVepClasses{
-    my @valid = qw (transcript_ablation
-    splice_donor_variant
-    splice_acceptor_variant
-    stop_gained
-    frameshift_variant
-    stop_lost
-    initiator_codon_variant
-    inframe_insertion
-    inframe_deletion
-    missense_variant
-    protein_altering_variant
-    transcript_amplification
-    splice_region_variant
-    incomplete_terminal_codon_variant
-    synonymous_variant
-    stop_retained_variant
-    coding_sequence_variant
-    mature_miRNA_variant
-    5_prime_UTR_variant
-    3_prime_UTR_variant
-    intron_variant
-    NMD_transcript_variant
-    non_coding_exon_variant
-    nc_transcript_variant
-    upstream_gene_variant
-    downstream_gene_variant
-    TFBS_ablation
-    TFBS_amplification
-    TF_binding_site_variant
-    regulatory_region_variant
-    regulatory_region_ablation
-    regulatory_region_amplification
-    feature_elongation
-    feature_truncation
-    intergenic_variant);
-
-    if ( not @classes ) {
-        @classes = qw (transcript_ablation
-        splice_donor_variant
-        splice_acceptor_variant
-        splice_region_variant
-        stop_gained
-        frameshift_variant
-        stop_lost
-        initiator_codon_variant
-        inframe_insertion
-        inframe_deletion
-        missense_variant
-        protein_altering_variant
-        transcript_amplification
-        TFBS_ablation
-        TFBS_amplification
-        regulatory_region_ablation
-        regulatory_region_amplification);
-    }
-    push( @classes, @add ) if (@add);
-    foreach my $class (@classes) {
-        die "Error - variant class '$class' not recognised.\n"
-        if not grep { /$class/i } @valid;
-    }
-}
 ########################################
 sub convert_text{
     #replace characters not compatible with VCF
@@ -974,44 +1026,52 @@ sub convert_text{
 }
 ########################################
 sub check_consequence {
-    my ( $annot ) = @_;
-    if ($snpEff_mode){
-        return check_snpeff_consequence($annot);
+    if ($opts{m} eq 'snpeff'){
+        return check_snpeff_consequence(@_);
     }else{
-        return check_vep_consequence($annot);
+        return check_vep_consequence(@_);
     }
 }
 ########################################
 sub check_snpeff_consequence {
-    my ( $annot ) = @_;
-    if ($annot->{Transcript_BioType} =~ /nonsense_mediated_decay|pseudogene$/i){
-        return 0;
-    }
-CLASS: foreach my $class (@classes) {
-        if (lc$annot->{Effect} eq lc$class){
+    my ($annot, $biotype_filters, $class_filters) = @_;
+    #skip variants with undef features (intergenic variants)
+    return 0 if not defined $annot->{feature_id};
+    #skip unwanted biotypes
+    return 0 if exists $biotype_filters->{lc $annot->{transcript_biotype} };
+    my @anno_csq = split( /\&/, $annot->{annotation} );
+ANNO: foreach my $ac (@anno_csq){
+        $ac = lc($ac);#we've already converted %class_filters to all lowercase
+        if ( exists $class_filters->{$ac} ){
             return 1;
         }
     }
-    return 0;
+    return 0;#no annotation matching %class_filters
 }
+
 ########################################
 sub check_vep_consequence {
-
-    #return 1 if matches class and isn't a NMD_transcript_variant
-    my ( $annot ) = @_;
-    my @anno_csq = split( /\&/, $annot->{consequence} );
-    if ( grep { /NMD_transcript_variant/i } @anno_csq ) {
-        return 0;
+    my ($annot, $biotype_filters, $class_filters) = @_;
+    #intergenic variants have no feature associated with them - skip
+    return 0 if $annot->{consequence} eq "intergenic_variant";
+    #skip unwanted biotypes
+    return 0 if (exists $biotype_filters->{$annot->{biotype}}) ;
+    #skip non-canonical transcripts if --canonical_only selected
+    if ($opts{canonical_only}) {
+        return 0 if ( not $annot->{canonical} );
     }
-CLASS: foreach my $class (@classes) {
-        foreach my $ac (@anno_csq) {
-            if ( lc $ac eq lc $class ) {
-                return 1;
-            }
+    
+    my @anno_csq = split( /\&/, $annot->{consequence} );
+    #skip NMD transcripts
+    return 0 if ( grep { /NMD_transcript_variant/i } @anno_csq );
+
+ANNO: foreach my $ac (@anno_csq){
+        $ac = lc($ac);#we've already converted %class_filters to all lowercase
+        if ( exists $class_filters->{$ac} ){
+            return 1;
         }
     }
-    #no match
-    return 0;
+    return 0;#no annotation matching %class_filters
 }
 ########################################
 sub prepare_files {
@@ -1052,7 +1112,7 @@ sub prepare_database {
             if ($oldest) {
                 display_error_and_continue(
                     "No files missing in database.",
-"Oldest file is $oldest days old. Use the \"Update Database\" option to update."
+"Oldest file is $oldest days old. Use the -D/--DOWNLOAD_NEW option to update."
                 );
             }
             else {
@@ -1067,11 +1127,11 @@ sub prepare_database {
     }
     #my $progressbar = Term::ProgressBar->new(
     #    { name => "Prep Database", count => 100, ETA => "linear", } );
-    if ( not -e $genedir ) {
-        unless (mkdir $genedir){
+    if ( not -e $opts{d} ) {
+        unless (mkdir $opts{d}){
             display_error_and_exit(
                     "Permissions Error",
-"Can't create directory $genedir for database files - please check permissions"
+"Can't create directory $opts{d} for database files - please check permissions"
             );
         }
     }
@@ -1101,9 +1161,9 @@ sub prepare_database {
         $n++;
         my $time = strftime( "%H:%M:%S", localtime );
         print STDERR "[$time] Processing $file_name, file $n of $t...\n";
-        chdir $genedir or display_error_and_exit(
+        chdir $opts{d} or display_error_and_exit(
             "Directory Error",
-            "Can't move to directory $genedir",
+            "Can't move to directory $opts{d}",
         );
         my $file_exists = 0;
 
@@ -1240,7 +1300,7 @@ sub downloadBiogrid{
     my $file = shift;
     my $exists = shift;
     my $url = "$file->{url}/$file->{dir}/$file->{file}";
-    my $dl  = "$genedir/$file->{file}";
+    my $dl  = "$opts{d}/$file->{file}";
     my $time = strftime( "%H:%M:%S", localtime );
     print STDERR "[$time] Downloading $url...\n";
     getstore($url, $dl )
@@ -1786,13 +1846,51 @@ Output file name.
 
 Directory containing reference files. Will look for a folder called 'ensAnnotatorDb' in the same directory as this program if not supplied. This directory will be created and populated if using the --DOWNLOAD_NEW option.
 
-=item B<-s    --snpEff>
-
-Use SnpEff annotations instead of VEP annotations to identify genes. You must have used the -geneId flag when annotating with snpEff for this script to work.
-
 =item B<-f    --functional>
 
-Use this flag to only annotate standard 'functional' variant classes (transcript_ablation, splice_donor_variant, splice_acceptor_variant, splice_region_variant, stop_gained, frameshift_variant, stop_lost, initiator_codon_variant, inframe_insertion, inframe_deletion, missense_variant, protein_altering_variant, transcript_amplification, TFBS_ablation, TFBS_amplification, regulatory_region_ablation, regulatory_region_amplification). Prevents annotation of gene information for genes/transcripts that overlap a variant but are not affected in a way defined by one of these variant classes.
+Use this flag to only annotate standard 'functional' variant classes.  Prevents annotation of gene information for genes/transcripts that overlap a variant but are not affected in a way defined by one of these variant classes. The default classes are:
+
+B<VEP:>
+
+        TFBS_ablation
+        TFBS_amplification
+        frameshift_variant
+        inframe_deletion
+        inframe_insertion
+        initiator_codon_variant
+        missense_variant
+        protein_altering_variant
+        regulatory_region_ablation
+        regulatory_region_amplification
+        splice_acceptor_variant
+        splice_donor_variant
+        stop_gained
+        stop_lost
+        transcript_ablation
+        transcript_amplification
+
+B<SnpEff:>
+
+        chromosome
+        coding_sequence_variant
+        inframe_insertion
+        disruptive_inframe_insertion
+        inframe_deletion
+        disruptive_inframe_deletion
+        exon_loss_variant
+        frameshift_variant
+        missense_variant
+        rare_amino_acid_variant
+        splice_acceptor_variant
+        splice_donor_variant
+        splice_region_variant
+        stop_lost
+        5_prime_UTR_premature_start_codon_gain_variant
+        start_lost
+        stop_gained
+        exon_loss
+
+Available classes that can be chosen instead of (or in addition to - see below) these classes can be found in the data/vep_classes.tsv and data/snpeff_classes.tsv files respectively using the -c/--classes. 
 
 =item B<-c    --classes>
 
@@ -1801,6 +1899,33 @@ Use this to specify VEP/SnpEff variant classes to annotate. Gene information wil
 =item B<-a    --additional_classes>
 
 Use this to specify additional VEP variant classes to annotate as well as those used by --functional.
+
+=item B<-b    --biotype_filters>
+
+When using the -f/--functional or -c/--classes options, features/transcripts with the following biotypes are ignored by default:
+
+    IG_C_pseudogene
+    IG_J_pseudogene
+    IG_V_pseudogene
+    nonsense_mediated_decay
+    non_stop_decay
+    processed_pseudogene
+    pseudogene
+    retained_intron
+    transcribed_processed_pseudogene
+    transcribed_unprocessed_pseudogene
+    TR_J_pseudogene
+    TR_V_pseudogene
+    unitary_pseudogene
+    unprocessed_pseudogene
+
+You may override this filter by specifying biotypes to filter with this option or prevent biotype filtering using the --no_biotype_filtering option (see below). 
+
+The 'data/biotypes.tsv' file contains a list of valid biotypes and the default behaviour of this program (i.e. 'keep' or 'filter'). 
+
+=item B<--no_biotype_filtering>
+
+Use this flag to consider consequences affecting ALL biotypes when using -f/--functional or -c/--classes options.
 
 =item B<-g    --gene_annotations>
 
@@ -1831,6 +1956,10 @@ URL for Ensmbl REST server for gene ID queries. Default is "http://grch37.rest.e
 
 Use this flag to disable REST queries (e.g. if you have no internet connection). 
 
+=item B<-m    --mode>
+
+This program will attempt to detect the format of your input automatically by looking for VEP or SnpEff annotations, but you may specify either 'vep' or 'snpeff' with this option to select the mode employed by the script if you have a file with both VEP and SnpEff annotations. By default, if both annotations are present and the program is run without this option, VEP annotations will be used. NOTE: Only SnpEff annotations using the more recent 'ANN' style annotations rather than the older 'EFF' style are recognised by this program.
+
 =item B<-p    --progress>
 
 Show a progress bar.
@@ -1851,7 +1980,7 @@ Download missing reference files only (e.g. after an interrupted --DOWNLOAD_NEW 
 
 Show help message.
 
-=item B<-m    --manual>
+=item B<--manual>
 
 Show manual page.
 
