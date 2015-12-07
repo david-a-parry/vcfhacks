@@ -1820,13 +1820,13 @@ sub download_gene2xml {
 
 =head1 NAME
 
-ensemblGeneAnnotator.pl - add gene annotations to a VCF file annotated by Ensembl's variant_effect_predictor.pl
+geneAnnotator.pl - add gene annotations to a VCF file annotated by Ensembl's variant_effect_predictor.pl or SnpEff
 
 =head1 SYNOPSIS
 
-        ensemblGeneAnnotator.pl -i [VEP annotated vcf file] -d [directory containing reference files] [options]
-        ensemblGeneAnnotator.pl -h (display help message)
-        ensemblGeneAnnotator.pl -m (display manual page)
+        geneAnnotator.pl -i [VEP/SnpEff annotated vcf file] -d [directory containing reference files] [options]
+        geneAnnotator.pl -h (display help message)
+        geneAnnotator.pl -m (display manual page)
 
 =cut
 
@@ -1836,7 +1836,7 @@ ensemblGeneAnnotator.pl - add gene annotations to a VCF file annotated by Ensemb
 
 =item B<-i    --input>
 
-Input VCF file annotated with variant_effect_predictor.pl or snpEff. Alternatively, if using --list_mode, a list of gene symbols or Enztrez Gene IDs. Required.
+Input VCF file annotated with variant_effect_predictor.pl or SnpEff. Alternatively, if using --list_mode, a list of gene symbols or Enztrez Gene IDs. Required.
 
 =item B<-o    --output>
 
@@ -1991,22 +1991,25 @@ Show manual page.
 
 =head1 EXAMPLES 
 
-        ensemblGeneAnnotator.pl -i vep_annotated.vcf -d ~/ensGeneAnnotatorDatabase -o vep_and_ensGene_annotated.vcf
-        #annotate vep_annotated.vcf file using database folder located at ~/ensGeneAnnotatorDatabase
+        geneAnnotator.pl -i vep_annotated.vcf -o vep_and_gene_annotated.vcf
+        #annotate vep_annotated.vcf file 
+
+        geneAnnotator.pl -i vep_annotated.vcf -d ~/data/geneAnnotatorDatabase -o vep_and_gene_annotated.vcf
+        #annotate vep_annotated.vcf file using database folder located at ~/data/geneAnnotatorDatabase
         
-        ensemblGeneAnnotator.pl -i vep_annotated.vcf -d ~/ensGeneAnnotatorDatabase -o vep_and_ensGene_annotated.vcf --functional
+        geneAnnotator.pl -i vep_annotated.vcf -d ~/data/geneAnnotatorDatabase -o vep_and_ensGene_annotated.vcf --functional
         #as above but only considering genes which have at least one 'functional' variant consequence
         
-        ensemblGeneAnnotator.pl -d ~/newEnsGeneAnnotatorDatabase -D
-        #download files and create database in ~/newEnsGeneAnnotatorDatabase folder
+        geneAnnotator.pl -d ~/data/newGeneAnnotatorDatabase -D
+        #download files and create database in ~/data/newGeneAnnotatorDatabase folder
 
-        ensemblGeneAnnotator.pl -d ~/newEnsGeneAnnotatorDatabase -R
-        #replace missing files in ~/newEnsGeneAnnotatorDatabase 
+        geneAnnotator.pl -d ~/data/geneAnnotatorDatabase -R
+        #replace missing files in ~/data/geneAnnotatorDatabase
 
 
 =head1 DESCRIPTION
 
-This script reads VCF lines annotated with Ensembl's variant_effect_predictor.pl, identifies the corresponding human Entrez Gene ID for each ensembl gene and annotates information from Gene RIFS, Gene Ontology, NCBI summaries, OMIM and MGI phenotypes to each variants INFO field. In order to conform to VCF format, text in annotations has spaces replaced with underscores, semi-colons replaced with the ^ symbol and commas replaced with the ` symbol. Multiple values for annotations are separated with two colons ("::"). This is designed to allow for conversion of fields to readable text with a simple regex when attempting to report output in a human readable format.
+This script reads VCF lines annotated with Ensembl's variant_effect_predictor.pl or SnpEff, identifies the corresponding human Entrez Gene ID for each ensembl gene and annotates information from Gene RIFS, Gene Ontology, NCBI summaries, BioGrid, OMIM and MGI phenotypes to each variants INFO field. In order to conform to VCF format, text in annotations has spaces replaced with underscores, semi-colons replaced with the ^ symbol and commas replaced with the ` symbol. Multiple values for annotations are separated with two colons ("::"). This is designed to allow for conversion of fields to readable text with a simple regex when attempting to report output in a human readable format.
 
 This program must create a local database of gene annotations to search, which is a time consuming process but only needs to be done occasionally, when you wish to update the stored annotations. Alternatively, a prebuilt database may be downloaded from http://sourceforge.net/projects/vcfhacks/files/ensAnnotatorDatabase/ 
 
