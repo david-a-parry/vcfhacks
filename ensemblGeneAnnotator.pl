@@ -25,6 +25,7 @@ use FindBin qw($RealBin);
 use lib "$FindBin::Bin/lib";
 use lib "$FindBin::Bin/lib/Bioperl";
 use lib "$FindBin::Bin/lib/BioASN1EntrezGene/lib";
+use VcfhacksUtils;
 use ParseVCF;
 
 my $genedir;
@@ -78,12 +79,22 @@ if (not $no_rest_queries){
         if (eval "use JSON; 1"){
             $http = HTTP::Tiny->new();
         }else{
-            informUser("[WARNING] JSON module is required for using rest queries to find missing ENTREZ IDs. If you want to use this feature please install this module using CPAN.\n");  
+            informUser
+            ( 
+                "[WARNING] JSON module is required for using rest ".
+                "queries to find missing ENTREZ IDs. If you want to ".
+                "use this feature please install this module using CPAN.\n"
+            );  
             $no_rest_queries = 1;
         }
     }else{
-        informUser("[WARNING] HTTP::Tiny is required for using rest queries to find missing ENTREZ IDs. If you want to use this feature please install this module using CPAN.\n");  
-    $no_rest_queries = 1;
+        informUser
+        (
+            "[WARNING] HTTP::Tiny is required for using rest queries to ".
+            "find missing ENTREZ IDs. If you want to use this feature please ".
+            "install this module using CPAN.\n"
+        );  
+        $no_rest_queries = 1;
     }
 }
 
@@ -184,9 +195,11 @@ else {
     foreach my $m (@missing) {
         push @missing_files, $m->{localfile};
     }
-    display_error_and_exit(
-        "Missing database files - rerun with the --DOWNLOAD_NEW option to correct this.",
-        "Can't find following files:\n" . join( "\n", @missing_files ) . "\n"
+    display_error_and_exit
+    (
+        "Missing database files - rerun with the --DOWNLOAD_NEW option ".
+        "to correct this. Can't find following files:\n" . 
+        join( "\n", @missing_files ) . "\n"
     ) if @missing;
 }
 if ($prep) {
@@ -219,7 +232,19 @@ if (@missing) {
 
 my $next_update  = 0;
 my $pre_progress = 0;
-my @all_annotations = qw(ENSGENE_ID ENTREZ_ID SYMBOL GO_ID GO_DESCRIPTION GENERIFS BIOGRID_INTERACTANTS SUMMARY OMIM MGI_PHENOTYPE);
+my @all_annotations = 
+qw(
+    ENSGENE_ID
+    ENTREZ_ID
+    SYMBOL
+    GO_ID
+    GO_DESCRIPTION
+    GENERIFS
+    BIOGRID_INTERACTANTS
+    SUMMARY
+    OMIM
+    MGI_PHENOTYPE
+);
 if (@annotations){
     foreach my $anno (@annotations){
         if (not grep {/uc($_) eq uc($anno)/} @annotations){
@@ -287,7 +312,8 @@ sub getEntrezIdFromSymbol{
 
 ######################################################
 sub getSymbolsToIds{
-    open (my $FH, $database{human_summary}->{localfile}) or die "Cannot open database file for reading: $!\n";
+    open (my $FH, $database{human_summary}->{localfile}) 
+      or die "Cannot open database file for reading: $!\n";
     while (my $line = <$FH>){
         chomp $line;
         my @spl = split("\t", $line);
@@ -330,7 +356,10 @@ sub parseAsList{
                     push @single_anno, $entrez_id; 
                 }elsif (exists $gene_annot->{lc($annot)}){
                     if (ref ($gene_annot->{lc($annot)}) eq 'ARRAY'){
-                        remove_duplicates( \@{ $gene_annot->{lc($annot)} } );
+                        @{$gene_annot->{lc($annot)}} = VcfhacksUtils::removeDups
+                        ( 
+                            @{ $gene_annot->{lc($annot)} } 
+                        );
                         my @conv = ();
                         foreach my $g (@{$gene_annot->{lc($annot)}}){
                             push @conv, $g;
@@ -390,12 +419,22 @@ sub parseAsVcf{
     my $vcf_line = 0;
     $next_update = 0;
     print $OUT join( "", @{ $vcf_obj->get_metaHeader() } );
-    print $OUT
-        "##INFO=<ID=GeneAnno,Number=.,Type=String,Description=\"Collected Entrez/MGI gene annotations from for VEP/SnpEff annotated human genes. ". 
-        "Multiple values per annotation are separated using two colons ('::'), spaces are replaced with underscores, commas are replaced with the ` ".
-        "symbol, and semi-colons are replaced with the ^ symbol so that regexes can be used to extract the original text programmatically. ".
-        "Format: " . join("|", @annotations) ."\">\n";
+    my %gene_inf = 
+    (
+        ID          => "GeneAnno",
+        Number      => ".",
+        Type        => "String",
+        Description => "Collected Entrez/MGI/BioGrid gene annotations from for".
+                       " VEP/SnpEff annotated human genes. Multiple values per".
+                       " annotation are separated using two colons ('::'), " . 
+                       "spaces are replaced with underscores, commas are " .
+                       "replaced with the ` symbol, and semi-colons are " . 
+                       "replaced with the ^ symbol so that regexes can be used".
+                       " to extract the original text programmatically. ".
+                       "Format: " . join("|", @annotations) 
+    );
 
+    print $OUT VcfhacksUtils::getInfoHeader(%gene_inf) . "\n"; 
     my $header = $vcf_obj->getHeader(1);
     print $OUT $header;
     my $gene_field = "gene";#if using VEP annotations we get Gene ID from this key
@@ -409,15 +448,19 @@ sub parseAsVcf{
         my @csq = ();
         my %gene_annot = ();
         if ($snpEff_mode){
-            @csq = $vcf_obj->getSnpEffFields([ "Effect", "Gene_Name", "Transcript_BioType" ] ); #returns array of hashes e.g. $csq[0]->{Gene_Name} = 'ABCA1' ; $csq[0]->{EFFECT} = 'DOWNSTREAM'
-            die
-    "No consequence field found for line:\n$line\nPlease annotated your VCF file with SnpEff before running this program with the --snpEff_mode option.\n"
-            if not @csq;
+            @csq = $vcf_obj->getSnpEffFields
+            (
+                [ "Effect", "Gene_Name", "Transcript_BioType" ] 
+            ); #returns array of hashes 
+               #e.g. $csq[0]->{Gene_Name} = 'ABCA1' ; $csq[0]->{EFFECT} = 'DOWNSTREAM'
+            die "No consequence field found for line:\n$line\nPlease annotate ".
+                "your VCF file with SnpEff before running this program with " .
+                "the --snpEff_mode option.\n" if not @csq;
         }else{
             @csq = $vcf_obj->getVepFields( [ "Gene", "Consequence" ] );
-            die
-    "No consequence field found for line:\n$line\nPlease annotated your VCF file with ensembl's variant effect precictor before running this program.\n"
-            if not @csq;
+            die "No consequence field found for line:\n$line\nPlease annotate ".
+                " your VCF file with ensembl's variant effect precictor before".
+                "running this program.\n" if not @csq;
         }
         foreach my $c (@csq) {
             if ($functional) {
@@ -452,7 +495,12 @@ sub parseAsVcf{
                     push @single_anno, $entrez_id;    
                 }elsif (exists $gene_annot{$entrez_id}->{lc($annot)}){
                     if (ref ($gene_annot{$entrez_id}->{lc($annot)}) eq 'ARRAY'){
-                        remove_duplicates( \@{ $gene_annot{$entrez_id}->{lc($annot)} } );
+                        
+                        @{$gene_annot{$entrez_id}->{lc($annot)}} =
+                          VcfhacksUtils::removeDups
+                          ( 
+                             @{ $gene_annot{$entrez_id}->{lc($annot)} }
+                          );
                         my @conv = ();
                         foreach my $g (@{$gene_annot{$entrez_id}->{lc($annot)}}){
                             push @conv, convert_text($g);
@@ -472,7 +520,8 @@ sub parseAsVcf{
         my $new_line = $vcf_obj->addVariantInfoField('GeneAnno', $ens_annot);
         print $OUT "$new_line\n";
         if ($progress){
-            $next_update = $progressbar->update($vcf_line) if $vcf_line >= $next_update;
+            $next_update = $progressbar->update($vcf_line) 
+              if $vcf_line >= $next_update;
         }
     }
     if ($progress){
@@ -1139,7 +1188,8 @@ sub prepare_database {
 #my $exit_status = `$command`;
 #display_error_and_continue("Error processing gene2xml command", "Exit status of $exit_status from $command") if $exit_status;
 #unlink $file->{file} or display_error_and_exit( "Can't delete xml output ($file->{file})", "Check permissions - it is safe to manually delete this file now");
-            my ( $enstoEntrez_file_name, $file_dir ) = fileparse( $database_ref->{ensemblToEntrez}->{localfile} );
+            my ( $enstoEntrez_file_name, $file_dir ) 
+               = fileparse( $database_ref->{ensemblToEntrez}->{localfile} );
             extract_ncbi_summaries( $gene2xml, $decomp_file, "$file_name.tmp",
                 $enstoEntrez_file_name .".tmp" );
                 move( "$file_name.tmp", $file_name ) or display_error_and_exit(
@@ -1147,10 +1197,12 @@ sub prepare_database {
                 "Error creating file $file_name",
                 "Check permissions and/or disk space."
                 );
-                move( $enstoEntrez_file_name .".tmp", $enstoEntrez_file_name) or display_error_and_exit(
-                "File Error",
-                "Error creating file $database_ref->{ensemblToEntrez}->{localfile}",
-                "Check permissions and/or disk space."
+                move( $enstoEntrez_file_name .".tmp", $enstoEntrez_file_name) 
+                  or display_error_and_exit
+                (
+                    "File Error",
+                    "Error creating file $database_ref->{ensemblToEntrez}->{localfile}",
+                    "Check permissions and/or disk space."
                 );
             $time = strftime( "%H:%M:%S", localtime );
             print STDERR "[$time] Sorting and indexing ensemblToEntrez file...\n";
@@ -1389,7 +1441,8 @@ sub extract_ncbi_summaries {
         "to extract NCBI gene summaries. Please install bioperl and try again\n";
     my $time = strftime( "%H:%M:%S", localtime );
     my $cmd = "$gene2xml -i $agsfile -b -x > $agsfile.asn.1";
-    print STDERR "[$time] Converting NCBI binary gene data to text from $agsfile using the following command:\n$cmd\n";
+    print STDERR "[$time] Converting NCBI binary gene data to text from ". 
+                 "$agsfile using the following command:\n$cmd\n";
     system($cmd); 
     if ($? == -1) {
         die "failed to execute conversion: $!\n";
@@ -1406,7 +1459,8 @@ sub extract_ncbi_summaries {
     open( my $SUMOUT, ">$sum_out" ) or die "Can't open $sum_out for writing\n";
 
     $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "[$time] Extracting NCBI gene data from $agsfile - this may take some time...\n";
+    print STDERR "[$time] Extracting NCBI gene data from $agsfile - ". 
+                 "this may take some time...\n";
     while ( my ( $gene, $genestructure, $uncaptured ) = $io->next_seq ) {
     
         my $chrom;
@@ -1475,7 +1529,8 @@ sub extract_ncbi_summaries {
     
     close $SUMOUT;
     close $ENSOUT;
-    unlink "$agsfile.asn.1" or warn "Error deleting $agsfile.asn.1 file - you may want to delete this manually.\n";
+    unlink "$agsfile.asn.1" or warn "Error deleting $agsfile.asn.1 file - ".
+           "you may want to delete this manually.\n";
 }
 
 #####################################
@@ -1684,9 +1739,12 @@ sub download_gene2xml {
         }
     }
     else {
-        display_error_and_exit(
+        display_error_and_exit
+        (
             "Unsupported OS: $^O",
-"Failed to retrieve gene2xml because your OS is not supported.  If you have a binary place it in your database folder and rerun the database update"
+            "Failed to retrieve gene2xml because your OS is not supported. ".
+            "If you have a binary place it in your database folder and rerun ".
+            "the database update"
         );
     }
     $ftpobj->get($prog)
