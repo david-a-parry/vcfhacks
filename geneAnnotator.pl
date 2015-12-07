@@ -113,7 +113,7 @@ EOT
 
 
 my ( $script, $script_dir ) = fileparse($0);
-$opts{d} = "$RealBin/ensAnnotatorDb" if ( not $opts{d} );
+$opts{d} = "$RealBin/data/geneAnnotatorDb" if ( not $opts{d} );
 $opts{d} =~ s/\/$//;
 my $OUT;
 if ($opts{o}) {
@@ -1844,7 +1844,7 @@ Output file name.
 
 =item B<-d    --directory>
 
-Directory containing reference files. Will look for a folder called 'ensAnnotatorDb' in the same directory as this program if not supplied. This directory will be created and populated if using the --DOWNLOAD_NEW option.
+Directory containing reference files. Will look for a folder called 'geneAnnotatorDb' in the 'data' subdirectory where this program is located if this option is not supplied. This directory will be created and populated if using the --DOWNLOAD_NEW option.
 
 =item B<-f    --functional>
 
@@ -2011,7 +2011,7 @@ Show manual page.
 
 This script reads VCF lines annotated with Ensembl's variant_effect_predictor.pl or SnpEff, identifies the corresponding human Entrez Gene ID for each ensembl gene and annotates information from Gene RIFS, Gene Ontology, NCBI summaries, BioGrid, OMIM and MGI phenotypes to each variants INFO field. In order to conform to VCF format, text in annotations has spaces replaced with underscores, semi-colons replaced with the ^ symbol and commas replaced with the ` symbol. Multiple values for annotations are separated with two colons ("::"). This is designed to allow for conversion of fields to readable text with a simple regex when attempting to report output in a human readable format.
 
-This program must create a local database of gene annotations to search, which is a time consuming process but only needs to be done occasionally, when you wish to update the stored annotations. Alternatively, a prebuilt database may be downloaded from http://sourceforge.net/projects/vcfhacks/files/ensAnnotatorDatabase/ 
+This program must create a local database of gene annotations to search, which is a time consuming process but only needs to be done occasionally, when you wish to update the stored annotations. Alternatively, a prebuilt database may be downloaded from [URL TO BE UPDATED!]
 
 =cut
 
