@@ -149,7 +149,7 @@ my %info_fields = VcfReader::getInfoFields(header => \@header);
 
 if ($opts{m}){
     if ( lc($opts{m}) ne 'vep' and lc($opts{m}) ne 'snpeff' ){
-    die <<EOT
+        die <<EOT
 SYNTAX ERROR: Unrecognised value for --mode: '$opts{m}'. 
 
 Valid values are 'vep' or 'snpeff'. 
@@ -157,6 +157,7 @@ Valid values are 'vep' or 'snpeff'.
 EOT
 ;
     }
+    $opts{m} = lc($opts{m}); 
 }
 
 
