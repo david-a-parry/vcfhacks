@@ -1128,12 +1128,11 @@ sub prepare_database {
     #my $progressbar = Term::ProgressBar->new(
     #    { name => "Prep Database", count => 100, ETA => "linear", } );
     if ( not -e $opts{d} ) {
-        unless (mkdir $opts{d}){
-            display_error_and_exit(
-                    "Permissions Error",
-"Can't create directory $opts{d} for database files - please check permissions"
-            );
-        }
+        make_path($opts{d}, { verbose => 1 } ) or display_error_and_exit
+        (
+            "make_path error",
+            "Can't create directory $opts{d} for database files: $!"
+        );
     }
     foreach my $file (@files) {
         if (defined $file->{file} && $file->{file} eq "Homo_sapiens.ags.gz"){
