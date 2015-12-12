@@ -1825,7 +1825,7 @@ geneAnnotator.pl - add gene annotations to a VCF file annotated by Ensembl's var
 
         geneAnnotator.pl -i [VEP/SnpEff annotated vcf file] -d [directory containing reference files] [options]
         geneAnnotator.pl -h (display help message)
-        geneAnnotator.pl -m (display manual page)
+        geneAnnotator.pl --manual (display manual page)
 
 =cut
 
