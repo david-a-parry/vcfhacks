@@ -144,6 +144,7 @@ use lib "$FindBin::Bin/lib";
 use SortGenomicCoordinates;
 use VcfReader;
 use IdParser;
+use EnsemblRestQuery;
 
 my @bedfile;
 my @reg;
