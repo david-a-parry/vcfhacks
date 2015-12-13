@@ -1,8 +1,16 @@
+#!/usr/bin/env perl
 use strict;
 use warnings;
 use Module::CoreList;
 use Module::Extract::Use;
 use Data::Dumper;
+
+die <<EOT
+
+usage: $0 script.pl [script2.pl script3.pl ... scriptN.pl] 
+
+EOT
+   if @ARGV < 1;
 
 my @core = Module::CoreList->find_modules();
 
