@@ -1302,12 +1302,15 @@ sub downloadBiogrid{
     my $dl  = "$opts{d}/$file->{file}";
     my $time = strftime( "%H:%M:%S", localtime );
     print STDERR "[$time] Downloading $url...\n";
-    getstore($url, $dl )
-          or restore_file( $exists, $file )
-          && display_error_and_exit( 
-            "Download error",
-            "Error downloading $url!\n"
-    );
+    my $er = getstore($url, $dl );
+    if (is_error($er)){
+          restore_file( $exists, $file )
+          && display_error_and_exit
+             ( 
+                "Download error",
+                "Error getting $url - code $er\n"
+            );
+    }
     $time = strftime( "%H:%M:%S", localtime );
     print STDERR "[$time] Decompressing $dl...\n";
     unzip $dl => $file->{localfile} or die "Unzip failed: $UnzipError\n";   
@@ -1744,6 +1747,7 @@ sub restore_file {
     if ($exists) {
         move( "$file.bkup", $file );
     }
+    return 1;
 }
 
 ######################################################################
