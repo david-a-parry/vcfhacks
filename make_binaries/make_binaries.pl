@@ -5,18 +5,20 @@ use File::Copy::Recursive qw(rcopy);
 use File::Path qw (remove_tree);
 use FindBin qw($Bin);
 
-my @needs_tabix = qw (
-        annotateSnps.pl
-        filterOnEvsMaf.pl
-        filterOnSample.pl
-        filterVcfOnVcf.pl
-        getVariantsByLocation.pl
-        rankOnCaddScore.pl
-        sampleCallsToInfo.pl
+my @needs_tabix =  
+qw (
+    annotateSnps.pl
+    filterOnEvsMaf.pl
+    filterOnSample.pl
+    filterVcfOnVcf.pl
+    getVariantsByLocation.pl
+    rankOnCaddScore.pl
+    sampleCallsToInfo.pl
 );
-my @needs_sort_external = qw (
-        sortVcf.pl
-        rankOnCaddScore.pl
+my @needs_sort_external = 
+qw (
+    sortVcf.pl
+    rankOnCaddScore.pl
 );
 
 my $dir = "$Bin/../";
@@ -54,7 +56,7 @@ foreach my $f (@files){
     if ($f =~ /\.pl$/){
         (my $exe = $f) =~ s/\.pl$//;
         chdir($bin_dir);
-        my $pp = "pp";
+        my $pp = "pp --lib lib/ --lib lib/Bioperl --lib lib/BioASN1EntrezGene/lib";
         if ($^O eq 'darwin'){
             $pp = "pp5.16";
         }
@@ -69,6 +71,10 @@ foreach my $f (@files){
             
             }
         }
+        if ($f eq "geneAnnotator.pl"){
+            $pp_cmd .= " -M Bio::SeqIO::entrezgene" . 
+                       " -M HTTP::Tiny -M JSON";
+        } 
         print STDERR "Making binary with command: $pp_cmd\n";
         system($pp_cmd); 
         if ($?){
@@ -85,7 +91,7 @@ chdir($bin_dir);
 foreach my $f (@files){
     next if $f =~ /^\./;
     if ($f !~ /\.pl$/){
-        if ( -d $f){
+        if ( -d $f and $f ne 'data' ){
             print STDERR "Recursively removing directory $f.\n";
             remove_tree($f, {verbose => 1} );
         }else{

@@ -52,7 +52,7 @@ A VCF file to use to find variants overlapping variants from your input. By defa
 
 Note, that the VCFs used in this argument do not have to be coordinate sorted, but that it is possible that you will output duplicated lines from your input if they are not. Your output will be in the same order as this VCF.
 
-This option can not be used in conjunction with --regions or --bed arguments.
+This option can not be used in conjunction with --regions, --bed, --gene_list or --gene_ids  arguments.
 
 =item B<-e    --matching> 
 
@@ -144,6 +144,7 @@ use lib "$FindBin::Bin/lib";
 use SortGenomicCoordinates;
 use VcfReader;
 use IdParser;
+use EnsemblRestQuery;
 
 my @bedfile;
 my @reg;
@@ -197,8 +198,8 @@ pod2usage
      -exitval => 2 
 ) if ( not @bedfile and not @reg and not @gene_ids and not $opts{v}  and not $opts{l} ) ;
 
-pod2usage( -message => "ERROR: --vcf_filter option can not be used in conjunction with --bed or --region arguments.\n", -exitval => 2 )
-  if ( (@bedfile or @reg) and $opts{v} );
+pod2usage( -message => "ERROR: --vcf_filter option can not be used in conjunction with --bed, --region, --gene_ids or --gene_list arguments.\n", -exitval => 2 )
+  if ( (@bedfile or @reg or @gene_ids) and $opts{v} );
 
 if ($opts{e} and not $opts{v}){
     print STDERR "WARNING: redundant use of --matching argument without --vcf_filter argument.\n" unless $opts{s};
