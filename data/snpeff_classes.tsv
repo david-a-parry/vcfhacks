@@ -23,8 +23,6 @@ rare_amino_acid_variant	default
 splice_acceptor_variant	default
 splice_donor_variant	default
 splice_region_variant	valid
-splice_region_variant	valid
-splice_region_variant	default
 stop_lost	default
 5_prime_UTR_premature_start_codon_gain_variant	default
 start_lost	default
