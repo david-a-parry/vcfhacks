@@ -227,9 +227,10 @@ my ($OUT, $LIST) = openOutput();
 writeOptionsToHeader();
 
 #start progress bar 
-my $next_update = 0;
-my $total_vars  = 0; 
-my $var_count   = 0;
+my $next_update      = 0;
+my $total_vars       = 0; 
+my $var_count        = 0;
+my $functional_count = 0;
 if ($opts{b}) {
     if ( $opts{i} eq "-" ) {
         informUser("Can't use -b/--progress option when input is from STDIN\n");
@@ -298,7 +299,7 @@ LINE: while (my $line = <$VCF>){
         }else{
             #if new chrom check biallelics and clear collected data
             $contigs{$chrom} = scalar(keys%contigs);
-            checkMatchingVariants() if $contigs{$chrom} > 0;
+            $functional_count += checkMatchingVariants() if $contigs{$chrom} > 0;
         }
     }
 
@@ -454,6 +455,7 @@ CSQ:    foreach my $annot (@a_csq){
                     }
                 }else{#if not checking matching genes can print and bail out now
                     print $OUT "$line\n";
+                    $functional_count++;
                     next LINE; 
                 }
             }
@@ -478,13 +480,19 @@ CSQ:    foreach my $annot (@a_csq){
     }
 }#end of LINE
 if (defined $opts{f}){
-    checkMatchingVariants();
+    $functional_count += checkMatchingVariants();
 }
 close $VCF;
 
 updateProgressBar();  
 outputGeneList();
 close $OUT;
+
+informUser
+(
+    "$functional_count variants matching criteria found from $var_count total".
+    " variants.\n"
+);
 
 #################################################
 sub addSamplesWithGt{
@@ -608,6 +616,7 @@ sub outputGeneList{
 }
 #################################################
 sub checkMatchingVariants{
+    my $count = 0; 
     my $min_matching = $opts{n} ? $opts{n} : scalar @samples;
     my %lines_to_print = (); 
     foreach my $tr (keys %transcript_sample_vars){
@@ -625,10 +634,12 @@ sub checkMatchingVariants{
     @lines_out = VcfReader::sortByPos( \@lines_out ); 
     foreach my $l (@lines_out){
         print $OUT join("\t", @$l) . "\n";
+        $count++;
     }
     %transcript_sample_vars = ();
     %vcf_lines = ();
     %transcript_to_symbol = ();
+    return $count;
 }
 
 #################################################
@@ -1212,7 +1223,6 @@ B<SnpEff:>
         rare_amino_acid_variant
         splice_acceptor_variant
         splice_donor_variant
-        splice_region_variant
         stop_lost
         5_prime_UTR_premature_start_codon_gain_variant
         start_lost
