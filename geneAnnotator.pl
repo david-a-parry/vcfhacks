@@ -1886,7 +1886,6 @@ B<SnpEff:>
         rare_amino_acid_variant
         splice_acceptor_variant
         splice_donor_variant
-        splice_region_variant
         stop_lost
         5_prime_UTR_premature_start_codon_gain_variant
         start_lost
