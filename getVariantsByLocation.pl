@@ -379,7 +379,7 @@ sub process_regions{
         my @hits = VcfReader::searchByRegion(
             %sargs,
             chrom => $r->{chrom},
-            start => $r->{start}+1,
+            start => $r->{start},
             end   => $r->{end},
         );
 
