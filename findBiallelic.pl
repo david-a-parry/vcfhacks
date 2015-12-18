@@ -46,6 +46,7 @@ GetOptions(
     'consensus_splice_site',
     'c|cadd_filter=f',
     'd|damaging=s{,}',
+    'denovo_biallelic_mode',
     'e|equal_genotypes',
     'f|family=s', # ped file
     'h|?|help',
@@ -145,7 +146,7 @@ my %sample_to_col = VcfReader::getSamples
 #get available INFO fields from header
 my %info_fields = VcfReader::getInfoFields(header => \@header);
 
-#check mode
+#check annotation mode
 
 if ($opts{m}){
     if ( lc($opts{m}) ne 'vep' and lc($opts{m}) ne 'snpeff' ){
@@ -185,6 +186,16 @@ my %biotype_filters = map { $_ => undef } getAndCheckBiotypes();
 #check ped, if provided is ok and get specified families
 my ($ped_obj, @fams) = checkPedAndFamilies();
 
+#denovo_biallelic_mode can only be run on ped samples with two parents
+if ($opts{denovo_biallelic_mode} and (@samples or $opts{check_all_samples}) ){
+    pod2usage(
+        -message => "SYNTAX ERROR: --denovo_biallelic_mode can only be used ".
+                    "with pedigrees, not samples supplied using -s/--samples".
+                    " or --check_all_samples arguments.\n",
+        -exitval => 2
+    );
+}
+
 #add all samples if --check_all_samples option is selected
 
 if ($opts{check_all_samples}) {
@@ -194,6 +205,7 @@ if ($opts{check_all_samples}) {
 # check affected and unaffected samples from ped and specified on commandline
 
 addSamplesFromPed();
+
 #store ped samples in a hash so we can quickly look up whether we should be checking family IDs
 my %ped_samples = ();
 if ($opts{f}){
@@ -707,10 +719,22 @@ GENOTYPE: foreach my $gt (keys %gt_counts){
             #we should have already rejected any combinations carried by any unaffected
             #...found in the VCF, so now we just need to check obligate carriers
             my ($chrom) = (split /\:/, $alleles[0]); 
-            if (not $opts{y} and not $opts{t} and $chrom !~ /^(chr)*X/i){
+            if ($opts{denovo_biallelic_mode}){
                 foreach my $aff ( $ped_obj->getAffectedsFromFamily($f) ){
-                    my @par =
-                      grep { exists $sample_to_col{$_} } $ped_obj->getParents($aff);
+                    my @par = getParentsInVcf($aff);
+                    my $denovo_allele = 0; 
+                    foreach my $un (@par){
+                        if ($sample_vars{$alleles[0]}->{$un} == 0 and
+                            $sample_vars{$alleles[1]}->{$un} == 0){
+                            $denovo_allele++;
+                            last;
+                        }
+                    }
+                    next GENOTYPE if not $denovo_allele; 
+                }   
+            }elsif (not $opts{y} and not $opts{t} and $chrom !~ /^(chr)*X/i){
+                foreach my $aff ( $ped_obj->getAffectedsFromFamily($f) ){
+                    my @par = getParentsInVcf($aff);
                 # if no min_matching_per_family and no ignore_carrier_status
                 #...assume we are not entertaining any phenocopies and therefore
                 #...all obligate carriers must carry mutation
@@ -1020,6 +1044,18 @@ sub addSamplesFromPed{
       . " unaffected samples from pedigree in VCF.\n");
     informUser( scalar(@not_un)
       . " unaffected samples from pedigree were not in VCF.\n");
+    if ($opts{denovo_biallelic_mode}){
+        @aff = getSamplesWithTwoParents(@aff);
+        die "No affected samples found with both parents in VCF. Can't run ".
+            "--denovo_biallelic_mode with this VCF/Ped combination.\n" 
+            if @aff < 1;
+        informUser
+        ( 
+            scalar(@aff) . " affected samples from pedigree VCF have both ".
+            "parents in input VCF and will be considered for biallelic " .
+            "variants with de novo occurence of one or more alleles.\n"
+        );
+    }
     if ($opts{y}) {
         if ( not $opts{n} ) {
             informUser(
@@ -1043,6 +1079,29 @@ sub addSamplesFromPed{
    
 }
 
+#################################################
+sub getSamplesWithTwoParents{
+    informUser( 
+        "Running with --denovo_biallelic_mode option - checking for ".
+        "affected samples with two parents...\n"
+    );
+    my @have_parents = ();
+    foreach my $s (@_){
+        my @par = getParentsInVcf($s);
+        next if @par < 2; 
+        die "ERROR: ". scalar(@par) . " parents for  sample $s?!\n" if @par > 2;
+        push @have_parents, $s;
+        informUser("Sample '$s' has both parents in input VCF.\n"); 
+    }
+    return @have_parents;
+}
+
+
+#################################################
+sub getParentsInVcf{
+    my $s = shift;
+    return grep { exists $sample_to_col{$_} } $ped_obj->getParents($s);
+}
 #################################################
 sub checkSamples{
     #check @samples and @reject and @reject_except exist in file
@@ -1710,7 +1769,6 @@ B<SnpEff:>
         rare_amino_acid_variant
         splice_acceptor_variant
         splice_donor_variant
-        splice_region_variant
         stop_lost
         5_prime_UTR_premature_start_codon_gain_variant
         start_lost
