@@ -93,6 +93,34 @@ sub getInfoHeader{
       "Type=$info{Type},Description=\"$info{Description}\">";
 }
 
+=item B<getFormatHeader>
+
+Takes a hash containing the keys 'ID, NUMBER, TYPE and DESCRIPTION' and outputs an appropriately formatted FORMAT header.
+
+ my %format_field = 
+ (
+     ID          => "AFormatField",
+     NUMBER      => "A",
+     TYPE        => "String",
+     DESCRIPTION => "A made up VCF INFO field.";
+ );
+ my $f_string = VcfhacksUtils::getFormatHeader(%format_field); 
+ 
+=cut
+
+sub getFormatHeader{
+    my %info = @_;
+    foreach my $f ( qw / ID Number Type Description / ){
+        if (not exists $info{$f}){
+            carp "INFO field '$f' must be provided to getInfoHeader method!\n";
+            return;
+        }
+    }
+    return "##FORMAT=<ID=$info{ID},Number=$info{Number},".
+      "Type=$info{Type},Description=\"$info{Description}\">";
+}
+
+
 
 =back
 
