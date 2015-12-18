@@ -9,10 +9,14 @@ annovcfToSimple.pl - takes a vcf file and outputs a simplified version in Excel'
 
         annovcfToSimple.pl -i [ file] [options]
         
+        annovcfToSimple.pl -s -i [SnpEff annotated VCF file] [options]
+        
         annovcfToSimple.pl -v -i [VEP annotated VCF file] [options]
         
         annovcfToSimple.pl -g -v -i [VEP and geneAnnotator.pl annotated VCF file] [options]
         
+        annovcfToSimple.pl -s -i [SnpEff annotated VCF file] [options]
+
         annovcfToSimple.pl -h (display help message)
         
         annovcfToSimple.pl -m (display manual page)
@@ -25,7 +29,7 @@ annovcfToSimple.pl - takes a vcf file and outputs a simplified version in Excel'
 
 =item B<-i    --input>
 
-Input VCF file, optionally annotated with variant_effect_predictor.pl and geneAnnotator.pl. 
+Input VCF file, optionally annotated with variant_effect_predictor.pl/SnpEff and geneAnnotator.pl. 
 
 =item B<-o    --output>
 
@@ -62,6 +66,10 @@ PED format - from the PLINK documentation:
 
 Use this flag to output annotations from Ensembl's variant_effect_predictor.pl at the beginning of each line (assuming your input has already been annotated by the VEP).
 
+=item B<--snpeff>
+
+Use this flag to output annotations from SnpEff at the beginning of each line (assuming your input has already been annotated by SnpEff). Can not be used in conjunction with --vep option.
+
 =item B<-g    --gene_anno>
 
 Use this flag if annotated with geneAnnotator.pl to output gene annotation information. This script cannot distinguish between gene annotation information belonging to canonical transcripts or particular variant classes, these distinctions have to be made when running geneAnnotator.pl prior to this script.
@@ -70,9 +78,54 @@ Use this flag if annotated with geneAnnotator.pl to output gene annotation infor
 
 Use this flag to only print consequences from canonical transcripts when using --vep option. 
 
-=item B<--functional>
+=item B<-f    --functional>
 
-Use this flag to only annotate standard 'functional' variant classes (transcript_ablation, splice_donor_variant, splice_acceptor_variant, splice_region_variant, stop_gained, frameshift_variant, stop_lost, initiator_codon_variant, inframe_insertion, inframe_deletion, missense_variant, protein_altering_variant, transcript_amplification, TFBS_ablation, TFBS_amplification, regulatory_region_ablation, regulatory_region_amplification).
+Use this flag to only annotate standard 'functional' variant classes. VEP/SnpEff results not matching these classes will not be reported. Default 'functional' variant classes are:
+
+B<VEP:>
+
+        TFBS_ablation
+        TFBS_amplification
+        frameshift_variant
+        inframe_deletion
+        inframe_insertion
+        initiator_codon_variant
+        missense_variant
+        protein_altering_variant
+        regulatory_region_ablation
+        regulatory_region_amplification
+        splice_acceptor_variant
+        splice_donor_variant
+        splice_region_variant
+        stop_gained
+        stop_lost
+        transcript_ablation
+        transcript_amplification
+
+B<SnpEff:>
+
+        chromosome
+        coding_sequence_variant
+        inframe_insertion
+        disruptive_inframe_insertion
+        inframe_deletion
+        disruptive_inframe_deletion
+        exon_loss_variant
+        frameshift_variant
+        missense_variant
+        rare_amino_acid_variant
+        splice_acceptor_variant
+        splice_donor_variant
+        splice_region_variant
+        stop_lost
+        5_prime_UTR_premature_start_codon_gain_variant
+        start_lost
+        stop_gained
+        exon_loss
+
+Available classes that can be chosen instead of (or in addition to - see below) these classes can be found in the data/vep_classes.tsv and data/snpeff_classes.tsv files respectively using the -c/--classes. 
+
+
 
 =item B<-c    --classes>
 
@@ -82,10 +135,12 @@ Use this to specify a set of VEP variant classes to print in output. Overrides -
 
 Use this to specify additional VEP variant classes to output as well as those used by --functional.
 
-=item B<--fields>
+=item B<-e    --fields>
 
-Specify one or more VEP fields to output. Use of --vep without this flag outputs the following fields:
+Specify one or more VEP/SnpEff fields to output. Use of --vep or --snpeff options without this flag outputs the following fields:
 
+B<VEP:>
+       
             symbol
             gene
             feature
@@ -107,18 +162,61 @@ Specify one or more VEP fields to output. Use of --vep without this flag outputs
             ea_maf
             afr_maf
             amr_maf
-            asn_maf
+            eas_maf
             eur_maf
+            sas_maf
+B<SnpEff:>
+            allele
+            annotation
+            annotation_impact
+            gene_name
+            gene_id
+            feature_type
+            feature_id
+            transcript_biotype
+            hgvs.c
+            hgvs.p
+            rank
+            cds.pos / cds.length
+            aa.pos / aa.length
 
 If you wish to use the above fields in addition to fields specified here add 'default' to your list of fields.
        
 =item B<--all>
 
-Use with --vep option to output all available VEP fields.
+Use with --vep or --snpeff option to output all available VEP/SnpEff fields.
 
 =item B<-n    --info_fields>
 
 One or more INFO field IDs from to output as columns. These are case sensitive and must appear exactly as defined in the VCF header. By default, if --info_fields is not specified, CaddPhredScore INFO fields will be written to the output automatically if found.
+
+=item B<-b    --biotype_filters>
+
+When using the -f/--functional or -c/--classes options, features/transcripts with the following biotypes are ignored by default:
+
+    IG_C_pseudogene
+    IG_J_pseudogene
+    IG_V_pseudogene
+    nonsense_mediated_decay
+    non_stop_decay
+    processed_pseudogene
+    pseudogene
+    retained_intron
+    transcribed_processed_pseudogene
+    transcribed_unprocessed_pseudogene
+    TR_J_pseudogene
+    TR_V_pseudogene
+    unitary_pseudogene
+    unprocessed_pseudogene
+
+You may override this filter by specifying biotypes to filter with this option or prevent biotype filtering using the --no_biotype_filtering option (see below). 
+
+The 'data/biotypes.tsv' file contains a list of valid biotypes and the default behaviour of this program (i.e. 'keep' or 'filter'). 
+
+=item B<--no_biotype_filtering>
+
+Use this flag to consider consequences affecting ALL biotypes when using -f/--functional or -c/--classes options.
+
 
 =item B<-d    --do_not_simplify>
 
@@ -143,7 +241,7 @@ Show manual page.
 
 =head1 DESCRIPTION
 
-Reads a VCF file and outputs a simplified version in Excel's .xlsx format. Useful when using a VCF annotated with Ensembl's variant_effect_predictor.pl to output a more easily readable version (use the -v option), and particularly useful for VCF files annotated with geneAnnotator.pl (use the -g option).
+Reads a VCF file and outputs a simplified version in Excel's .xlsx format. Useful when using a VCF annotated with Ensembl's variant_effect_predictor.pl or SnpEff to output a more easily readable version (use the --vep or --snpeff option), and particularly useful for VCF files annotated with geneAnnotator.pl (use the -g option).
 
 =cut
 
@@ -173,7 +271,8 @@ use Pod::Usage;
 use File::Basename;
 use FindBin;
 use lib "$FindBin::Bin/lib";
-use ParseVCF;
+use VcfReader;
+use VcfhacksUtils;
 use ParsePedfile;
 use TextToExcel;
 
@@ -182,8 +281,9 @@ use TextToExcel;
 
 my $vcf;
 my @samples;
-my @vep_classes;
-my @vep_add;
+my @csq_classes;
+my @csq_add;
+my @biotypes = ();
 my @peds;
 my $output;
 my $config = {};
@@ -192,94 +292,42 @@ my $summarise_samples_with_variants;
 my $help;
 my $man;
 GetOptions($config,
-    'c|classes=s{,}' => \@vep_classes,
-    'a|additional_classes=s{,}' => \@vep_add,
-    'functional',
-    'gene_anno',
-    'text_output',
-    'do_not_simplify',
-    'canonical_only',
-    'vep',
-    'fields=s{,}', => \@{$config->{fields}}, 
     'all',
-    'n|info_fields=s{,}', => \@{$config->{info_fields}},
-    'i|input=s' =>\$vcf,
-    'output=s' => \$output,
-    's|samples=s{,}' => \@samples,
-    'u|summarise:s' => \$summarise_counts,
+    'a|additional_classes=s{,}' => \@csq_add,
+    'b|biotypes=s{,}' => \@biotypes,
+    'canonical_only',
     'contains_variant' => \$summarise_samples_with_variants,
-    'pedigree=s{,}' => \@peds,
+    'c|classes=s{,}' => \@csq_classes,
+    'do_not_simplify',
+    'fields|e=s{,}', => \@{$config->{fields}}, 
+    'functional|f',
+    'gene_anno',
+    'i|input=s' =>\$vcf,
     'manual' => \$man,
-    'help' => \$help) or pod2usage(-exitval => 2, -message => "Syntax error.\n");
+    'no_biotype_filtering',
+    'n|info_fields=s{,}', => \@{$config->{info_fields}},
+    'o|output=s' => \$output,
+    'pedigree=s{,}' => \@peds,
+    'snpeff',
+    's|samples=s{,}' => \@samples,
+    'text_output',
+    'u|summarise:s' => \$summarise_counts,
+    'vep',
+    'help' => \$help, 
+) or pod2usage(-exitval => 2, -message => "Syntax error.\n");
 pod2usage( -verbose => 2 ) if $man;
 pod2usage( -verbose => 1 ) if $help;
 pod2usage( -exitval => 2, -message => "--input is required" ) if (not $vcf);
 
-if (@vep_classes or @vep_add){
+if (@csq_classes or @csq_add){
     $config->{functional} = 1;
 }
 
+#get and check header
+my @header = VcfReader::getHeader($vcf);
+die "ERROR: Invalid VCF header in $vcf\n" 
+  if not VcfReader::checkHeader(header => \@header);
 
-my @vep_valid = qw (transcript_ablation
-                splice_donor_variant
-                splice_acceptor_variant
-                stop_gained
-                frameshift_variant
-                stop_lost
-                initiator_codon_variant
-                inframe_insertion
-                inframe_deletion
-                missense_variant
-                protein_altering_variant
-                transcript_amplification
-                splice_region_variant
-                incomplete_terminal_codon_variant
-                synonymous_variant
-                stop_retained_variant
-                coding_sequence_variant
-                mature_miRNA_variant
-                5_prime_UTR_variant
-                3_prime_UTR_variant
-                intron_variant
-                NMD_transcript_variant
-                non_coding_exon_variant
-                nc_transcript_variant
-                upstream_gene_variant
-                downstream_gene_variant
-                TFBS_ablation
-                TFBS_amplification
-                TF_binding_site_variant
-                regulatory_region_variant
-                regulatory_region_ablation
-                regulatory_region_amplification
-                feature_elongation
-                feature_truncation
-                intergenic_variant);
-
-if (not @vep_classes){
-        @vep_classes = qw (transcript_ablation
-                splice_donor_variant
-                splice_acceptor_variant
-                splice_region_variant
-                stop_gained
-                frameshift_variant
-                stop_lost
-                initiator_codon_variant
-                inframe_insertion
-                inframe_deletion
-                missense_variant
-                protein_altering_variant
-                transcript_amplification
-                TFBS_ablation
-                TFBS_amplification
-                regulatory_region_ablation
-                regulatory_region_amplification);
-}
-push (@vep_classes, @vep_add) if (@vep_add);
-#check VEP classes
-foreach my $class (@vep_classes){
-        die "Error - variant class '$class' not recognised.\n" if not grep {/$class/i} @vep_valid;
-}
 #get all samples from any peds specified
 my @ped_samples = ();
 if (@peds){
@@ -310,11 +358,10 @@ if (not $output){
 }else{
     $output .= ".$out_ext" if $output !~ /\.$out_ext$/;
 }
-my @fields = ();
 my @info_fields = ();
 my @gene_anno_fields = ();
-my $vcf_obj = ParseVCF->new( file=> $vcf);
-my %info_fields = $vcf_obj->getInfoFields();
+
+my %info_fields = VcfReader::getInfoFields(header => \@header);
 if (defined $config->{gene_anno}){
     if (not exists $info_fields{GeneAnno}){
         die "GeneAnno INFO field not found in VCF header - please annotate ".
@@ -328,55 +375,15 @@ if (defined $config->{gene_anno}){
             "your VCF with geneAnnotator.pl or report this error if it recurs.\n";
     }
 }
-if (defined $config->{vep}){
-    my $vep_header = $vcf_obj->readVepHeader();
-    if (not @{$config->{fields}} and not $config->{all}){
-        unshift @{$config->{fields}}, getDefaultVepFields($vep_header);
-    }elsif($config->{all}){
-         push @{$config->{fields}},  sort {$vep_header->{$a} <=> $vep_header->{$b}} keys %{$vep_header};
-    }elsif(grep { /default/i } @{$config->{fields}}){
-        @{$config->{fields}} = grep {! /^default$/i } @{$config->{fields}};
-        unshift @{$config->{fields}}, getDefaultVepFields($vep_header);
-    }
-    if (not grep {/consequence/i} @{$config->{fields}} ){
-        push @{$config->{fields}}, 'consequence';
-    }
-    if (not grep {/allele/i} @{$config->{fields}} ){
-        push @{$config->{fields}}, 'allele';
-    }
-    @fields = map { lc($_) } @{$config->{fields}} if defined $config->{fields};
-    my %seen = ();
-    @fields = grep {! $seen{$_}++ } @fields;
-    if (@fields){
-        my @temp_fields = (); 
-        if(defined $config->{canonical_only}){
-            push @fields, 'canonical' if not grep{/canonical/i} @fields;
-        }
-        foreach my $csq (@fields){
-            if (not exists $vep_header->{($csq)}){
-                if ($csq eq 'consequence' or $csq eq 'allele'){
-                    die "Couldn't find '$csq' VEP field in header - please ensure your VCF is annotated with " .
-                    "Ensembl's variant effect precictor specifying the appropriate annotations.\n";
-                }else{
-                    warn "Couldn't find '$csq' VEP field in header - will not output this annotaiton.\n";
-                }
-            }else{
-                push @temp_fields, $csq;
-            }
-        }
-        @fields = @temp_fields;
-    }else{
-        if(defined $config->{canonical_only}){
-            if (not exists $vep_header->{canonical}){
-                print STDERR "Canonical field not found in VEP header - all transcripts will be assessed.\n";
-                $config->{canonical_only} = undef;
-            }
-        }
-        foreach my $csq (sort {$vep_header->{$a} <=> $vep_header->{$b}} keys %{$vep_header}){
-            push @fields, $csq;
-        }
-    }
-}
+
+
+my %csq_header = getAndCheckCsqHeader();
+my @csq_fields = getCsqFields();#consequence fields to retrieve from VCF
+@csq_classes = getAndCheckClasses();
+my %class_filters = map { $_ => undef } @csq_classes;
+my %biotype_filters = map { $_ => undef } getAndCheckBiotypes();
+
+
 if (@{$config->{info_fields}}){
     foreach my $f (@{$config->{info_fields}}){
         if (exists $info_fields{$f}){
@@ -391,10 +398,15 @@ if (@{$config->{info_fields}}){
 }
 
 
+my %sample_to_col = VcfReader::getSamples
+(
+    header => \@header,
+    get_columns => 1,
+);
 if (@ped_samples){
     my @sample_found = ();
     foreach my $s (@ped_samples){
-        if ($vcf_obj->checkSampleInVcf($s)){
+        if (exists $sample_to_col{$s}){
             push @sample_found, $s;
         }
     }
@@ -406,32 +418,33 @@ if (@ped_samples){
     push @samples, @sample_found;
 }
 #check samples or get them if none specified
-if (not @samples and $summarise_counts ne 'all'){
-    eval{
-    @samples = $vcf_obj->getSampleNames();
-    };
-    warn "$@" if $@;
+if (not @samples and ( 
+    (defined $summarise_counts and $summarise_counts ne 'all' ) or not defined $summarise_counts) 
+){
+    @samples = VcfReader::getSamples
+    (
+        header => \@header,
+    );
 }else{
-    my $header_string = $vcf_obj->getHeader(1);
-    foreach my $sample (@samples){
-        die "Can't find sample $sample in header line.\nHeader:\n$header_string\n" 
-            if not $vcf_obj->checkSampleInVcf($sample);
+    foreach my $s (@samples){
+        die "Can't find sample $s in header line.\nHeader:\n$header[-1]\n" 
+            if not exists $sample_to_col{$s};
     }
 }
 
 my $OUT;
 my $xl_obj;
-my @header = get_header();
+my @col_header = get_header();
 if (defined $config->{text_output}){
     if ($output){
         open ($OUT, ">$output") or die "Can't open $output: $!\n";
     }else{
         $OUT = \*STDOUT;
     }
-    foreach my $h (@header){
+    foreach my $h (@col_header){
         $h =~ s/ /_/g;
     }
-    print $OUT join("\t", @header) ."\n";
+    print $OUT join("\t", @col_header) ."\n";
 }else{
     $xl_obj = TextToExcel->new( file=> $output);
     $header_formatting = $xl_obj->createFormat(bold => 1);
@@ -439,16 +452,21 @@ if (defined $config->{text_output}){
         color     => 'blue',
         underline => 1,
     );
-    $xl_obj->writeLine(line => \@header, format => $header_formatting);
+    $xl_obj->writeLine(line => \@col_header, format => $header_formatting);
 }
 
-LINE: while (my $vcf_line = $vcf_obj->readLine){
+my $VCF = VcfReader::openVcf($vcf); 
+LINE: while (my $var = <$VCF>){
+    next if $var =~ /^#/;
+    chomp $var;
+    my @split = split("\t", $var);
     my @preceding = ();
     my @line = ();
     my @following = ();
     #Get preceding VEP columns (there may be multiple rows per line)
-    if (defined $config->{vep}){
-        my ($prec, $canonical_found, $functional_found, $sample_found) = get_vep_fields() ; 
+    if (defined $config->{vep} or defined $config->{snpeff}){
+        my ($prec, $canonical_found, $functional_found, $sample_found) 
+            = get_csq_fields(\@split); 
         if (@$prec > 0){
             @preceding = @$prec;
         }else{
@@ -462,7 +480,7 @@ LINE: while (my $vcf_line = $vcf_obj->readLine){
                 $e_string = "No valid variant in samples";
             }
             push @temp_prec, $e_string;
-            for (my $i = 1; $i < @fields; $i++){
+            for (my $i = 1; $i < @csq_fields; $i++){
                 push @temp_prec, "-";
             }
             push @preceding, \@temp_prec;
@@ -470,7 +488,11 @@ LINE: while (my $vcf_line = $vcf_obj->readLine){
 
     }
     if (defined $config->{gene_anno}){
-        my $g_anno = $vcf_obj->getVariantInfoField('GeneAnno');
+        my $g_anno = VcfReader::getVariantInfoField
+        (
+            \@split,
+            'GeneAnno'
+        );
         my @g_annots = split(",", $g_anno);
         foreach my $g (@g_annots){
             my @temp_follow = ();
@@ -487,16 +509,10 @@ LINE: while (my $vcf_line = $vcf_obj->readLine){
     }
     #Get values for line
     if (defined $config->{do_not_simplify} and not defined $summarise_counts){
-        @line = get_vcf_fields();    
+        @line = get_vcf_fields(\@split);    
     }else{
-        @line = get_simplified_fields();    
+        @line = get_simplified_fields(\@split);    
     }
-    #old way
-#    if (ref $gene_anno_cols eq 'ARRAY'){
-#        foreach my $field (@$gene_anno_cols){
-#            push @line, $vcf_obj->getCustomField($field);
-#        }
-#    }
     #now write to text or excel as appropriate
     if (defined $config->{text_output}){
         my @fol_text = ();
@@ -541,57 +557,172 @@ LINE: while (my $vcf_line = $vcf_obj->readLine){
                     );
     }
 }
+close $VCF;
 if ($xl_obj){
     $xl_obj->DESTROY();
 }
 if ($OUT){
     close $OUT;
 }
-$vcf_obj->DESTROY();
+
+#################################################
+sub getAndCheckClasses{
+    return if not $config->{vep} and not $config->{snpeff}; 
+    my %all_classes = ();
+    if ($config->{vep} ){
+        %all_classes =  VcfhacksUtils::readVepClassesFile();
+    }else{
+        %all_classes =  VcfhacksUtils::readSnpEffClassesFile();
+    }
+    if (not @csq_classes){
+        @csq_classes = grep { $all_classes{$_} eq 'default' } keys %all_classes;
+        push @csq_classes, 'splice_region_variant';
+    }
+    push @csq_classes, @csq_add if (@csq_add);
+    @csq_classes = map { lc($_) } @csq_classes; 
+    @csq_classes = VcfhacksUtils::removeDups(@csq_classes);
+    foreach my $class (@csq_classes) {
+        die "Error - variant class '$class' not recognised.\n"
+          if not exists $all_classes{lc($class)} ;
+    }
+    return @csq_classes;
+}
 
 ####################################################
-sub getDefaultVepFields{
-    my ($vep_header) = @_;
-    my @def = ();
-    push @def, 
-        qw ( 
-            symbol
+sub getAndCheckCsqHeader{
+    return if not $config->{vep} and not $config->{snpeff}; 
+    if ($config->{vep} and $config->{snpeff}){ 
+        die "Please supply only one of --vep or --snpeff options.\n";
+    }
+    my %csq_head = ();
+    if ($config->{vep}){
+        eval { 
+            %csq_head = VcfReader::readVepHeader
+            (
+                header => \@header
+            ); 
+        };
+        if ($@){
+            die "ERROR: Could not find VEP header in input. Please ".
+                "annotate your input with Ensembl's VEP and try again.\n";
+        } ;
+    }elsif ($config->{snpeff}){
+        eval { 
+            %csq_head = VcfReader::readSnpEffHeader
+            (
+                header => \@header
+            ); 
+        } ;
+        if ($@){
+            die "ERROR: Could not find SnpEff header in input. Please ".
+                "annotate your input with SnpEff and try again.\n";
+        }
+    }
+    return %csq_head;
+}
+
+####################################################
+sub getCsqFields{
+    return if not $config->{vep} and not $config->{snpeff}; 
+    my @default_fields = ();
+    if ($config->{vep}){
+       @default_fields =  
+        qw(
+            allele
             gene
             feature
-            allele
+            feature_type
             consequence
-            cds_position
-            protein_position
-            amino_acids
-            codons
-            existing_variation
-            exon
-            intron
-            gmaf 
-            aa_maf
-            ea_maf
-            afr_maf
-            amr_maf
-            asn_maf
-            eur_maf
-            sift
-            polyphen
+            symbol
+            biotype
         );
-    push @def, "condel" if exists $vep_header->{condel};
-    push @def, "splice_consensus" if exists $vep_header->{splice_consensus};
-    push @def, "hgvsc" if exists $vep_header->{hgvsc};
-    push @def, "hgvsp" if exists $vep_header->{hgvsp};
-    return @def;
+        push @default_fields, "condel" 
+            if exists $csq_header{condel};
+        push @default_fields, "splice_consensus" 
+            if exists $csq_header{splice_consensus};
+        push @default_fields, "hgvsc" 
+            if exists $csq_header{hgvsc};
+        push @default_fields, "hgvsp" 
+            if exists $csq_header{hgvsp};
+    }else{
+        @default_fields = 
+        qw(
+            allele
+            annotation
+            annotation_impact
+            gene_name
+            gene_id
+            feature_type
+            feature_id
+            transcript_biotype
+            hgvs.c
+            hgvs.p
+            rank
+        );
+        push @default_fields, 
+            "cds.pos / cds.length", 
+            "aa.pos / aa.length",
+            "errors / warnings / info";
+    }
+
+    if (not @{$config->{fields}} and not $config->{all}){
+        unshift @{$config->{fields}}, @default_fields;
+    }elsif($config->{all}){
+         push @{$config->{fields}},  
+            sort {$csq_header{$a} <=> $csq_header{$b}} keys %csq_header;
+    }elsif(grep { /default/i } @{$config->{fields}}){
+        @{$config->{fields}} = grep {! /^default$/i } @{$config->{fields}};
+        unshift @{$config->{fields}}, @default_fields;
+    }
+    my @required = ( "allele" );
+    if ($config->{vep}){
+        push @required, "consequence";
+        push @required, "biotype";
+    }else{
+        push @required, "annotation";
+        push @required, "transcript_biotype";
+    }
+    foreach my $req (@required){
+        if (not grep { $_ eq $req } @{$config->{fields}} ){
+            push @{$config->{fields}}, $req;
+        }
+    }
+    @csq_fields = map { lc($_) } @{$config->{fields}} if defined $config->{fields};
+    @csq_fields = VcfhacksUtils::removeDups(@csq_fields);
+    if($config->{vep} and $config->{canonical_only}){
+        push @csq_fields, 'canonical' if not grep{$_ eq 'canonical'} @csq_fields;
+    }
+    my @temp_fields = (); 
+    foreach my $csq (@csq_fields){
+        if (not exists $csq_header{$csq}){
+            if ( grep {$_ eq $csq} @required ){
+                die "Couldn't find '$csq' consequence field in header - ".
+                    "please ensure your VCF is annotated with " .
+                    "the appropriate annotations.\n";
+            }else{
+                warn "Couldn't find '$csq' consequence field in header - will not output this annotaiton.\n";
+            }
+        }else{
+            push @temp_fields, $csq;
+        }
+    }
+    return @temp_fields;
 }
+
 ####################################################
 sub get_vcf_fields{
+    my $line = shift;
     my @vcf_values = ();
-    foreach my $field (split("\t", $vcf_obj->get_currentLine)){
+    foreach my $field (@$line){
         push @vcf_values, $field;
     }
     #Add user-specified INFO fields after normal VCF fields
     foreach my $f (@info_fields){
-        my $value = $vcf_obj->getVariantInfoField($f);
+        my $value = VcfReader::getVariantInfoField
+        (   
+            $line,
+            $f
+        );
         if (defined $value){
             push @vcf_values, $value;
         }else{
@@ -603,21 +734,42 @@ sub get_vcf_fields{
 
 ####################################################
 sub get_simplified_fields{
+    my $line = shift;
     my @vcf_values = ();
     #Get preceding INFO fields (these will be one per line)
-    foreach my $f (qw (CHROM POS ID QUAL FILTER REF ALT)){ 
-        push @vcf_values, $vcf_obj->getVariantField($f);
-    }
-    my @all_alleles = $vcf_obj->readAlleles();
+    push @vcf_values, VcfReader::getMultipleVariantFields
+    (
+        $line, 
+        qw (
+            CHROM 
+            POS 
+            ID 
+            QUAL 
+            FILTER 
+            REF 
+            ALT
+        )
+    ); 
+    my @all_alleles = VcfReader::readAlleles(line => $line);
     if (defined $summarise_counts){
         my %allele_counts = ();
         my %genotype_counts = ();
         if ($summarise_counts eq 'all'){
-            %allele_counts = $vcf_obj->countAlleles();
-            %genotype_counts = $vcf_obj->countGenotypes();
+            %allele_counts = VcfReader::countAlleles(line => $line);
+            %genotype_counts = VcfReader::countGenotypes(line => $line);
         }else{
-            %allele_counts = $vcf_obj->countAlleles(samples => \@samples);
-            %genotype_counts = $vcf_obj->countGenotypes(samples => \@samples);
+            %allele_counts = VcfReader::countAlleles
+            (
+                line => $line,
+                samples => \@samples,
+                sample_to_columns => \%sample_to_col,
+            );
+            %genotype_counts = VcfReader::countGenotypes
+            (
+                line => $line,
+                samples => \@samples,
+                sample_to_columns => \%sample_to_col,
+            );
         }
             
         my @al_count_string = ();
@@ -651,9 +803,19 @@ sub get_simplified_fields{
             my %calls = ();
             my %var_to_samples = ();
             if ($summarise_counts eq 'all'){
-                %calls = $vcf_obj->getSampleCall(all => 1);
+                %calls = VcfReader::getSampleCall
+                (
+                    line => $line, 
+                    all => 1,
+                    sample_to_columns => \%sample_to_col,
+                );
             }else{
-                %calls = $vcf_obj->getSampleCall(multiple => \@samples);
+                %calls = VcfReader::getSampleCall
+                (
+                    line => $line, 
+                    multiple => \@samples,
+                    sample_to_columns => \%sample_to_col,
+                );
             }
             foreach my $sample (sort keys %calls){
                 next if ($calls{$sample} =~/^0[\|\/]0$/);
@@ -687,13 +849,23 @@ sub get_simplified_fields{
         my @sample_allele_depths = ();
         my @sample_genotype_quality = ();
         foreach my $sample (@samples){
-            my $genotype = $vcf_obj->getSampleActualGenotypes(sample=>$sample);
+            my $genotype = VcfReader::getSampleActualGenotypes 
+            (
+                sample =>$sample,
+                line => $line,
+                sample_to_columns => \%sample_to_col,
+            );
             if (defined $genotype){ 
                 push (@sample_calls, $genotype);
             }else{
                 push @sample_calls, "-";
             }
-            my @ads = $vcf_obj->getSampleAlleleDepths($sample);
+            my @ads = VcfReader::getSampleAlleleDepths 
+            (
+                sample =>$sample,
+                line => $line,
+                sample_to_columns => \%sample_to_col,
+            );
             my $allele_depths = '-';
             if (@ads){
                 my @allele_depth = ();
@@ -704,7 +876,13 @@ sub get_simplified_fields{
             }
             push (@sample_allele_depths, $allele_depths);
             my $genotype_quality = "-";
-            my $gq = $vcf_obj->getSampleGenotypeField(sample => $sample, field => "GQ");
+            my $gq = VcfReader::getSampleGenotypeField
+            (
+                sample  => $sample, 
+                line => $line,
+                sample_to_columns => \%sample_to_col,
+                field => "GQ",
+            );
             if (defined $gq && $gq =~ /(\d+\.*\d*)+/){
         #     $genotype_quality = 100 - (100 * 10**(-$gq/10));
                 $genotype_quality = $gq;
@@ -723,7 +901,11 @@ sub get_simplified_fields{
     }
     #Add user-specified INFO fields after normal VCF fields
     foreach my $f (@info_fields){
-        my $value = $vcf_obj->getVariantInfoField($f);
+        my $value = VcfReader::getVariantInfoField
+        (
+            $line,
+            $f,
+        ); 
         if (defined $value){
             push @vcf_values, $value;
         }else{
@@ -733,17 +915,104 @@ sub get_simplified_fields{
     return @vcf_values;
 }
 
+#################################################
+sub getAndCheckBiotypes{
+    return if $config->{no_biotype_filtering}; 
+    my %all_biotypes = VcfhacksUtils::readBiotypesFile();
+    if (not @biotypes){
+        @biotypes = grep { $all_biotypes{$_} eq 'filter' } keys %all_biotypes;
+    }
+    @biotypes = map { lc($_) } @biotypes; 
+    @biotypes = VcfhacksUtils::removeDups(@biotypes);
+    foreach my $biotyp (@biotypes) {
+        die "Error - biotype '$biotyp' not recognised.\n"
+          if not exists $all_biotypes{lc($biotyp)} ;
+    }
+    return @biotypes;
+}
+ 
+####################################################
+sub get_csq_fields{
+    my $line = shift;
+    if ($config->{vep}){
+        return get_vep_fields($line);
+    }else{
+        return get_snpeff_fields($line);
+    }
+}
+
+####################################################
+sub get_snpeff_fields{
+    #returns a 2D array of VEP values
+    my $line = shift;
+    my ($row, $col) = @_;
+    my @csq = VcfReader::getSnpEffFields
+    ( 
+        line          => $line,
+        field         => \@csq_fields,
+        snpeff_header => \%csq_header,
+    );
+    my ($canonical_found, $functional_found, $sample_found) = (0, 0, 0);
+    my @snpeff_values = ();
+    my %sample_alleles = ();
+    if ($config->{samples}){
+        %sample_alleles = map {$_ => undef} 
+        VcfReader::getSampleActualGenotypes
+        (
+            line                => $line,
+            multiple            => $config->{samples}, 
+            return_alleles_only => 1
+        );
+    }
+ANNOT:  foreach my $annot (@csq){
+        my @csq_values = ();
+        $canonical_found++;#no canonical check for snpeff
+        if ($config->{functional}){
+            next ANNOT if not check_functional($annot);
+        }
+        $functional_found++;
+        if ($config->{samples}){
+            next if not exists $sample_alleles{$annot->{allele}};
+        }
+        $sample_found++;
+        foreach my $csq  (@csq_fields){
+            my $value = $annot->{$csq};
+            if (defined $value){
+                push @csq_values, $value;
+            }else{
+                push @csq_values, '-';
+            }
+        }
+        push @snpeff_values, \@csq_values;
+    }
+    return (\@snpeff_values, $canonical_found, $functional_found, $sample_found);
+}
 ####################################################
 sub get_vep_fields{
     #returns a 2D array of VEP values
+    my $line = shift;
     my ($row, $col) = @_;
-    my @csq = $vcf_obj->getVepFields(\@fields);
+    my @csq = VcfReader::getVepFields
+    ( 
+        line        => $line,
+        field       => \@csq_fields,
+        vep_header  => \%csq_header,
+    );
     my ($canonical_found, $functional_found, $sample_found) = (0, 0, 0);
     my %vep_allele = ();
     my @vep_values = ();
+    my @all_alleles = VcfReader::readAlleles(line => $line);
     if ($config->{samples}){
-        my @sample_alleles = $vcf_obj->getSampleActualGenotypes(multiple => $config->{samples}, return_alleles_only => 1);
-        my @v_alleles = $vcf_obj->altsToVepAllele(alt => \@sample_alleles);
+        my @sample_alleles = VcfReader::getSampleActualGenotypes
+        (
+            line                => $line,
+            multiple            => $config->{samples}, 
+            return_alleles_only => 1
+        );
+        my @v_alleles = VcfReader::altsToVepAllele
+        (
+            line => $line,
+        );
         @vep_allele{@v_alleles} = @sample_alleles;
      }
 ANNOT:  foreach my $annot (@csq){
@@ -760,7 +1029,7 @@ ANNOT:  foreach my $annot (@csq){
             next if not exists $vep_allele{$annot->{allele}};
         }
         $sample_found++;
-        foreach my $vep  (@fields){
+        foreach my $vep  (@csq_fields){
             my $value = $annot->{$vep};
             if (defined $value){
                 push @csq_values, $value;
@@ -776,34 +1045,64 @@ ANNOT:  foreach my $annot (@csq){
 ####################################################################
 sub check_functional{
     my $annot = shift;
-    foreach my $class (@vep_classes){
-        my @anno_csq = split(/\&/, $annot->{consequence});
-        if (grep {/NMD_transcript_variant/i} @anno_csq){
-            return 0;
-        }else{
-            foreach my $ac (@anno_csq){
-                if (lc$ac eq lc$class){
-                    return 1;
-                }
-            }
+    if ($config->{vep}){
+        return check_vep_consequence($annot);
+    }else{
+        return check_snpeff_consequence($annot);
+    }
+}
+
+########################################
+sub check_snpeff_consequence {
+    my $annot = shift;
+    #skip variants with undef features (intergenic variants)
+    return 0 if not defined $annot->{feature_id};
+    #skip unwanted biotypes
+    return 0 if exists $biotype_filters{lc $annot->{transcript_biotype} };
+    my @anno_csq = split( /\&/, $annot->{annotation} );
+ANNO: foreach my $ac (@anno_csq){
+        $ac = lc($ac);#we've already converted %class_filters to all lowercase
+        if ( exists $class_filters{$ac} ){
+            return 1;
         }
     }
-    return 0;
+    return 0;#no annotation matching %class_filters
 }
+
+########################################
+sub check_vep_consequence {
+    my $annot = shift;
+    #intergenic variants have no feature associated with them - skip
+    return 0 if $annot->{consequence} eq "intergenic_variant";
+    #skip unwanted biotypes
+    return 0 if (exists $biotype_filters{$annot->{biotype}}) ;
+    #skip non-canonical transcripts if --canonical_only selected
+    if ($config->{canonical_only}) {
+        return 0 if ( not $annot->{canonical} );
+    }
+    
+    my @anno_csq = split( /\&/, $annot->{consequence} );
+
+ANNO: foreach my $ac (@anno_csq){
+        $ac = lc($ac);#we've already converted %class_filters to all lowercase
+        if ( exists $class_filters{$ac} ){
+            return 1;
+        }
+    }
+    return 0;#no annotation matching %class_filters
+}
+
+
 ####################################################################
 sub get_header{
     my @head = ();
-    #first deal with VEP fields
-    my $vep_header;
-    if (defined $config->{vep}){
-        foreach my $csq (@fields){
-            push @head, $csq;
-        }
+    #first deal with VEP/SnpEff fields
+    foreach my $csq (@csq_fields){
+        push @head, $csq;
     }
+
     #GET HEADER INFO
-    my $header_string = $vcf_obj->getHeader(1);
-    my %header_columns = $vcf_obj->getHeaderColumns();
-    my @head_split= split("\t", $header_string);
+    my @head_split= split("\t", $header[-1]);
     my @anno_columns = ();
     if (defined $config->{do_not_simplify}){
         foreach my $h (@head_split){
@@ -846,21 +1145,12 @@ sub get_header{
         }
 
         if (defined $config->{gene_anno}){
-        #old way
-#            my $i = 0; 
-#            $i++ until $head_split[$i] =~ /CHROM/;
-#            @anno_columns = @head_split[0..$i-1];
-#            foreach my $anno_col (@anno_columns){
-#                push @head, $anno_col;
-#            }
-        #new way
             foreach my $g (@gene_anno_fields){
                 push @head, $g;
             }
         }
 
     }
-#    return \@head, \@anno_columns;
     return @head;
 }
 
