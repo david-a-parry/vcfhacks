@@ -11,7 +11,7 @@ annovcfToSimple.pl - takes a vcf file and outputs a simplified version in Excel'
         
         annovcfToSimple.pl -v -i [VEP annotated VCF file] [options]
         
-        annovcfToSimple.pl -g -v -i [VEP and ensemblGeneAnnotator.pl annotated VCF file] [options]
+        annovcfToSimple.pl -g -v -i [VEP and geneAnnotator.pl annotated VCF file] [options]
         
         annovcfToSimple.pl -h (display help message)
         
@@ -25,7 +25,7 @@ annovcfToSimple.pl - takes a vcf file and outputs a simplified version in Excel'
 
 =item B<-i    --input>
 
-Input VCF file, optionally annotated with variant_effect_predictor.pl and ensemblGeneAnnotator.pl. 
+Input VCF file, optionally annotated with variant_effect_predictor.pl and geneAnnotator.pl. 
 
 =item B<-o    --output>
 
@@ -64,7 +64,7 @@ Use this flag to output annotations from Ensembl's variant_effect_predictor.pl a
 
 =item B<-g    --gene_anno>
 
-Use this flag if annotated with ensemblGeneAnnotator.pl to output gene annotation information. This script cannot distinguish between gene annotation information belonging to canonical transcripts or particular variant classes, these distinctions have to be made when running ensemblGeneAnnotator.pl prior to this script.
+Use this flag if annotated with geneAnnotator.pl to output gene annotation information. This script cannot distinguish between gene annotation information belonging to canonical transcripts or particular variant classes, these distinctions have to be made when running geneAnnotator.pl prior to this script.
 
 =item B<--canonical_only>
 
@@ -143,7 +143,7 @@ Show manual page.
 
 =head1 DESCRIPTION
 
-Reads a VCF file and outputs a simplified version in Excel's .xlsx format. Useful when using a VCF annotated with Ensembl's variant_effect_predictor.pl to output a more easily readable version (use the -v option), and particularly useful for VCF files annotated with ensemblGeneAnnotator.pl (use the -g option).
+Reads a VCF file and outputs a simplified version in Excel's .xlsx format. Useful when using a VCF annotated with Ensembl's variant_effect_predictor.pl to output a more easily readable version (use the -v option), and particularly useful for VCF files annotated with geneAnnotator.pl (use the -g option).
 
 =cut
 
@@ -318,14 +318,14 @@ my %info_fields = $vcf_obj->getInfoFields();
 if (defined $config->{gene_anno}){
     if (not exists $info_fields{GeneAnno}){
         die "GeneAnno INFO field not found in VCF header - please annotate ".
-            "your VCF with ensemblGeneAnnotator.pl or rerun this program without ".
+            "your VCF with geneAnnotator.pl or rerun this program without ".
             "the --gene_anno option.\n";
     }
     if ($info_fields{GeneAnno}->{Description} =~ /Format: ([\w+\|]+)\"/){
         @gene_anno_fields = split(/\|/, $1);
     }else{
         die "Could not parse GeneAnno description field - please annotate ".
-            "your VCF with ensemblGeneAnnotator.pl or report this error if it recurs.\n";
+            "your VCF with geneAnnotator.pl or report this error if it recurs.\n";
     }
 }
 if (defined $config->{vep}){
