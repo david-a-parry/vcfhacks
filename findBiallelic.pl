@@ -1900,6 +1900,10 @@ Minimum genotype qualities to consider for affected samples only (i.e. samples s
 
 Minimum genotype qualities to consider for unaffected samples only (i.e. samples specified by --reject argument or unaffected samples from a given pedigree). Anything below this threshold will be considered a no call. Default is 20.
 
+=item B<--pl>
+
+Minimum 0-based phred-scale genotype likelihood (see the VCF spec for details) for alternative genotypes. When considering a given genotype, if the sample has a PL below this value for an incompatible genotype, the genotype will be considered a no-call. Default - not used.
+
 =item B<-e    --equal_genotypes>
 
 Use this flag if you only want to consider genotypes that are identical in each sample to count towards biallelic variation. Potentially useful if looking at several related individuals segregating the same disease and not using a PED file to specify their relationships (or if for some reason you think several families will have the same causative mutation).
