@@ -1,6 +1,6 @@
 # vcfhacks
 
-This project comprises a set of perl programs and modules that may be useful for VCF manipulation when trying to discover disease-causing variants in sequencing data. Although more biologists are taking to the commandline many do not have the time or inclination to really get to grips with the more obtuse programs used in the field of bioinformatics. The aim of this project is to provide conceptually simple programs that perform common useful tasks. 
+This project comprises a set of perl programs and modules for VCF manipulation when trying to discover disease-causing variants in sequencing data. This project provides conceptually simple programs that can perform variant filtering and annotation to aid identification of disease-causing variants.
 
 Usage examples are included in the examples.md markdown documents which can also be viewed at https://github.com/gantzgraf/vcfhacks/blob/master/examples.md or https://github.com/gantzgraf/vcfhacks/blob/master/examples_bin.md
 
@@ -10,70 +10,85 @@ You may either download these programs as perl scripts or as precompiled binarie
 
 ### BINARIES
 
-These programs are all command line utilities. To run these programs you simply need to download and extract the tar.bz2 file for your plaform (currently only 64 bit Linux Mac OS X systems are supported) and change into the newly created vcfhacks_binaries directory. Each program can be run from this directory using the command *./[program_name]*  (e.g. *./annotateSnps*) or you may prefer to move the programs somewhere in your $PATH or add the new vcfhacks_binaries to your $PATH to be able to run these programs from any directory. You may need to make the programs executable before they will run (e.g. by running 'chmod +x *' from within your vcfhacks_binaries directory). 
+These programs are all command line utilities. To run these programs you simply need to download and extract the tar.bz2 file for your plaform from https://github.com/gantzgraf/vcfhacks/releases (currently only 64 bit Linux Mac OS X systems are supported) and change into the newly created vcfhacks_binaries directory. Each program can be run from this directory using the command *./[program_name]*  (e.g. *./annotateSnps*) or you may prefer to move the programs somewhere in your $PATH or add the new vcfhacks_binaries to your $PATH to be able to run these programs from any directory. You may need to make the programs executable before they will run (e.g. by running 'chmod +x *' from within your vcfhacks_binaries directory). 
 
 ### SCRIPTS
 
-Unzip the downloaded file and ensure you keep the .pl scripts in the same directory as the 'lib' folder containing .pm module files.  The vep_plugins folder also contains two Variant Effect Predictor (VEP) plugin modules (SpliceConsensus.pm and SpliceConsensusFilter.pm) which should be installed in your VEP cache 'Plugins' folder if you want to use them. The SpliceConsensus.pm annotations can be used for variant filtering purposes in getFunctionalVariantsVep.pl and findBiallelicVep.pl.
+You may either download and unpack a script bundle from a specific release (https://github.com/gantzgraf/vcfhacks/releases), or to stay up to date, you may clone this repository: 
 
-To run the scripts either add the enclosing directory to your PATH and make sure the scripts are executable (e.g. 'chmod +x vcfhacks/*.pl') or run each script using 'perl [location of script]' followed by the required arguments. Help information is available for most scripts by running the script with either '--help' or '--manual' options. 
+    git clone --recursive https://github.com/gantzgraf/vcfhacks.git
 
-If you want to use scripts to search bgzip compressed VCFs or use rankOnCaddScore.pl you will also need to install the Tabix.pm perl module by Heng Li. Download pre-1.0 version of tabix from github (https://github.com/samtools/tabix) or clone the git repository (git clone https://github.com/samtools/tabix.git). If you downloaded the zipped version unzip to create the tabix directory. Next, cd into the new tabix directory and run 'make', cd into the 'perl' subdirectory, run 'perl Makefile.PL' and 'make test'. If tests succeed run '[sudo] make install' to complete Tabix.pm installation. If you get the error 'Subroutine Tabix::tabix_open redefined...' this is harmless and can be removed by replacing: 
+...and regularly run 'git pull' to receive updates.
 
-```
-    require XSLoader;
-    XSLoader::load('Tabix', $VERSION);
-```
+The .pl scripts must remain in the same directory as the 'lib' and 'data' folders but you may create symlinks to the scripts (e.g. in your ~/bin folder) if you wish.  The vep_plugins folder also contains two Variant Effect Predictor (VEP) plugin modules (SpliceConsensus.pm and SpliceConsensusFilter.pm) which should be installed in your VEP cache 'Plugins' folder if you want to use them. The SpliceConsensus.pm annotations can be used for variant filtering purposes in getFunctionalVariants.pl and findBiallelic.pl.
 
-...with... 
+To run the scripts either add the enclosing directory to your PATH and make sure the scripts are executable (e.g. 'chmod +x vcfhacks/*.pl'), run the scripts directly from the folder (e.g. ./annotateSnps.pl) or run each script using 'perl [location of script]' followed by the required arguments. Help information is available for most scripts by running the script with either '--help' or '--manual' options. 
 
-```
-    {
-    no warnings 'redefine';
-    require XSLoader;
-    XSLoader::load('Tabix', $VERSION);
-    }
-```
+If you want to use scripts to search bgzip compressed VCFs or use rankOnCaddScore.pl you will also need to build and install the Tabix.pm perl module by Heng Li. From the vcfhacks directory:
 
-...in Tabix.pm (and reinstalling). 
+    cd lib/Tabix/
+    make
+    cd perl
+    perl Makefile.PL
+    make
+    make test
+    (sudo) make install
 
 Other perl modules required by these scripts are installable via CPAN - perl will complain that they are not available in "@INC" when you attempt to run these programs if they are not on your system. Please see http://www.cpan.org/modules/INSTALL.html for instructions on how to install these modules. Below is a list of these non-core modules that you are likely to need install:
 
-    Bio::DB::Sam (hgmdMartToVcf.pl only)
-    Excel::Writer::XLSX (annovcfToSimple.pl only)
-    LWP::Simple (ensemblGeneAnnotator.pl only)
-    HTTP::Tiny (ensemblGeneAnnotator.pl for remote retrieval of gene IDs only)
-    JSON (ensemblGeneAnnotator.pl for remote retrieval of gene IDs only)
     Parallel::ForkManager
     Sys::CPU
     Term::ProgressBar
+    LWP::Simple (geneAnnotator.pl only)
+    HTTP::Tiny (geneAnnotator.pl for remote retrieval of gene IDs only)
+    JSON (geneAnnotator.pl for remote retrieval of gene IDs only)
+    Excel::Writer::XLSX (annovcfToSimple.pl only)
+    Bio::DB::Sam (hgmdMartToVcf.pl only)
 
 
 ## UPDATE
 
 _VERSION 0.1.18:_
 
-16/08/15
+19/12/15
 
--VEP's (rather vague) 'protein_altering_variant' class is now included by default as a 'functional' variant in relevant scripts.
+-ensemblGeneAnnotator.pl is now renamed geneAnnotator.pl. 
 
--findBiallelic scripts now feature the option to look at variants compatible with X-linked recessive inheritance as well/instead of autosomal recessive inheritance.
+-geneAnnotator.pl can annotate snpEff annotated VCF files annotates using the newer 'ANN=' style annotations in addition to VEP annotated VCFs.
+
+-geneAnnotator.pl now annotates BIOGRID interactants. 
+
+-geneAnnotator.pl will attempt to retrieve Entrez gene IDs remotely if they are not in the database.
+
+-geneAnnotator.pl can also be used to work on a list of genes, not just on VCFs.
+
+-getFunctionalVariants.pl and findBiallelic.pl replace the VEP and SnpEff specific scripts and can be used on either VEP or SnpEff annotated files (only the newer 'ANN' style SnpEff annotations are supported).
+
+-in the interest of speed, findBiallelic.pl checks that input is sorted on-the-fly rather than doing a pass of the whole file before running.
+
+-findBiallelic.pl now feature the option to look at variants compatible with X-linked recessive inheritance as well/instead of autosomal recessive inheritance.
+
+-findBiallelic.pl and getFunctionalVariants.pl can use Cadd score annotations from rankOnCaddScore.pl to filter alleles.
+
+-findBiallelic.pl and getFunctionalVariants.pl can use custom allele frequency annotations for filtering alleles.
+
+-getVariantsByLocation.pl can retrieve variants that overlap given genes.
 
 -filterVcfOnVcf.pl can now filter using population specific allele frequency fields, particularly in the case of ExAC VCFs.
+
+-filterVcfOnVcf.pl can be used to add custom allele frequency annotations.
+
+-VEP's (rather vague) 'protein_altering_variant' class is now included by default as a 'functional' variant in relevant scripts.
 
 -filterOnSample.pl now features the option to only consider samples with a minimum read depth at a variant site.
 
 -rankOnCaddScore.pl can now take a directory as an argument in order to find any .(b)gz files contained to use for CADD annotations.
 
--rankOnCaddScore.pl ignores the new '*' allele codes in VCFs.
+-scripts handle the new '*' allele codes appropriately.
 
 -getHetVariants.pl features the option to specify minimum and maximum allele balances for a call to be considered heterozygous.
 
--added checkInheritance.pl script.
-
--added renameSamples.pl script.
-
--in the interest of speed, findBiallelic scripts check that input is sorted on-the-fly rather than doing a pass of the whole file before running.
+-added checkInheritance.pl, renameSamples.pl and removeVariantInfoFields.pl scripts.
 
 -fixed 'not numeric value' errors from no-calls when processing genotype qualities.
 
