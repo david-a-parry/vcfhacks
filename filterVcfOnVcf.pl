@@ -102,7 +102,7 @@ Use this flag to reverse the script so that only matching lines are printed.
 
 =item B<--annotation>
 
-If filtering using samples (i.e. not using the --info_filter option) you can use this option to specify an annotation for allele frequencies and allele numbers calculated from samples in your --filter VCF. These annotations will be added to the INFO field as 'annotation_AF' and 'annotation_AN' where 'annotation' is the value you supply to this option. For example, if specifying '--annotation controls' it would add 'controls_AF' and 'controls_AN' INFO fields giving the allele frequency and allele numbers respectively for the samples used in your --filter VCF.
+Use this option to specify an annotation for allele frequencies and allele numbers calculated from samples/INFO fields in your --filter VCF. These annotations will be added to the INFO field of the output as 'annotation_AF' and 'annotation_AN' where 'annotation' is the value you supply to this option. For example, if specifying '--annotation controls' it would add 'controls_AF' and 'controls_AN' INFO fields giving the allele frequency and allele numbers respectively for the samples used in your --filter VCF. These annotations can be used by programs such as findBiallelic.pl and getFunctionalVariants.pl for filtering using custom allele frequencies.
 
 =item B<-t    --forks>
 
