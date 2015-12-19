@@ -113,8 +113,8 @@ use Data::Dumper;
 use Pod::Usage;
 use POSIX qw/strftime/;
 use Term::ProgressBar;
-use FindBin;
-use lib "$FindBin::Bin/lib";
+use FindBin qw($RealBin);
+use lib "$RealBin/lib";
 use SortGenomicCoordinates;
 use ParseVCF;
 
