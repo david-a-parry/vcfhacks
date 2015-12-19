@@ -1354,6 +1354,10 @@ Minimum variant Phred-like quality score to consider. Variants with a QUAL field
 
 Minimum genotype qualities to consider. Only applicable when using the -s/--samples option. Any genotype call below this threshold will be considered a no call. Default is 20
 
+=item B<--pl>
+
+Minimum 0-based phred-scale genotype likelihood (see the VCF spec for details) for alternative genotypes. Only applicable when using the -s/--samples option. When considering a given allele, if the sample has a PL below this value for a genotype not including this allele, the sample will not be considered a carrier of that allele. Default - not used.
+
 =item B<--pass_filters>
 
 Only consider variants with a PASS filter field. If the FILTER field for variant is not PASS the variant will be skipped.
@@ -1390,7 +1394,9 @@ Show the program's manual page.
 
 =head1 DESCRIPTION
 
-    TODO!
+In its simplest form this program will print specific variant classes from a VCF file annotated with either Ensembl's variant_effect_predictor.pl program or SnpEff and filter out other variant classes. Input must be a VCF annotated by the variant_effect_predictor.pl program using the '--vcf' option or a VCF annotated with SnpEff using the (now default) ANN style annotations.
+
+As well as outputting variants on the basis of functional annotation, this program can identify genes with functional variants in specific samples using the --samples and --find_shared genes options.
 
 =cut
 
