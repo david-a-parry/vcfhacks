@@ -68,9 +68,13 @@ _VERSION 0.1.18:_
 
 -findBiallelic.pl now feature the option to look at variants compatible with X-linked recessive inheritance as well/instead of autosomal recessive inheritance.
 
+-findBiallelic.pl will read phase information (PID and PGT) from GATK if present and not consider variants in cis as potential compound hets.
+
 -findBiallelic.pl and getFunctionalVariants.pl can use Cadd score annotations from rankOnCaddScore.pl to filter alleles.
 
 -findBiallelic.pl and getFunctionalVariants.pl can use custom allele frequency annotations for filtering alleles.
+
+-findBiallelic.pl and getFunctionalVariants.pl can now filter genotypes using genotype PL annotations.
 
 -getVariantsByLocation.pl can retrieve variants that overlap given genes.
 
