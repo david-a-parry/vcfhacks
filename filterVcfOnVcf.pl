@@ -9,8 +9,8 @@ use Term::ProgressBar;
 use Data::Dumper;
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use POSIX qw(strftime);
-use FindBin;
-use lib "$FindBin::Bin/lib";
+use FindBin qw($RealBin);
+use lib "$RealBin/lib";
 use VcfReader;
 
 =head1 NAME

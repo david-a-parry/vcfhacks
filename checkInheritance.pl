@@ -7,8 +7,8 @@ use Getopt::Long;
 use Pod::Usage;
 use Term::ProgressBar;
 use Data::Dumper;
-use FindBin;
-use lib "$FindBin::Bin/lib";
+use FindBin qw($RealBin);
+use lib "$RealBin/lib";
 use ParsePedfile;
 use VcfReader;
 

@@ -22,9 +22,9 @@ use Cwd;
 use Term::ProgressBar;
 
 use FindBin qw($RealBin);
-use lib "$FindBin::Bin/lib";
-use lib "$FindBin::Bin/lib/Bioperl";
-use lib "$FindBin::Bin/lib/BioASN1EntrezGene/lib";
+use lib "$RealBin/lib";
+use lib "$RealBin/lib/Bioperl";
+use lib "$RealBin/lib/BioASN1EntrezGene/lib";
 use VcfhacksUtils;
 use VcfReader; 
 

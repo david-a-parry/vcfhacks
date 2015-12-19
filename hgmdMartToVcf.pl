@@ -6,8 +6,8 @@ use Bio::DB::Sam;
 use Data::Dumper;
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use File::Temp qw/ tempfile /;
-use FindBin;
-use lib "$FindBin::Bin/lib";
+use FindBin qw($RealBin);
+use lib "$RealBin/lib";
 use VcfReader;
 
 my %opts = ();

@@ -5,8 +5,8 @@ use warnings;
 use Getopt::Long;
 use Pod::Usage;
 use Data::Dumper;
-use FindBin;
-use lib "$FindBin::Bin/lib";
+use FindBin qw($RealBin);
+use lib "$RealBin/lib";
 use VcfReader;
 
 my %opts = ();
