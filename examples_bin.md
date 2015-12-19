@@ -42,6 +42,10 @@ We may only want to filter using these VCFs if variants are present above a cert
 
     ./filterVcfOnVcf -i input_snpfiltered_evsfiltered.vcf -f controls.vcf -o input_snpfiltered_evsfiltered_vcffiltered.vcf -y 0.01 
 
+Using the --annotation option with filterVcfOnVcf can be used to add custom allele frequency (AF) and allele number (AN) annotations to the output, which can be used for filtering on allele frequency by findBiallelic and getFunctionalVariants. This can be useful either to allow filtering on a different allele frequency with those programs and is particularly useful when a variants contains two or more alternate alleles where one may be common and the other rare. In these cases, the variant won't be filtered because the rare allele has a frequency below the frequency filter used but downstream scripts such as findBiallelic can ignore the common allele by reading the custom allele frequency values for those alleles. The example below will do the same as the previous command but also add the allele frequency/number annotations 'controls_AF' and 'controls_AN':
+
+    ./filterVcfOnVcf -i input_snpfiltered_evsfiltered.vcf -f controls.vcf --annotation controls -o input_snpfiltered_evsfiltered_vcffiltered.vcf -y 0.01 
+
 We can also filter using VCFs such as those available from the **ExAC** project using allele frequency (AF) annotations in the VCF INFO field if we pass the **--info_filter/-w** option: 
 
     ./filterVcfOnVcf -i input_snpfiltered_evsfiltered.vcf -f ExAC.r0.1.sites.vep.vcf.gz -o input_snpfiltered_evsfiltered_vcffiltered.vcf -y 0.01  -w 
@@ -58,21 +62,21 @@ In the example above Sample1 and Sample2 might be affected individuals while Sam
 
 The above might be useful for identifying mutations with dominant inheritance patterns by identifying mutations only present in affected samples. See the full documentation for filterOnSample 
 
-At this point, you may want to identify variants that have potentially pathogenic functional consequences on gene products. In order to do so you will need to have annotated your VCF with functional consequences using either Ensembl's *Variant Effect Predictor* (http://www.ensembl.org/info/docs/tools/vep/index.html) or *SnpEff* (http://snpeff.sourceforge.net/).  You can filter this VCF using getFunctionalVariantsVep/getFunctionalVariantsSnpEff or **findBiallelicVep/findBiallelicSnpEff** depending on your needs.  Below is an example using findBiallelicVep to identify potential compound heterozygous or homozygous 'functional' variants present in Sample1 and Sample2 (they are related so we are  using the -e flag to specify that we expect both to contain the same causative mutation) but not in Sample3 and Sample4 (unaffected family members):
+At this point, you may want to identify variants that have potentially pathogenic functional consequences on gene products. In order to do so you will need to have annotated your VCF with functional consequences using either Ensembl's *Variant Effect Predictor* (http://www.ensembl.org/info/docs/tools/vep/index.html) or *SnpEff* (http://snpeff.sourceforge.net/).  You can filter this VCF using getFunctionalVariants or **findBiallelic** depending on your needs.  Below is an example using findBiallelic to identify potential compound heterozygous or homozygous 'functional' variants present in Sample1 and Sample2 (they are related so we are  using the -e flag to specify that we expect both to contain the same causative mutation) but not in Sample3 and Sample4 (unaffected family members):
 
-    ./findBiallelicVep -i vep.input_snpfiltered_evsfiltered_vcffiltered.vcf -s Sample1 Sample2 -r Sample3 Sample4 -e -o output.vcf 
+    ./findBiallelic -i vep.input_snpfiltered_evsfiltered_vcffiltered.vcf -s Sample1 Sample2 -r Sample3 Sample4 -e -o output.vcf 
 
 The above might be better acheived by using a *PED file* of the family instead:
 
-    ./findBiallelicVep -i vep.input_snpfiltered_evsfiltered_vcffiltered.vcf -f family.ped -o output.vcf 
+    ./findBiallelic -i vep.input_snpfiltered_evsfiltered_vcffiltered.vcf -f family.ped -o output.vcf 
 
 You might instead be looking at several unrelated samples with the same condition and want to identify shared genes with potential compound heterozygous or homozygous 'functional' variants (not necessarily the same causative variants in each sample). In the example below we look at four unrelated samples with the same condition and output variants for genes that have potential biallelic variation in 3 or more of the 4 samples:
 
-    ./findBiallelicVep -i vep.input_snpfiltered_evsfiltered_vcffiltered.vcf -s Sample1 Sample2 Sample3 Sample4 -n 3 -o output.vcf -l shared_genes.txt
+    ./findBiallelic -i vep.input_snpfiltered_evsfiltered_vcffiltered.vcf -s Sample1 Sample2 Sample3 Sample4 -n 3 -o output.vcf -l shared_genes.txt
 
-See the various options in the help documentation for findBiallelicVep for more details on how to filter variants on VEP fields such as 1000 genomes allele frequency or PolyPhen predictions.
+See the various options in the help documentation for findBiallelicVep for more details on how to filter variants on VEP fields such as 1000 genomes allele frequency, PolyPhen predictions or CADD scores.
 
-The **getFunctionalVariantsVep** program identifies variants matching 'functional' criteria and can also be used to provide a list of gene IDs to ignore (e.g. lof tolerant genes).  You may want to use this program to filter genes on functional consequence when not looking for biallelic variation or to prefilter with a list of gene IDs before running findBiallelicVep. You may also/instead want to use rankOnCaddScore to rank variants ignoring functional annotation using Combined Annotation Dependent Depletion (CADD) scores.
+The **getFunctionalVariants** program identifies variants matching 'functional' criteria. You may want to use this program to filter genes on functional consequence when not looking for biallelic variation. You may also/instead want to use rankOnCaddScore to rank variants ignoring functional annotation using Combined Annotation Dependent Depletion (CADD) scores.
 
     ./rankOnCaddScore -i input.vcf -o cadd_ranked.vcf -c ~/cadd_score_files/*.gz -n not_found_cadd_scores.tsv
 
@@ -80,19 +84,19 @@ You may then want to submit your 'not_found_cadd_scores.tsv' to http://cadd.gs.w
 
 ###ANNOTATING YOUR OUTPUT:###
 
-Having filtered/ranked you variant calls you may want to annotate gene information using ensemblGeneAnnotator . You may either create your own database with ensemblGeneAnnotator or download a pre-build database from: 
+Having filtered/ranked you variant calls you may want to annotate gene information using geneAnnotator. If you downloaded a release of 0.1.18 or higher you should already have the geneAnnotatorDb folder in the data subdirectory. If instead you retrieved the scripts by cloning this repository you may either create your own database with geneAnnotator or download a pre-built database from: 
 
-    http://sourceforge.net/projects/vcfhacks/files/ensAnnotatorDatabase/
+    https://github.com/gantzgraf/vcfhacks/releases/tag/v.0.1.18
 
-Remember to unzip the database if you have downloaded the pre-built version. Annotation requires ensembl gene IDs annotated using Ensembl's variant effect predictor. 
+Remember to unzip the database and place the geneAnnotatorDb folder within the data directory in your vcfhacks folder if you have downloaded the pre-built version. Annotation requires gene IDs annotated using Ensembl's variant effect predictor or SnpEff. 
 
-    ./ensemblGeneAnnotator -i input.vcf -d ~/ensAnnotator -o annotated.vcf
+    ./geneAnnotator -i input.vcf -o annotated.vcf
 
 You may only want to annotate gene information for 'functional' variants and omit information for overlapping genes with synonymous/intronic/UTR variants, in which case use a command like the the following:
 
-    ./ensemblGeneAnnotator -i input.vcf -d ~/ensAnnotator -o annotated.vcf --functional
+    ./geneAnnotator -i input.vcf -o annotated.vcf --functional
 
-At this point you may wish to produce a spreadsheet of your results using annovcfToSimple. The following should create an Excel spreadsheet (.xlsx) from a VEP and ensemblGeneAnnotator annotated file:
+At this point you may wish to produce a spreadsheet of your results using annovcfToSimple. The following should create an Excel spreadsheet (.xlsx) from a VEP and geneAnnotator annotated file:
 
     ./annovcfToSimple -g -v -i input.vcf -o input.xlsx
 
@@ -126,6 +130,10 @@ To get variants from vars.vcf that match a variant in other.vcf
 To get variants from vars.vcf that overlap the coordinates 1:2000000 or 1:30000000: 
     
     ./getVariantsByLocation -i vars.vcf -r 1:2000000 1:30000000 -o filtered.vcf
+
+To get variants from vars.vcf that overlap the gene ABCA4 (using GRCh37 coordinates by default):
+
+    ./getVariantsByLocation -i vars.vcf -g ABCA4 -o filtered.vcf
 
 If you have a VCF that is no longer coordinate sorted (e.g. if you've ranked your variants on CADD scores), you may use filterVcfOnLocation to output variants that lie within specific genomic regions. This may be significantly slower compared to using getVariantsByLocation on an indexed VCF but is useful if you do not want to coordinate sort your file.
 
@@ -162,7 +170,7 @@ If you want to see the sample names with ALT genotypes as well as the number of 
 
 You can pipe to countVcfCalls from STDIN by specifying '-' as the input file. So, if you have a particular variant you want compare counts for at position 1:2000000 you may use the following command:
 
-    ./getVariantsByLocation -i vars.vcf -r 1:2000000 | perl countVcfCalls -i -
+    ./getVariantsByLocation -i vars.vcf -r 1:2000000 | ./countVcfCalls -i -
 
 If you have a VCF with many hundreds to thousands of samples that you frequently use for filtering on allele frequency using filterVcfOnVcf, you can summarise the allele counts with sampleCallsToInfo:
 
@@ -172,11 +180,11 @@ For data from a VCF with many hundreds to thousands of samples, using a summaris
 
     ./filterVcfOnVcf -i input.vcf  -f summarised.vcf  -o filtered.vcf -y 0.01 --info_filter
 
-Sometimes you may want to take a look at the genotype calls for a select few samples from a multisample VCF without having to count across many 10s-100s of columns to find the relevant calls - selectSampleCalls.pl will only output the calls from chosen samples without altering INFO fields such as AD, AF and AC fields. 
+Sometimes you may want to take a look at the genotype calls for a select few samples from a multisample VCF without having to count across many 10s-100s of columns to find the relevant calls - selectSampleCalls will only output the calls from chosen samples without altering INFO fields such as AD, AF and AC fields. 
 
     ./selectSampleCalls -i small.vcf -s sample1 sample2 | grep rs137853041
 
-checkInheritance can count the number of variants in a VCF conforming to expected inhertiance patterns when provided with a PED file with at least one parent-child relationship
+checkInheritance can count the number of variants in a VCF conforming to expected inhertiance patterns when provided with a PED file with at least one parent-child relationship.
 
     ./checkInheritance -i input.vcf -f family.ped
 
@@ -184,5 +192,8 @@ Renaming of samples within a VCF can be acheived using a file containing lines w
 
     ./renameSamples -i input.vcf -s sample_mapping.txt
 
+INFO fields can be removed (for example if the INFO field is poorly formatted and causing issues with other tools) using removeVariantInfoFields.
+
+    ./removeVariantInfoFields -i input.vcf -r DODGY_INFO_FIELD 
 
 
