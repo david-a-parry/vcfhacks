@@ -34,6 +34,8 @@ If you want to use scripts to search bgzip compressed VCFs or use rankOnCaddScor
     make test
     (sudo) make install
 
+For convenience, the bioperl modules required for the geneAnnotator.pl database creation are provided within the 'lib' folder and should be automatically found by the program. 
+
 Other perl modules required by these scripts are installable via CPAN - perl will complain that they are not available in "@INC" when you attempt to run these programs if they are not on your system. Please see http://www.cpan.org/modules/INSTALL.html for instructions on how to install these modules. Below is a list of these non-core modules that you are likely to need install:
 
     Parallel::ForkManager
