@@ -48,9 +48,19 @@ Other perl modules required by these scripts are installable via CPAN - perl wil
 
 ## UPDATE
 
-_VERSION 0.1.18:_
+## VERSION 0.1.18:
 
 19/12/15
+
+### Release Information
+
+This is a significant update with many changes and fixes. Some of the more important changes include handling of the new '*' alleles produced by variant callers, better compatibility with VCFs produced by freebayes, ensemblGeneAnnotator.pl (now named geneAnnotator.pl) adds BIOGRID interactants and use of phase information by findBiallelic.pl. 
+
+Old ensemblGeneAnnotator databases will no longer be compatible with geneAnnotator.pl, which now looks in the 'data/geneAnnotatorDb' subdirectory by default or database files. An up to date version of this database comes bundled with this release or can be downloaded separately from this release if cloning the git repository instead. 
+
+annotateSnps.pl can use the ClinVar TSV file from the MacArthur lab (https://github.com/macarthur-lab/clinvar) for better dissemination of previously reported pathogenic variants. annotateSnps.pl, filterOnEvsMaf.pl and filterVcfOnVcf.pl all write frequency data to INFO fields in their output files which can subsequently be read by findBiallelic.pl and getFunctionalVariants.pl for filtering on allele frequency at the allele (rather than variant) level. 
+
+### Changes
 
 * ensemblGeneAnnotator.pl is now renamed geneAnnotator.pl. 
 
@@ -82,6 +92,10 @@ _VERSION 0.1.18:_
 
 * filterVcfOnVcf.pl can be used to add custom allele frequency annotations.
 
+* Parsing of VEP alleles is improved, which should prevent some 'undefined variable' errors in scripts that parse VEP annotations.
+
+* Compatibility with VCFs produced by freebayes is improved, where allele depths will be calculated from 'AO' and 'RO' genotype fields in the absence of 'AD' fields. 
+
 * VEP's (rather vague) 'protein_altering_variant' class is now included by default as a 'functional' variant in relevant scripts.
 
 * filterOnSample.pl now features the option to only consider samples with a minimum read depth at a variant site.
@@ -99,7 +113,7 @@ _VERSION 0.1.18:_
 * fixed an issue when using a custom set of VEP fields in annovcfToSimple.pl where the consequence or allele fields would not be retrieved.
 
 
-_VERSION 0.1.17:_
+### VERSION 0.1.17:
 
 08/05/15
 
@@ -110,7 +124,7 @@ _VERSION 0.1.17:_
 * fixed an error with the --gene_id_mode option in getFunctionalVariantsSnpEff.pl
 
 
-_VERSION 0.1.16:_
+### VERSION 0.1.16:
 
 31/03/15
 
@@ -134,7 +148,7 @@ _VERSION 0.1.16:_
 
 * updated pre-built ensemblGeneAnnotator database (<https://github.com/gantzgraf/vcfhacks/releases/download/v.0.1.16/ensAnnotatorDb.zip> or  <http://sourceforge.net/projects/vcfhacks/files/ensAnnotatorDatabase/>) again.
 
-_VERSION 0.1.15:_
+### VERSION 0.1.15:
 
 11/12/14
 
@@ -150,7 +164,7 @@ _VERSION 0.1.15:_
 
 * updated pre-built ensemblGeneAnnotator database (<http://sourceforge.net/projects/vcfhacks/files/ensAnnotatorDatabase/>) for this version. 
 
-_VERSION 0.1.14:_
+### VERSION 0.1.14:
 
 9/10/14
 
@@ -176,7 +190,7 @@ _VERSION 0.1.14:_
 
 * added more detailed usage examples to examples.txt (and examples.rtf)
 
-_VERSION 0.1.13:_
+### VERSION 0.1.13:
 
 30/9/14
 
@@ -199,7 +213,7 @@ _VERSION 0.1.13:_
 * fixed an error that might cause annovcfToSimple.pl to fail as result of trying to merge a single cell
 
 
-_VERSION 0.1.12:_
+### VERSION 0.1.12:
 
 1/9/14
 
@@ -214,7 +228,7 @@ _VERSION 0.1.12:_
 * fixed a bug with filterVcfOnVcf.pl where linebreaks would not be added between variants when run without forks. 
 
 
-_VERSION 0.1.11:_
+### VERSION 0.1.11:
 
 21/8/14
 
@@ -231,7 +245,7 @@ _VERSION 0.1.11:_
 * annovcfToSimple.pl now allows you to use the value 'default' with the --fields option to include all default fields plus those specified manually.
 
 
-_VERSION 0.1.10:_
+### VERSION 0.1.10:
 
 18/8/14
 
@@ -249,7 +263,7 @@ _VERSION 0.1.10:_
 
 * sortVcf.pl now uses VcfReader.pm instead of ParseVcf.pm
 
-_VERSION 0.1.9:_
+### VERSION 0.1.9:
 
 18/7/14
 
@@ -263,7 +277,7 @@ _VERSION 0.1.9:_
 
 * VcfReader.pm created to allow for parallel execution in annotateSnps.pl, filterOnEvsMaf.pl, filterVcfOnVcf.pl and filterOnSample.pl and to introduce a faster indexing method for uncompressed VCFs for quicker variant retrieval by positon/region. Version 0.2 will occur once VcfReader.pm replaces the object-oriented ParseVCF.pm in all scripts.
 
-_VERSION 0.1.8a:_
+### VERSION 0.1.8a:
 
 5/6/14
 
@@ -273,7 +287,7 @@ _VERSION 0.1.8a:_
 
 * when using DBNSFP filter expressions in getFunctionalVariantsSnpEff.pl/findBiallelicSnpEff.pl numeric expressions are no longer converted to string expressions when INFO field type is String/Char if the given expression uses numeric style comparators, but users are still warned that INFO field is of type string.
 
-_VERSION 0.1.8:_
+### VERSION 0.1.8:
 
 3/6/14
 
@@ -285,7 +299,7 @@ _VERSION 0.1.8:_
 
 * Fixed bug where annovcfToSimple.pl expected to see Cadd Phred Score field by default. Now it decides whether to use it by default after checking whether it is present or not in the header.
 
-_VERSION 0.1.7a:_
+### VERSION 0.1.7a:
 
 20/5/14
 
@@ -293,7 +307,7 @@ _VERSION 0.1.7a:_
 
 * Corrected --allele_ratio_cutoff short option from -x to -z in filterOnSample.pl
 
-_VERSION 0.1.7:_
+### VERSION 0.1.7:
 
 15/5/14
 
@@ -303,7 +317,7 @@ _VERSION 0.1.7:_
 
 * Fixed a bug with ParseVCF.pm where it would miss some INFO fields when Number was '.'
 
-_VERSION 0.1.6:_
+### VERSION 0.1.6:
 
 6/5/14
 
@@ -341,7 +355,7 @@ filterOnSample.pl -i [var.vcf] -s [sample ID of child] -r [sample ID of mother] 
 
 * added option to annovcfToSimple.pl to output INFO fields as columns.
 
-_VERSION 0.1.5:_
+### VERSION 0.1.5:
 
 28/3/14
 
@@ -375,7 +389,7 @@ _VERSION 0.1.5:_
 
 * added ParsePedfile.pm module
 
-_VERSION 0.1.4:_
+### VERSION 0.1.4:
 
 27/1/14
 
@@ -391,7 +405,7 @@ _VERSION 0.1.4:_
 
 * various code tidy-ups, minor optimisations
 
-_VERSION 0.1.3:_
+### VERSION 0.1.3:
 
 16/12/13 
 
@@ -404,7 +418,9 @@ _VERSION 0.1.3:_
 
 __CREDIT__
 
-These scripts were written __David A. Parry__, a geneticist/molecular biologist at the University of Leeds.
+These programs were written __David A. Parry__, currently at the University of Edinburgh. 
+
+For help or suggestions please email: gantzgraf (at) users.noreply.github.com
 
 __If you find these programs useful and use them for a paper__ ***please cite the URL <https://github.com/gantzgraf/vcfhacks> *** 
 
