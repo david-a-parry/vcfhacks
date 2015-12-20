@@ -54,11 +54,13 @@ Other perl modules required by these scripts are installable via CPAN - perl wil
 
 ### Release Information
 
-This is a significant update with many changes and fixes. Some of the more important changes include handling of the new '*' alleles produced by variant callers, better compatibility with VCFs produced by freebayes, ensemblGeneAnnotator.pl (now named geneAnnotator.pl) adds BIOGRID interactants and use of phase information by findBiallelic.pl. 
+This is a significant update with many changes and fixes. Some of the more important changes include handling of the new '*' alleles produced by variant callers, better compatibility with VCFs produced by freebayes, ensemblGeneAnnotator.pl (now named geneAnnotator.pl) adds BIOGRID interactants and use of phase information by findBiallelic.pl.
 
 Old ensemblGeneAnnotator databases will no longer be compatible with geneAnnotator.pl, which now looks in the 'data/geneAnnotatorDb' subdirectory by default or database files. An up to date version of this database comes bundled with this release or can be downloaded separately from this release if cloning the git repository instead. 
 
 annotateSnps.pl can use the ClinVar TSV file from the MacArthur lab (https://github.com/macarthur-lab/clinvar) for better dissemination of previously reported pathogenic variants. annotateSnps.pl, filterOnEvsMaf.pl and filterVcfOnVcf.pl all write frequency data to INFO fields in their output files which can subsequently be read by findBiallelic.pl and getFunctionalVariants.pl for filtering on allele frequency at the allele (rather than variant) level. 
+
+Bioperl modules required for geneAnnotatorDb updates are now provided in the 'lib' subdirectory (meaning installation of the full Bioperl distribution is no longer required) as well as a patched version of the Tabix perl module to make installation more simple.
 
 ### Changes
 
