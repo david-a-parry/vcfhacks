@@ -9,8 +9,8 @@ use Data::Dumper;
 use POSIX qw/strftime/;
 use Sys::CPU;
 use List::Util qw(sum);
-use FindBin;
-use lib "$FindBin::Bin/lib";
+use FindBin qw($RealBin);
+use lib "$RealBin/lib";
 use VcfReader;
 
 my $minGQ = 0;

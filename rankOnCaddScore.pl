@@ -9,8 +9,8 @@ use Pod::Usage;
 use Data::Dumper;
 use Term::ProgressBar;
 use Tabix;
-use FindBin;
-use lib "$FindBin::Bin/lib";
+use FindBin qw($RealBin);
+use lib "$RealBin/lib";
 use ParseVCF;
 
 #TO DO - allow multiple cadd files, do not annotate if exact variant not found

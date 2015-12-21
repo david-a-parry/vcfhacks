@@ -6,8 +6,8 @@ use Pod::Usage;
 use Data::Dumper;
 use List::Util qw ( first ) ;
 use POSIX qw/strftime/;
-use FindBin;
-use lib "$FindBin::Bin/lib";
+use FindBin qw($RealBin);
+use lib "$RealBin/lib";
 use ParsePedfile;
 use VcfReader;
 use VcfhacksUtils;
@@ -1899,6 +1899,10 @@ Minimum genotype qualities to consider for affected samples only (i.e. samples s
 =item B<-u    --un_quality>
 
 Minimum genotype qualities to consider for unaffected samples only (i.e. samples specified by --reject argument or unaffected samples from a given pedigree). Anything below this threshold will be considered a no call. Default is 20.
+
+=item B<--pl>
+
+Minimum 0-based phred-scale genotype likelihood (see the VCF spec for details) for alternative genotypes. When considering a given genotype, if the sample has a PL below this value for an incompatible genotype, the genotype will be considered a no-call. Default - not used.
 
 =item B<-e    --equal_genotypes>
 

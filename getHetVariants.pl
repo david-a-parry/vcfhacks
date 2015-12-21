@@ -2,8 +2,8 @@
 use strict;
 use warnings;
 use Data::Dumper;
-use FindBin;
-use lib "$FindBin::Bin/lib";
+use FindBin qw($RealBin);
+use lib "$RealBin/lib";
 use ParseVCF;
 use Pod::Usage;
 use Getopt::Long;
