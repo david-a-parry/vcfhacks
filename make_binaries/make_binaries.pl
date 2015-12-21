@@ -57,23 +57,16 @@ foreach my $f (@files){
         (my $exe = $f) =~ s/\.pl$//;
         chdir($bin_dir);
         my $pp = "pp --lib lib/ --lib lib/Bioperl --lib lib/BioASN1EntrezGene/lib";
-        if ($^O eq 'darwin'){
-            $pp = "pp5.16";
-        }
         my $pp_cmd = "$pp -c $f -o $exe";
         if (grep {$_ eq $f} @needs_tabix){
             $pp_cmd .= " -M Tabix";
         }
         if (grep {$_ eq $f} @needs_sort_external){
             $pp_cmd .= " -M Sort::External";
-            if ($^O eq 'darwin'){
-                $pp_cmd .= " --lib /opt/local/lib/perl5/site_perl/5.16.3/darwin-thread-multi-2level/";
-            
-            }
         }
         if ($f eq "geneAnnotator.pl"){
             $pp_cmd .= " -M Bio::SeqIO::entrezgene" . 
-                       " -M HTTP::Tiny -M JSON";
+                       " -M HTTP::Tiny -M JSON  -M JSON::backportPP";
         } 
         print STDERR "Making binary with command: $pp_cmd\n";
         system($pp_cmd); 
