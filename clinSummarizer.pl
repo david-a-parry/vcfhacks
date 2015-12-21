@@ -10,10 +10,10 @@ use Excel::Writer::XLSX::Utility;
 use List::Util qw(first sum);
 use Pod::Usage;
 use File::Basename;
-use FindBin;
 use Tabix; 
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
-use lib "$FindBin::Bin/lib";
+use FindBin qw($RealBin);
+use lib "$RealBin/lib";
 use VcfReader;
 use TextToExcel;
 
