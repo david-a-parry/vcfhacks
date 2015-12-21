@@ -50,7 +50,7 @@ Other perl modules required by these scripts are installable via CPAN - perl wil
 
 ## UPDATE
 
-## VERSION 0.1.18:
+## VERSION 0.2.0:
 
 19/12/15
 
