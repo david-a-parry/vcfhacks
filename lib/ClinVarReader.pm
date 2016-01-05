@@ -39,17 +39,17 @@ ClinVarReader.pm - reads and parses the ClinVar file curated by the MacArthur la
     my @pathogenic = ClinVarReader::getPathogenic(\@matches, \%col);
     #get pathogenic variants from search results
 
-    my @nonpathogenic = ClinVarReader::getNonPathogenic(\@matches, %col);
+    my @nonpathogenic = ClinVarReader::getNonPathogenic(\@matches, \%col);
     #get non-pathogenic variants from search results
 
-    my @conflicted = ClinVarReader::getConflicted(\@pathogenic, %col);
+    my @conflicted = ClinVarReader::getConflicted(\@pathogenic, \%col);
     #get conflicted variants from search results
 
-    my @unconflicted = ClinVarReader::getUnconflicted(\@pathognic, %col);
+    my @unconflicted = ClinVarReader::getUnconflicted(\@pathognic, \%col);
     #get unconflicted variants from search results
 
     foreach my $m (@matches){
-        push @traits, ClinVarReader::getColumnValues($m, 'all_traits', %col);
+        push @traits, ClinVarReader::getColumnValues($m, 'all_traits', \%col);
     }
 
 
