@@ -817,6 +817,11 @@ sub evaluate_snp {
                     $min_allele->{snp_info}->{$f} = $value;
                     $info_values{$f} = $value;
                 }
+            }elsif($f eq 'dbSNPBuildID'){
+                if ($min_allele->{snp_info}->{$f} > $value){
+                    $min_allele->{snp_info}->{$f} = $value;
+                }
+                $info_values{$f} = $value;
             }
         }
     }
