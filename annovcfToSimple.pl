@@ -137,7 +137,7 @@ Use this to specify additional VEP variant classes to output as well as those us
 
 =item B<-e    --fields>
 
-Specify one or more VEP/SnpEff fields to output. Use of --vep or --snpeff options without this flag outputs the following fields:
+Specify one or more VEP/SnpEff fields to output. Use of --vep or --snpeff options without this flag outputs the following fields (assuming they are present in your VCF):
 
 B<VEP:>
        
@@ -636,14 +636,20 @@ sub getCsqFields{
             symbol
             biotype
         );
-        push @default_fields, "condel" 
-            if exists $csq_header{condel};
-        push @default_fields, "splice_consensus" 
-            if exists $csq_header{splice_consensus};
-        push @default_fields, "hgvsc" 
-            if exists $csq_header{hgvsc};
-        push @default_fields, "hgvsp" 
-            if exists $csq_header{hgvsp};
+        foreach my $f (qw / 
+            amino_acids
+            codons
+            existing_variation
+            exon
+            intron
+            condel
+            splice_consensus
+            hgvsc
+            hgvsp
+        /){
+            push @default_fields, $f 
+                if exists $csq_header{$f};
+        }
     }else{
         @default_fields = 
         qw(
