@@ -1015,6 +1015,59 @@ sub addVariantInfoField{
     return replaceVariantField($args{line}, 'INFO', join(";", @new_inf));
 }
 
+=item B<addVariantFilterField>
+
+For a given line adds specified FILTER field. Returns an array reference to a split line with the INFO field ammended accordingly. Default behaviour is to append the FILTER field, which can be modified with the 'replace' argument.
+
+Arguments
+
+=over 16
+
+=item line
+
+An array reference to a split VCF line. Required.
+
+=item id
+
+The FILTER field ID to add/replace. Required.
+
+=item replace
+
+If true any existing FILTER field will be replaced rather than appended to.  
+
+=back
+
+ 
+ my $modified_line = VcfReader::addVariantInfoField
+    (
+        line =>\@line, 
+        id => 'SOMEFILTER', 
+    );
+
+=cut
+
+sub addVariantFilterField{
+    my (%args) = @_;
+    croak "line argument is required for addVariantInfoField method " if not defined $args{line};
+    croak "line argument must be an array reference " if ref $args{line} ne 'ARRAY';
+    croak "id argument is required for addVariantInfoField method " if not defined $args{id};
+    if ($args{id} =~ /[,;]/){
+        croak "id ($args{id}) passed to addVariantInfoField method has invalid characters.\n";
+    }
+    if (not $args{replace}){
+        my $filter = getVariantField($args{line}, 'FILTER');
+        if ($filter ne '.'){ 
+            $filter = "$args{id};$filter";
+        }else{
+            $filter = $args{id};
+        }
+        return replaceVariantField($args{line}, 'FILTER', $filter);
+    }else{
+        return replaceVariantField($args{line}, 'FILTER', $args{id});
+    }
+}
+
+
 =item B<readAlleles>
 
 Returns an array of all alleles in a given VCF line (i.e. the alleles found in REF and ALT columns). Requires an array reference to a split line to be passed as the 'line' argument. Optionally takes 'alt_alleles' argument, which if true will cause the function to only return alleles from the ALT column. Default is to retrieve alleles from both REF and ALT columns. Alleles will be maintained in the order from the VCF.
