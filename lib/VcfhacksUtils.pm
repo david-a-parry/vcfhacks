@@ -112,7 +112,7 @@ sub getFormatHeader{
     my %info = @_;
     foreach my $f ( qw / ID Number Type Description / ){
         if (not exists $info{$f}){
-            carp "INFO field '$f' must be provided to getInfoHeader method!\n";
+            carp "INFO field '$f' must be provided to getFormatHeader method!\n";
             return;
         }
     }
@@ -120,6 +120,29 @@ sub getFormatHeader{
       "Type=$info{Type},Description=\"$info{Description}\">";
 }
 
+=item B<getFilterHeader>
+
+Takes a hash containing the keys 'ID, and DESCRIPTION' and outputs an appropriately formatted FORMAT header.
+
+ my %filter_field = 
+ (
+     ID          => "AFilterField",
+     DESCRIPTION => "A made up VCF FILTER field.";
+ );
+ my $f_string = VcfhacksUtils::getFilterHeader(%filter_field); 
+ 
+=cut
+
+sub getFilterHeader{
+    my %info = @_;
+    foreach my $f ( qw / ID Description / ){
+        if (not exists $info{$f}){
+            carp "INFO field '$f' must be provided to getFilterHeader method!\n";
+            return;
+        }
+    }
+    return "##FILTER=<ID=$info{ID},Description=\"$info{Description}\">";
+}
 
 
 =back
