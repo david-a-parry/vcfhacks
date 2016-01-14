@@ -106,7 +106,7 @@ Options:
             Description of FILTER to add. Required
 
         -r,--replace
-            Replace existing FILTER fields rather than appending to them
+            Replace existing FILTER fields rather than prepending to them
         
         -m,--match_replace
             Replace if existing FILTER field matches this string
@@ -116,7 +116,15 @@ Options:
 
 Examples:
 
-    $0 -i output.vcf -f OffTarget -d "Off target regions" -o output.vcf
+    $0 -i input.vcf -f OffTarget -d "Off target regions" -o output.vcf
+    #prepend 'OffTarget' to FILTER field of all variants in input.vcf
+
+    $0 -i input.vcf -f OffTarget -d "Off target regions" -o output.vcf
+    #replace FILTER field with 'OffTarget' for all variants in input.vcf
+
+    $0 -i input.vcf -f OffTarget -d "Off target regions" -o output.vcf -m PASS
+    #prepend 'OffTarget' to FILTER field unless existing FILTER field is 'PASS',
+    #in which case replace 'PASS' with 'OffTarget'
 
 
 EOT
