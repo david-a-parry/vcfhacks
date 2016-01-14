@@ -21,6 +21,7 @@ GetOptions(
     'f|filter=s',
     'd|description=s',
     'r|replace',
+    'm|match_replace=s',
     'h|?|help',
 );
 usage() if $opts{h};
@@ -66,6 +67,7 @@ LINE: while (my $line = <$VCF>){
         line  => \@split,
         id    => $opts{f},
         replace => $opts{r},
+        match_replace => $opts{m},
     );
     print $OUT join("\t", @$line_ref) . "\n";
     $var_count++;#for progress bar
@@ -106,6 +108,9 @@ Options:
         -r,--replace
             Replace existing FILTER fields rather than appending to them
         
+        -m,--match_replace
+            Replace if existing FILTER field matches this string
+
         -h,--help
             Show this message and exit
 

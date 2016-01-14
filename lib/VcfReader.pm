@@ -1035,6 +1035,10 @@ The FILTER field ID to add/replace. Required.
 
 If true any existing FILTER field will be replaced rather than appended to.  
 
+=item match_replace
+
+Only replace if the FILTER field matches this value, otherwise append.
+
 =back
 
  
@@ -1043,6 +1047,22 @@ If true any existing FILTER field will be replaced rather than appended to.
         line =>\@line, 
         id => 'SOMEFILTER', 
     );
+
+ my $modified_line = VcfReader::addVariantInfoField
+    (
+        line =>\@line, 
+        id => 'SOMEFILTER', 
+        replace => 1,
+    );
+
+ my $modified_line = VcfReader::addVariantInfoField
+    (
+        line =>\@line, 
+        id => 'SOMEFILTER', 
+        match_replace => 'PASS'
+    );
+
+
 
 =cut
 
@@ -1054,16 +1074,21 @@ sub addVariantFilterField{
     if ($args{id} =~ /[,;]/){
         croak "id ($args{id}) passed to addVariantInfoField method has invalid characters.\n";
     }
-    if (not $args{replace}){
+    if ($args{replace}){
+        return replaceVariantField($args{line}, 'FILTER', $args{id});
+    }else{
         my $filter = getVariantField($args{line}, 'FILTER');
         if ($filter ne '.'){ 
-            $filter = "$args{id};$filter";
+            if ($args{match_replace} and $filter eq $args{match_replace}){
+                $filter = $args{id};
+            }else{
+                $filter = "$args{id};$filter";
+            }
         }else{
             $filter = $args{id};
         }
         return replaceVariantField($args{line}, 'FILTER', $filter);
-    }else{
-        return replaceVariantField($args{line}, 'FILTER', $args{id});
+        
     }
 }
 
