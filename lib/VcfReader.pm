@@ -119,6 +119,8 @@ use IO::Compress::Gzip qw(gzip $GzipError) ;
 use Fcntl 'SEEK_SET';
 use Data::Dumper;
 use List::Util qw(sum);
+use File::Temp qw/ tempfile /;
+use File::Copy;
 #require Exporter;
 #our @ISA = qw(Exporter);
 #our @EXPORT_OK = qw();
@@ -650,9 +652,16 @@ sub indexVcf{
         return;
     }
     my $index = "$vcf.vridx";
+    my (undef, $tmp_index) = tempfile
+    ( 
+        "tmp_vridxXXXXX", 
+        UNLINK => 1,
+        TMPDIR => 1 
+    );
     #open (my $INDEX, "+>$index") or croak "can't open $index for writing index: $! ";
-    my $gz = new IO::Compress::Gzip $index
-        or croak "IO::Compress::Gzip failed to write index: $GzipError\n";
+    my $gz = new IO::Compress::Gzip $tmp_index
+        or croak "IO::Compress::Gzip failed to write to temporary file for ".
+        "index: $GzipError\n";
     my $offset = 0;
     my $prev_offset = 0;
     my $prev_pos = 0;
@@ -681,7 +690,6 @@ sub indexVcf{
         if (exists $contigs{$chrom}){
             if ($contigs{$chrom}->{order}  != scalar(keys%contigs) -1 or $pos < $prev_pos){
                 $gz->close();
-                unlink $index or carp "Couldn't delete partial index $index - please delete manually: $!" ;
                 croak "Can't index VCF - $vcf not sorted properly ";
             }
             if (exists $contigs{$chrom}->{regions}->{$pos_rounddown}){
@@ -762,6 +770,7 @@ sub indexVcf{
     close $FH;
     print $gz Dumper \%contigs;
     close $gz;
+    move($tmp_index, $index) or croak "Could not create index '$index' from temporary index file: $! ";
 }
 
 =item B<readIndex>
