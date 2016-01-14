@@ -50,7 +50,7 @@ my %filter =
     ID          => $opts{f}, 
     Description => $opts{d},
 ); 
-print $OUT VcfhacksUtils::getInfoHeader(%filter) . "\n"; 
+print $OUT VcfhacksUtils::getFilterHeader(%filter) . "\n"; 
 print $OUT "$header[-1]\n";
 
 my $next_update = 0;
