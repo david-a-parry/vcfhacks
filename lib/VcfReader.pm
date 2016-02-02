@@ -119,6 +119,8 @@ use IO::Compress::Gzip qw(gzip $GzipError) ;
 use Fcntl 'SEEK_SET';
 use Data::Dumper;
 use List::Util qw(sum);
+use File::Temp qw/ tempfile /;
+use File::Copy;
 #require Exporter;
 #our @ISA = qw(Exporter);
 #our @EXPORT_OK = qw();
@@ -650,9 +652,16 @@ sub indexVcf{
         return;
     }
     my $index = "$vcf.vridx";
+    my (undef, $tmp_index) = tempfile
+    ( 
+        "tmp_vridxXXXXX", 
+        UNLINK => 1,
+        TMPDIR => 1 
+    );
     #open (my $INDEX, "+>$index") or croak "can't open $index for writing index: $! ";
-    my $gz = new IO::Compress::Gzip $index
-        or croak "IO::Compress::Gzip failed to write index: $GzipError\n";
+    my $gz = new IO::Compress::Gzip $tmp_index
+        or croak "IO::Compress::Gzip failed to write to temporary file for ".
+        "index: $GzipError\n";
     my $offset = 0;
     my $prev_offset = 0;
     my $prev_pos = 0;
@@ -681,7 +690,6 @@ sub indexVcf{
         if (exists $contigs{$chrom}){
             if ($contigs{$chrom}->{order}  != scalar(keys%contigs) -1 or $pos < $prev_pos){
                 $gz->close();
-                unlink $index or carp "Couldn't delete partial index $index - please delete manually: $!" ;
                 croak "Can't index VCF - $vcf not sorted properly ";
             }
             if (exists $contigs{$chrom}->{regions}->{$pos_rounddown}){
@@ -762,6 +770,7 @@ sub indexVcf{
     close $FH;
     print $gz Dumper \%contigs;
     close $gz;
+    move($tmp_index, $index) or croak "Could not create index '$index' from temporary index file: $! ";
 }
 
 =item B<readIndex>
@@ -1005,6 +1014,84 @@ sub addVariantInfoField{
     }
     return replaceVariantField($args{line}, 'INFO', join(";", @new_inf));
 }
+
+=item B<addVariantFilterField>
+
+For a given line adds specified FILTER field. Returns an array reference to a split line with the INFO field ammended accordingly. Default behaviour is to append the FILTER field, which can be modified with the 'replace' argument.
+
+Arguments
+
+=over 16
+
+=item line
+
+An array reference to a split VCF line. Required.
+
+=item id
+
+The FILTER field ID to add/replace. Required.
+
+=item replace
+
+If true any existing FILTER field will be replaced rather than appended to.  
+
+=item match_replace
+
+Only replace if the FILTER field matches this value, otherwise append.
+
+=back
+
+ 
+ my $modified_line = VcfReader::addVariantInfoField
+    (
+        line =>\@line, 
+        id => 'SOMEFILTER', 
+    );
+
+ my $modified_line = VcfReader::addVariantInfoField
+    (
+        line =>\@line, 
+        id => 'SOMEFILTER', 
+        replace => 1,
+    );
+
+ my $modified_line = VcfReader::addVariantInfoField
+    (
+        line =>\@line, 
+        id => 'SOMEFILTER', 
+        match_replace => 'PASS'
+    );
+
+
+
+=cut
+
+sub addVariantFilterField{
+    my (%args) = @_;
+    croak "line argument is required for addVariantInfoField method " if not defined $args{line};
+    croak "line argument must be an array reference " if ref $args{line} ne 'ARRAY';
+    croak "id argument is required for addVariantInfoField method " if not defined $args{id};
+    if ($args{id} =~ /[,;]/){
+        croak "id ($args{id}) passed to addVariantInfoField method has invalid characters.\n";
+    }
+    if ($args{replace}){
+        return replaceVariantField($args{line}, 'FILTER', $args{id});
+    }else{
+        my $filter = getVariantField($args{line}, 'FILTER');
+        if ($filter ne '.'){ 
+            if ($args{match_replace} and $filter eq $args{match_replace}){
+                $filter = $args{id};
+            }else{
+                $filter = "$args{id};$filter";
+            }
+        }else{
+            $filter = $args{id};
+        }
+        return replaceVariantField($args{line}, 'FILTER', $filter);
+        
+    }
+}
+
 
 =item B<readAlleles>
 
@@ -2747,31 +2834,31 @@ sub byContigs{
 #but allowing for manual specification of $a and $b
 #for use within more complex sort subs 
 sub _byContigsManual{
-    my ($a, $b) = @_;
-    $a =~ s/^chr//;
-    $b =~ s/^chr//;
-    if ($a =~ /^\d+$/){
-        if ($b =~ /^\d+$/){
-            return $a <=> $b;
+    my ($sort_a, $sort_b) = @_;
+    $sort_a =~ s/^chr//;
+    $sort_b =~ s/^chr//;
+    if ($sort_a =~ /^\d+$/){
+        if ($sort_b =~ /^\d+$/){
+            return $sort_a <=> $sort_b;
         }else{
             return -1;
         }
-    }elsif ($b =~ /^\d+$/){
+    }elsif ($sort_b =~ /^\d+$/){
         return 1;
-    }elsif ($a =~ /^[XY]$/){
-        if ($b =~ /^[XY]$/){
-            return $a cmp $b;
+    }elsif ($sort_a =~ /^[XY]$/){
+        if ($sort_b =~ /^[XY]$/){
+            return $sort_a cmp $sort_b;
         }else{
             return -1;
         }
-    }elsif ($b =~ /^[XY]$/){
+    }elsif ($sort_b =~ /^[XY]$/){
         return 1;
-    }elsif ($a =~ /^MT*$/){
-        return $b cmp $a;
-    }elsif ($b =~ /^MT*$/){
+    }elsif ($sort_a =~ /^MT*$/){
+        return $sort_b cmp $sort_a;
+    }elsif ($sort_b =~ /^MT*$/){
         return 1;
     }else{
-        return $a cmp $b;
+        return $sort_a cmp $sort_b;
     }
 }
 
@@ -2788,41 +2875,41 @@ sub by_first_last_line{
     #usage - 
     #       my @sorted = sort { VcfReader::by_first_last_line($a, $b, \%contig_order) } @batches;
     #where \%contig_order has been generated using VcfReader::getContigOrder
-    my ($a, $b, $contigs) = @_;
-    if (ref $a ne 'ARRAY' or ref $b ne 'ARRAY'){
+    my ($aref, $bref, $contigs) = @_;
+    if (ref $aref ne 'ARRAY' or ref $bref ne 'ARRAY'){
         croak "First 2 arguments passed to by_first_last_line must be ARRAY references ";
     }
-    my $a_first_chrom = getVariantField( $a->[0],  "CHROM", );
-    my $a_first_pos   = getVariantField( $a->[0],  "POS", );
-    my $a_last_chrom  = getVariantField( $a->[-1], "CHROM", );
-    my $a_last_pos    = getVariantField( $a->[-1], "POS", );
-    my $b_first_chrom = getVariantField( $b->[0],  "CHROM", );
-    my $b_first_pos   = getVariantField( $b->[0],  "POS", );
-    my $b_last_chrom  = getVariantField( $b->[-1], "CHROM", );
-    my $b_last_pos    = getVariantField( $b->[-1], "POS", );
+    my $aref_first_chrom = getVariantField( $aref->[0],  "CHROM", );
+    my $aref_first_pos   = getVariantField( $aref->[0],  "POS", );
+    my $aref_last_chrom  = getVariantField( $aref->[-1], "CHROM", );
+    my $aref_last_pos    = getVariantField( $aref->[-1], "POS", );
+    my $bref_first_chrom = getVariantField( $bref->[0],  "CHROM", );
+    my $bref_first_pos   = getVariantField( $bref->[0],  "POS", );
+    my $bref_last_chrom  = getVariantField( $bref->[-1], "CHROM", );
+    my $bref_last_pos    = getVariantField( $bref->[-1], "POS", );
 
-    if ( $contigs->{$a_first_chrom} > $contigs->{$b_last_chrom} ) {
+    if ( $contigs->{$aref_first_chrom} > $contigs->{$bref_last_chrom} ) {
         return 1;
     }
-    elsif ( $contigs->{$a_last_chrom} < $contigs->{$b_first_chrom} ) {
+    elsif ( $contigs->{$aref_last_chrom} < $contigs->{$bref_first_chrom} ) {
         return -1;
     }
-    elsif ( $contigs->{$a_last_chrom} > $contigs->{$b_last_chrom} ) {
+    elsif ( $contigs->{$aref_last_chrom} > $contigs->{$bref_last_chrom} ) {
         return 1;
     }
-    elsif ( $contigs->{$a_first_chrom} > $contigs->{$b_first_chrom} ) {
+    elsif ( $contigs->{$aref_first_chrom} > $contigs->{$bref_first_chrom} ) {
         return 1;
     }
-    elsif ( $contigs->{$a_last_chrom} < $contigs->{$b_last_chrom} ) {
+    elsif ( $contigs->{$aref_last_chrom} < $contigs->{$bref_last_chrom} ) {
         return -1;
     }
-    elsif ( $contigs->{$a_last_chrom} > $contigs->{$b_last_chrom} ) {
+    elsif ( $contigs->{$aref_last_chrom} > $contigs->{$bref_last_chrom} ) {
         return 1;
     }
-    elsif ( $a_last_pos <= $b_first_pos ) {
+    elsif ( $aref_last_pos <= $bref_first_pos ) {
         return -1;
     }
-    elsif ( $a_first_pos >= $b_last_pos ) {
+    elsif ( $aref_first_pos >= $bref_last_pos ) {
         return 1;
     }
     return 0;
