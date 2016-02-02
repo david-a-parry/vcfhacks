@@ -748,6 +748,10 @@ sub get_depth_for_sample{
             $dp = sum(@ads);
         }
     }
+    $dp ||= 0;
+    if ($dp eq '.'){
+        $dp = 0;
+    }
     return $dp;
 }
 #################################################
