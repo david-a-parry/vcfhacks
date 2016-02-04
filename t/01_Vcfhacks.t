@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use Test::More; # tests => 44;
-use FindBin qw($RealBin);
+use FindBin qw($RealBin $Script);
 use lib "$RealBin/../lib";
 use lib "$RealBin/../lib/Bioperl";
 use lib "$RealBin/../lib/BioASN1EntrezGene/lib";
@@ -341,7 +341,7 @@ is(
 $n_tests++; 
 
 my %opts = ( a => "option", b => 1, x => '', y => ["some", "more", "options"]);
-my $optstring = '##01_VcfReader.t"a=option b=1 x= y=some,more,options"';
+my $optstring = "##$Script" .'"a=option b=1 x= y=some,more,options"';
 is(
     VcfhacksUtils::getOptsVcfHeader(%opts),
     $optstring,
