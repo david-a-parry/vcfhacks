@@ -68,14 +68,14 @@ sub getOptsVcfHeader{
 
 =item B<getInfoHeader>
 
-Takes a hash containing the keys 'ID, NUMBER, TYPE and DESCRIPTION' and outputs an appropriately formatted INFO header.
+Takes a hash containing the keys 'ID, Number, Type and Description' and outputs an appropriately formatted INFO header.
 
  my %info_field = 
  (
      ID          => "AnInfoField",
-     NUMBER      => "A",
-     TYPE        => "String",
-     DESCRIPTION => "A made up VCF INFO field.";
+     Number      => "A",
+     Type        => "String",
+     Description => "A made up VCF INFO field.",
  );
  my $inf_string = VcfhacksUtils::getInfoHeader(%info_field); 
  
@@ -95,14 +95,14 @@ sub getInfoHeader{
 
 =item B<getFormatHeader>
 
-Takes a hash containing the keys 'ID, NUMBER, TYPE and DESCRIPTION' and outputs an appropriately formatted FORMAT header.
+Takes a hash containing the keys 'ID, Number, Type and Description' and outputs an appropriately formatted FORMAT header.
 
  my %format_field = 
  (
      ID          => "AFormatField",
-     NUMBER      => "A",
-     TYPE        => "String",
-     DESCRIPTION => "A made up VCF INFO field.";
+     Number      => "A",
+     Type        => "String",
+     Description => "A made up VCF INFO field.",
  );
  my $f_string = VcfhacksUtils::getFormatHeader(%format_field); 
  
@@ -127,7 +127,7 @@ Takes a hash containing the keys 'ID, and DESCRIPTION' and outputs an appropriat
  my %filter_field = 
  (
      ID          => "AFilterField",
-     DESCRIPTION => "A made up VCF FILTER field.";
+     Description => "A made up VCF FILTER field.",
  );
  my $f_string = VcfhacksUtils::getFilterHeader(%filter_field); 
  
