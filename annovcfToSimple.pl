@@ -646,6 +646,19 @@ sub getCsqFields{
             splice_consensus
             hgvsc
             hgvsp
+            cds_position
+            protein_position
+            sift
+            polyphen
+            condel
+            gmaf
+            aa_maf
+            ea_maf
+            afr_maf
+            amr_maf
+            eas_maf
+            eur_maf
+            sas_maf
         /){
             push @default_fields, $f 
                 if exists $csq_header{$f};
