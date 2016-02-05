@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use Test::More;# tests => 44;
-use FindBin qw($RealBin $Script);
+use FindBin qw($RealBin);
 use lib "$RealBin/../lib";
 use lib "$RealBin/../lib/Bioperl";
 use lib "$RealBin/../lib/BioASN1EntrezGene/lib";
