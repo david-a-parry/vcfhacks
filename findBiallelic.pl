@@ -61,7 +61,7 @@ GetOptions(
     'n|num_matching=i',
     'o|output=s',
     'pass_filters',
-    "pl=f",
+    "pl=f", #TODO needs documentation
     'q|quality=i',
     'r|reject=s{,}',    
     'skip_unpredicted',
