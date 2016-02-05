@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More;# tests => 44;
+use Test::More tests => 11;
 use FindBin qw($RealBin $Script);
 use lib "$RealBin/../lib";
 use lib "$RealBin/../lib/Bioperl";
