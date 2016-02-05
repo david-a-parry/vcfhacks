@@ -28,6 +28,7 @@ GetOptions(
         "not_found|n=s",
         "do_not_rank|d",
         "filter|f=f",
+        "keep_unscored|k",
         "progress|p",
         "help|h",
         "manual|m",
@@ -139,12 +140,11 @@ while (my $line = $vcf_obj->readLine){
     #if there is no score set $max to -1 so it goes to bottom of the pile
     $max = -1 if not defined $max;
     if ($opts{filter}){
-        if (not defined $max){
-            $filtered++;
-            next;
-        }elsif($max < $opts{filter}){
-            $filtered++;
-            next;
+        if($max < $opts{filter}){
+            unless ($opts{keep_unscored} and $max == -1){
+                $filtered++;
+                next;
+            }
         }
     }
     $line = $vcf_obj->addVariantInfoField
@@ -365,6 +365,10 @@ Use this flag to annotate variants but not reorder your VCF.
 =item B<-f    --filter>
 
 CADD Phred score cut-off. Filter any variant that has a CADD score below this score. 
+
+=item B<-k    --keep_unscored>
+
+Use this flag when filtering on CADD score to retain any variants for which a CADD score can not be found in your output.
 
 =item B<-p    --progress>
 
