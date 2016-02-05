@@ -260,9 +260,9 @@ $n_tests++;
 my @ar = qw ( a b c c c d c e f e g h ) ;
 my @br = qw ( a b c d e f g h );
 @ar = VcfhacksUtils::removeDups(@ar); 
-is(
-    @ar,
-    @br,
+is_deeply(
+    \@ar,
+    \@br,
     "remove duplicate array entries"
 );
 $n_tests++; 
