@@ -139,13 +139,13 @@ By default, each variant from the given --input file will be assessed and if all
 =head1 EXAMPLES
 
     filterVcfOnVcf.pl -i input.vcf -f controls.vcf -o filtered.vcf
-    (filter variants in input.vcf if present in controls.vcf - at least one sample in controls.vcf must carry the variant for it to be filtered.
+    (filter variants in input.vcf if present in controls.vcf - at least one sample in controls.vcf must carry the variant for it to be filtered)
     
     filterVcfOnVcf.pl -i input.vcf -f controls.vcf -o filtered.vcf -y 0.01
     (filter variants in input.vcf if present at an allele frequency of 1% or higher in controls.vcf)
 
     filterVcfOnVcf.pl -i input.vcf -f controls.vcf -o filtered.vcf -w
-    (filter variants in input.vcf if present in controls.vcf - genotypes of samples in controls.vcf will not be checked
+    (filter variants in input.vcf if present in controls.vcf - genotypes of samples in controls.vcf will not be checked)
     
     filterVcfOnVcf.pl -i input.vcf -f ExAC.r0.3.sites.vep.vcf.gz -o filtered.vcf -y 0.01  -w 
     (filter variants in input.vcf if present at an allele frequency of 1% or higher in ExAC using INFO fields for filtering)
