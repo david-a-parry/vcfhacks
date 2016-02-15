@@ -42,7 +42,9 @@ Output file. Optional - defaults to STDOUT.
 
 =item B<-f    --filter>
 
-A VCF file to use to filter input. Variants from the input VCF that match a variant in this file will be filtered from the output. By default, if any sample matches a variant it will be filtered but combinations of --reject, --not_samples, --allele_frequency_filter, --threshold and --filter_homozygotes can be used to modify this behaviour. However, if more than one allele is present for a variant in your input VCF it will only be filtered if ALL alleles are matched in your filter VCF.
+A VCF file to use to filter input. Variants from the input VCF that match a variant in this file will be filtered from the output. By default, if any sample matches a variant it will be filtered but combinations of --reject, --not_samples, --allele_frequency_filter, --threshold and --filter_homozygotes can be used to modify this behaviour. However, if more than one allele is present for a variant in your input VCF it will only be filtered if ALL alleles are matched in your filter VCF. 
+
+Alternatively, if you want to filter ANY matching variant regardless of genotypes in your --filter VCF, simply add the -w/--info_filter argument without specifying any values for --allele_frequency_filter, --threshold or --filter_homozygotes.
 
 =item B<-s    --samples>
 
@@ -60,6 +62,8 @@ Samples from filter VCF files to ignore.  If specified variant alleles from all 
 
 Use this flag to use metrics written to the INFO field of your filter VCF for filtering on frequency, homozygosity or threshold counts rather than checking sample genotypes. Filtering on allele frequency (see --allele_frequency_filter option below) can be performed as long as your VCF contains allele frequency (AF) INFO tags and optionally population specific allele count (AC) and allele number (AN) tags (see --population_ids option below). This option is particularly useful for filtering against VCFs from ExAC using global and population allele frequencies. Alternatively, you can pre-process your own filter VCFs with the sampleCallsToInfo.pl script to reduce genotype information to AF, PGTS and GTC fields. Converting filter VCFs containing many hundreds/thousands of samples  with sampleCallsToInfo.pl for use with this option will speed up your analyses by many orders of magnitude.
 
+This option can also be used without using --allele_frequency_filter/--threshold/--filter_homozygotes arguments in order to filter any matching variant regardless of sample genotypes. 
+
 =item B<-y    --allele_frequency_filter>
 
 Reject variants if the allele frequency in your --filter VCF is equal to or greater than this value. All samples will be used to calculate allele frequency regardless of --reject or --not_samples settings, although variants will only be counted if the genotype quality is greater than the value given for --un_quality. The value must be a float between 0 and 1. 
@@ -68,7 +72,7 @@ Reject variants if the allele frequency in your --filter VCF is equal to or grea
 
 If using the --info_filter option and --allele_frequency_filter option, by default the filter VCF will be scanned for allele counts (e.g. AFR_AC) and allele number (e.g. AFR_AN) INFO tags for the population codes as used by EXAC (AFR, AMR, EAS, FIN, NFE, SAS). An alternative list of population IDs to search can be entered here. To disable this feature use this option specifying 'disable' as an argument.
     
-=item B<--minimum_allele_number>
+=item B<-n    --minimum_allele_number>
 
 Minimum number of allele counts for a variant found in a --filter VCF before it will be used for filtering on allele frequency. If filtering using population allele counts (see --population_ids above) this sets the minimum number of alleles that have to be called in a population (default = 100) before the frequency value will be used for filtering. If filtering using samples in a VCF the default is 0 (i.e. no minimum allele number).
 
@@ -135,11 +139,14 @@ By default, each variant from the given --input file will be assessed and if all
 =head1 EXAMPLES
 
     filterVcfOnVcf.pl -i input.vcf -f controls.vcf -o filtered.vcf
-    (filter variants in input.vcf if present in controls.vcf)
+    (filter variants in input.vcf if present in controls.vcf - at least one sample in controls.vcf must carry the variant for it to be filtered.
     
     filterVcfOnVcf.pl -i input.vcf -f controls.vcf -o filtered.vcf -y 0.01
     (filter variants in input.vcf if present at an allele frequency of 1% or higher in controls.vcf)
 
+    filterVcfOnVcf.pl -i input.vcf -f controls.vcf -o filtered.vcf -w
+    (filter variants in input.vcf if present in controls.vcf - genotypes of samples in controls.vcf will not be checked
+    
     filterVcfOnVcf.pl -i input.vcf -f ExAC.r0.3.sites.vep.vcf.gz -o filtered.vcf -y 0.01  -w 
     (filter variants in input.vcf if present at an allele frequency of 1% or higher in ExAC using INFO fields for filtering)
 
