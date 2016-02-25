@@ -172,16 +172,16 @@ my %database     = (
         localfile => "$opts{d}/morbidmap",
         col       => 2,
         delimiter => "\\|",
-        url       => "ftp.omim.org",
-        dir       => "OMIM",
-        file      => "morbidmap"
+        url       => "http://data.omim.org",
+        dir       => "downloads/AdxLgvoTT8ClBm0DEtbCmw",
+        file      => "morbidmap.txt"
     },
     biogrid    => {
         localfile => "$opts{d}/BIOGRID-ALL-3.4.131.tab2.txt",
         col       => 1,
         delimiter => "\t",
         url       => "http://thebiogrid.org",
-        dir       => "downloads/archives/Release%20Archive/BIOGRID-3.4.131/",
+        dir       => "downloads/archives/Release%20Archive/BIOGRID-3.4.131",
         file      => "BIOGRID-ALL-3.4.131.tab2.zip"
     },
 );
@@ -1178,6 +1178,10 @@ sub prepare_database {
             chdir $dir;
             downloadBiogrid($file, $file_exists);
             next; 
+        }elsif($file->{url} eq 'http://data.omim.org'){
+            chdir $dir;
+            downloadBiogrid($file, $file_exists);
+            next; 
         }
         $time = strftime( "%H:%M:%S", localtime );
         print STDERR "[$time] Connecting to $file->{url}...\n";
@@ -1344,16 +1348,21 @@ sub sort_and_index_gene_files {
     $check_taxon = 1
       if ( $file =~ /gene2go/ or $file =~ /generifs/ )
       ;    #for these files we'll ignore non-mouse and non-human genes
-    while (<$FILE>) {
-        next if /^#/;
+    while (my $line = <$FILE>) {
+        next if $line =~ /^#/;
         if ($check_taxon) {
-            my $tax_id = ( split "\t" )[0];
+            my $tax_id = ( split "\t", $line )[0];
             next if ( $tax_id != 9606 and $tax_id != 10090 );
         }
-        chomp;
-        if ( ( split /$delimiter/ )[$sort_column] )
+        if ($file_short eq 'morbidmap'){
+        #maintain compatibility with old databases where morbidmap 
+        # had | separator rather than \t
+            $line =~ s/\t/\|/g;
+        }
+        chomp $line;
+        if ( my $field = ( split  /$delimiter/, $line)[$sort_column] )
         {    #some MGI files have empty columns
-            push( @lines, [ $_, ( split /$delimiter/ )[$sort_column] ] );
+            push( @lines, [ $line, $field ] );
         }
     }
     close $FILE;
