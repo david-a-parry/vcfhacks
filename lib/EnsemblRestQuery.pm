@@ -195,6 +195,23 @@ sub getXrefs{
 }
 
 ##################################################
+sub proteinPosToGenomicPos{
+    my ($self, %args) = @_;
+    if (not $args{id}){
+        carp "'id' argument is required for method\n";
+        return;
+    }
+    if (not $args{start}){
+        carp "'start' argument is required for method\n";
+        return;
+    }
+    $args{end} ||= $args{start}; 
+    my $endpoint = "/map/translation/$args{id}/$args{start}..$args{end}";
+    my $url = $self->{_server} . $endpoint;
+    return $self->ensRestQuery($url); 
+}
+
+##################################################
 sub useGRCh37Server{
     my $self = shift;
     $self->{_server} = $self->{_grch37_server};
