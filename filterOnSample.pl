@@ -101,11 +101,12 @@ pod2usage( -verbose => 1 ) if $help;
 pod2usage( -message => "syntax error: --input (-i) argument is required.\n" )
   if not $vcf;
 pod2usage( -message =>
-"syntax error: you must specify samples using at least one of the arguments --samples (-s), --reject (-r) or --reject_all_except (-x).\n"
+"syntax error: you must specify samples using at least one of the arguments --samples (-s), --reject (-r), --reject_all_except (-x) or --frequency (-f).\n"
   )
   if not @samples
   and not @reject
-  and not @reject_except;
+  and not @reject_except
+  and not $opts{f};
 pod2usage(
     -message => "Genotype quality scores must be 0 or greater.\n",
     -exitval => 2
@@ -643,7 +644,11 @@ sub filter_on_sample {
             minGQ => $unaff_genotype_quality,
             line  => $vcf_line,
         );
-        $total_reject = 2 * (keys %sample_to_col);
+        #$total_reject = 2 * (keys %sample_to_col);#counts all chromosomes in vcf (assuming diploidy)
+        foreach my $k (keys (%r_allele_counts) ){
+            #only counts the number of samples with a good enough GQ
+            $total_reject += $r_allele_counts{$k};
+        }
     }
     if ( not @samples ) {
         for ( my $i = 1 ; $i < @ref_alt ; $i++ ) {
