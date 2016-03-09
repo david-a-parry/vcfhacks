@@ -28,6 +28,7 @@ my $ignore_non_existing;    #don't exit if a sample is not found
 my @reject        = ();     #reject if allele is present in these samples
 my @reject_except = ();     #reject all except these samples
 my $af = 0;    #filter if allele frequency equal to or greater than this
+my $min_n_freq = 0; #only filter on AF if we've seen this many chromosomes
 my $threshold;
 my $quality             = 20;
 my $allele_depth_cutoff = 0
@@ -59,6 +60,7 @@ my %opts = (
     'h'                   => \$help,
     'i'                   => \$vcf,
     'm'                   => \$manual,
+    'min_alleles_for_freq'=> \$min_n_freq,
     'num_matching'        => \$num_matching,
     'o'                   => \$out,
     'p'                   => \$check_presence_only,
@@ -80,6 +82,7 @@ GetOptions(
     'r|reject=s{,}',
     'x|reject_all_except:s{,}',
     'f|frequency=f',
+    'min_alleles_for_freq=i',
     't|threshold=i',
     'p|presence',
     'c|confirm_missing',
@@ -143,6 +146,10 @@ if ( defined $unaff_genotype_quality ) {
 else {
     $unaff_genotype_quality = $quality;
 }
+pod2usage(
+    -message => "--min_alleles_for_freq cannot be lower than 0.\n",
+    -exitval => 2
+) if ( $min_n_freq < 0 );
 if ( $forks < 2 ) {
     $forks       = 0;    #no point having overhead of forks for one fork
 }
@@ -228,7 +235,7 @@ if (@reject_except) {
     @reject = grep { !$seen{$_}++ } @reject;
 }
 
-if ( not @reject and not @samples ) {
+if ( not @reject and not @samples and not $opts{f}) {
     print STDERR
 "[WARNING]: no samples from --samples (-s), --reject (-r) or --reject_all_except (-x) argument found to filter. Your output will remain unchanged.\n";
 }
@@ -694,7 +701,7 @@ sub filter_on_sample {
                 }
             }
             if ($af) {
-                if ( exists $r_allele_counts{$allele} and $total_reject > 0 ) {
+                if ( exists $r_allele_counts{$allele} and $total_reject > $min_n_freq  ) {
                     next ALLELE
                       if $r_allele_counts{$allele} / $total_reject >= $af;
                 }
@@ -823,6 +830,10 @@ Reject variants present in all samples except these. If used without an argument
 
 Reject variants if the allele frequency (decimal value between 0.00 and 1.00) in the VCF is equal to or greater than this value. If --reject or --reject_all_except arguments are used only the relevent samples will be counted when calculating allele frequency. Otherwise, the allele frequency will be calculated for all samples with a variant call.
 
+=item B<--min_alleles_for_freq>
+
+Only filter on frequency if there are valid calls (i.e. above --un_quality) for this many alleles. Default = 0.
+
 =item B<-t    --threshold>
 
 Reject variants present in more than this number of samples in the VCF. Counts all samples in the VCF irrespective of whether they are specified by the --samples or any other argument.
@@ -906,6 +917,12 @@ Show manual page
  
  filterOnSample.pl -i [var.vcf] -s Sample1 -x Sample2 
  (look for variants in Sample1 and reject variants if present in any other sample in the VCF except for Sample2)
+
+ filterOnSample.pl -i [var.vcf] -f 0.05
+ (remove variants if present in 5% of the alleles in your VCF)
+ 
+ filterOnSample.pl -i [var.vcf] -f 0.05 --min_alleles_for_freq 100
+ (as above but only filter if at least 100 alleles [i.e. 50 individuals] had a genotype called with a GQ >= --un_quality)
  
  filterOnSample.pl -i [var.vcf] -s child -r mum dad -c -q 30
  (look for apparent de novo variants in child, ignoring variants for which mum or dad have no calls or genotype qualities below threshold genotype quality of 30)
