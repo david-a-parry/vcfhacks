@@ -31,6 +31,7 @@ my %opts = (
     d               => \@damaging,
     biotype_filters => \@biotypes,
     j               => \@custom_af,
+    min_af_counts   => 0,
 );
 
 
@@ -49,6 +50,8 @@ GetOptions(
     'denovo_biallelic_mode',
     'e|equal_genotypes',
     'f|family=s', # ped file
+    'g|vcf_af=f', # filter if AF from non-affecteds in VCF > this
+    'min_af_counts=i', # min no. alleles to use if using -g/--vcf_af
     'h|?|help',
     'i|input=s' ,
     'j|custom_af=s{,}',
@@ -95,9 +98,16 @@ pod2usage(
 pod2usage(
     -message =>
 "SYNTAX ERROR: --af option requires a value between 0.00 and 1.00 to ".
-"filter on global minor allele frequency.\n",
+"filter on allele frequency.\n",
     -exitval => 2
 ) if ( defined $opts{a} && ( $opts{a} < 0 or $opts{a} > 1.0 ) );
+
+pod2usage(
+    -message =>
+"SYNTAX ERROR: -g/--vcf_af option requires a value between 0.00 and 1.00 to ".
+"filter on allele frequency.\n",
+    -exitval => 2
+) if ( defined $opts{g} && ( $opts{g} < 0 or $opts{g} > 1.0 ) );
 
 #GQs are >= 0
 $opts{q} = defined $opts{q} ? $opts{q} : 20;
@@ -214,6 +224,12 @@ if ($opts{f}){
 checkSamples(); 
 
 my $min_biallelic = checkMinMatching();
+
+#if filtering on non-affecteds within VCF collect relevant sample IDs
+my @af_samples = ();
+if (defined $opts{g}){
+    @af_samples = getNonRelatedFromVcf();
+}
 
 # get available allele frequency annotations if filtering on AF
 # NOTE: we do not use VEP annotations as they do not necessarily match the variant allele
@@ -353,7 +369,27 @@ LINE: while (my $line = <$VCF>){
     if (%af_info_fields){ 
         %af_info_values = getAfInfoValues(\@split);
     }
-    
+
+    #get AFs in this VCF if filtering on internal AF
+    my %af_allele_freqs = ();
+    if (defined $opts{g}){
+        my $total_af_counts = 0;
+        my %af_allele_counts = VcfReader::countAlleles
+        (
+            line => \@split,
+            minGQ => $opts{u},
+            samples => \@af_samples,
+            sample_to_columns => \%sample_to_col,
+        );
+        foreach my $al (keys %af_allele_counts){
+            $total_af_counts += $af_allele_counts{$al};
+        }
+        if ($total_af_counts and $total_af_counts > $opts{min_af_counts}){
+            foreach my $al (keys %af_allele_counts){
+                $af_allele_freqs{$al} = $af_allele_counts{$al}/$total_af_counts;
+            }
+        }
+    }
     #get alleles and consequences for each allele
     my @alleles = VcfReader::readAlleles(line => \@split);
     my @csq = getConsequences(\@split);
@@ -401,6 +437,14 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
         if (%af_info_fields){ #check for annotateSnps.pl etc. frequencies
            next ALT if ( alleleAboveMaf($i - 1, \%af_info_values) );
         }
+        
+        #check frequency of this allele in this VCF if filtering on internal AF
+        if (defined $opts{g}){
+            if (exists $af_allele_freqs{$i}){
+                next ALT if $af_allele_freqs{$i} > $opts{g};
+            }
+        }    
+
         #get all consequences for current allele
         my @a_csq = ();
         if ($opts{m} eq 'vep'){
@@ -446,7 +490,23 @@ close $OUT;
 
 outputGeneList();
 
-
+#################################################
+sub getNonRelatedFromVcf{
+    my %related = map { $_ => undef } @samples; 
+    my %f_ids = map { $_ => undef } @fams;
+    foreach my $s (@samples){
+        if (exists $ped_samples{$s}){
+            my $f = $ped_obj->getFamilyId($s);
+            $f_ids{$f} = undef;
+        }
+    }
+    foreach my $f (keys %f_ids){
+        foreach my $s ($ped_obj->getSamplesFromFamily($f)){
+            $related{$s} = undef;
+        }
+    }
+    return grep { ! exists $related{$_} } keys %sample_to_col ; 
+}
 #################################################
 sub getSampleAlleleCounts{
     my ($gts, $i, $line) = @_;
@@ -1887,6 +1947,14 @@ Note: allele frequencies added by VEP are not used for filtering as they check t
 =item B<-j    --custom_af>
 
 If using the --af/--allele_frequency option and your data contains allele frequency fields from sources not recognised by this program, you may give the name of these allele frequency INFO fields here and they will be used for filtering in addition to the default fields. Note that these annotations must contain an annotation per ALT allele (i.e. the INFO field header must specify 'Number=A') to work properly and the allele frequency should be expressed as a number between 0.00 and 1.00 in order to be compatible with the default allele frequency fields recognised by this program.
+
+=item B<-g    --vcf_af>
+
+TODO!
+
+=item B<--min_af_counts>
+
+TODO!
 
 =item B<-q    --quality>
 
