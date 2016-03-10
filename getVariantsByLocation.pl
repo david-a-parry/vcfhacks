@@ -478,6 +478,7 @@ sub get_region_from_gene{
     my $id = shift;
     $id_parser->parseId($id);
     my $gene_hash; 
+    my @lookups = ();
     if (not $opts{q}){
         print STDERR "Interpretting ID \"$id\" as of type \"" . 
           $id_parser->get_identifierType() . "\"...\n";
@@ -510,14 +511,33 @@ sub get_region_from_gene{
         }
         my $gene = $restQuery->getGeneViaXreg($id, $opts{species});
         if (ref $gene eq 'ARRAY'){
-            if ($gene->[0]->{id}){
-                $gene_hash = $restQuery->lookUpEnsId($gene->[0]->{id}, 1);
+            foreach my $ge (@$gene){
+                if ($ge->{id}){
+                    my $ge_hash = $restQuery->lookUpEnsId($ge->{id}, 1);
+                    if (uc($ge_hash->{display_name}) eq uc($id)){
+                    #if gene symbol matches then we use this entry
+                        $gene_hash = $ge_hash;
+                        last;
+                    }else{
+                        push @lookups, $ge_hash;
+                    }
+                }
+            }
+            if (not $gene_hash){
+                if (@lookups == 1){
+                    $gene_hash = $lookups[0];
+                }
             }
         }
     }
     if (not $gene_hash){
         if (not $opts{s}){
             print STDERR "WARNING: Could not identify gene for ID \"$id\"\n";
+            if (@lookups){
+                my $idstring = join("\n", map { $_->{display_name} } @lookups );
+                print STDERR "Identified the following non-matching display names:\n".
+                             "$idstring\n";
+            }
             return;
         }
     }
