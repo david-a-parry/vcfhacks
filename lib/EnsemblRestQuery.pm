@@ -5,6 +5,7 @@ use warnings;
 use Carp;
 use HTTP::Tiny;
 use JSON;
+use Time::HiRes;
 our $AUTOLOAD;
 
 ##################################################
@@ -62,6 +63,8 @@ sub new {
         }
     }
     $self->{_http} = HTTP::Tiny->new();
+    $self->{_requestCount} = 0;
+    $self->{_lastRequestTime} = 0; 
     $class -> _incr_count();
     return $self;
 }
@@ -94,15 +97,34 @@ sub AUTOLOAD{
 sub ensRestQuery{
     my $self = shift;
     my $url = shift;
+    if($self->{_requestCount} == 15) { # check every 15
+        my $current_time = Time::HiRes::time();
+        my $diff = $current_time - $self->{lastRequestTime};
+        # if less than a second then sleep for the remainder of the second
+        if($diff < 1) {
+            Time::HiRes::sleep(1-$diff);
+        }
+        # reset
+        $self->{lastRequestTime} = Time::HiRes::time();
+        $self->{_requestCount} = 0;
+    }
     my $response = $self->{_http}->get($url, {
           headers => { 'Content-type' => 'application/json' }
     });
+    my $status = $response->{status};
     if (not $response->{success}){
-        carp "Ensembl REST query ('$url') failed!\n" ;
+        if($status == 429 && exists $response->{headers}->{'retry-after'}) {
+            my $retry = $response->{headers}->{'retry-after'};
+            Time::HiRes::sleep($retry);
+            return $self->ensRestQuery($url); 
+        }
+        my $reason = $response->{reason};
+        carp "Ensembl REST query ('$url') failed: Status code: ${status}. Reason: ${reason}\n" ;
         return;
     }
+
     if(length $response->{content}) {
-      return decode_json($response->{content});
+        return decode_json($response->{content});
     }
     carp "No content for Ensembl REST query ('$url')!\n";
     return;
