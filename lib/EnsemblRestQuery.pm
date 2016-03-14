@@ -63,8 +63,6 @@ sub new {
         }
     }
     $self->{_http} = HTTP::Tiny->new();
-    $self->{_requestCount} = 0;
-    $self->{_lastRequestTime} = 0; 
     $class -> _incr_count();
     return $self;
 }
@@ -97,17 +95,18 @@ sub AUTOLOAD{
 sub ensRestQuery{
     my $self = shift;
     my $url = shift;
-    if($self->{_requestCount} == 15) { # check every 15
+    $self->{_requestCount}++;    
+    if ($self->{_requestCount} == 15) { # check every 15
         my $current_time = Time::HiRes::time();
-        my $diff = $current_time - $self->{lastRequestTime};
+        my $diff = $current_time - $self->{_lastRequestTime};
         # if less than a second then sleep for the remainder of the second
         if($diff < 1) {
             Time::HiRes::sleep(1-$diff);
         }
         # reset
-        $self->{lastRequestTime} = Time::HiRes::time();
         $self->{_requestCount} = 0;
     }
+    $self->{_lastRequestTime} = Time::HiRes::time();
     my $response = $self->{_http}->get($url, {
           headers => { 'Content-type' => 'application/json' }
     });
