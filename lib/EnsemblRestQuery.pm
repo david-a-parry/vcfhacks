@@ -131,6 +131,7 @@ sub ensRestQuery{
 
 ##################################################
 sub queryEndpoint{
+    my $self = shift;
     my $endpoint = shift;
     $endpoint = "/$endpoint" if $endpoint !~ /^\//;
     my $url = $self->{_server} . $endpoint;
