@@ -452,8 +452,9 @@ sub process_vcf_filter{
 
 #########################################################
 sub geneFromEnst{
+    my $id = shift;
     if (not $opts{q}){
-        print STDERR "Identifying parent gene from Ensembl transcript...\n";
+        print STDERR "Identifying parent gene from Ensembl transcript $id...\n";
     }
     my $id = shift;
     return $restQuery->getParent($id, 1);
@@ -461,10 +462,10 @@ sub geneFromEnst{
 
 #########################################################
 sub geneFromEnsp{
-    if (not $opts{q}){
-        print STDERR "Identifying parent gene from Ensembl protein...\n";
-    }
     my $id = shift;
+    if (not $opts{q}){
+        print STDERR "Identifying parent gene from Ensembl protein $id...\n";
+    }
     my $par = $restQuery->getParent($id);
     if ($par){
         if (exists $par->{id}){
