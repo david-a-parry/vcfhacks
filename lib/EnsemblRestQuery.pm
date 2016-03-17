@@ -128,6 +128,14 @@ sub ensRestQuery{
     carp "No content for Ensembl REST query ('$url')!\n";
     return;
 }
+
+##################################################
+sub queryEndpoint{
+    my $endpoint = shift;
+    $endpoint = "/$endpoint" if $endpoint !~ /^\//;
+    my $url = $self->{_server} . $endpoint;
+    return $self->ensRestQuery($url); 
+}
  
 ##################################################
 
