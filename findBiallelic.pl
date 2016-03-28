@@ -64,7 +64,7 @@ GetOptions(
     'n|num_matching=i',
     'o|output=s',
     'pass_filters',
-    "pl=f", #TODO needs documentation
+    "pl=f", 
     'q|quality=i',
     'r|reject=s{,}',    
     'skip_unpredicted',
@@ -1950,11 +1950,11 @@ If using the --af/--allele_frequency option and your data contains allele freque
 
 =item B<-g    --vcf_af>
 
-TODO!
+Filter alleles with a frequency greater than this value in individuals in the VCF other than those specified by -s/--samples. If a ped file is specified using the -f/--family option then only individuals not related to affected individuals will be used to calculate this allele frequency. Must be a value between 0.0 and 1.0.
 
 =item B<--min_af_counts>
 
-TODO!
+If using the above -g/--vcf_af option, only filter if at least this many alleles have been called. Default = 0.
 
 =item B<-q    --quality>
 
