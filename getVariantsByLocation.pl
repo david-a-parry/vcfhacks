@@ -456,7 +456,6 @@ sub geneFromEnst{
     if (not $opts{q}){
         print STDERR "Identifying parent gene from Ensembl transcript $id...\n";
     }
-    my $id = shift;
     return $restQuery->getParent($id, 1);
 }
 
