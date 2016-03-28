@@ -57,7 +57,7 @@ GetOptions(
     "n|num_matching=i",
     "o|output=s" ,
     "pass" ,
-    "pl=f", #TODO needs documentation
+    "pl=f", 
     "s|samples=s{,}",
     "skip_unpredicted" ,
     "v|var_quality=i",
