@@ -18,7 +18,7 @@ You may either download and unpack a script bundle from a specific release (http
 
     git clone --recursive https://github.com/gantzgraf/vcfhacks.git
 
-...and regularly run 'git pull' to receive updates.
+...and regularly run 'git pull' to receive updates. 
 
 The .pl scripts must remain in the same directory as the 'lib' and 'data' folders but you may create symlinks to the scripts (e.g. in your ~/bin folder) if you wish.  The vep_plugins folder also contains two Variant Effect Predictor (VEP) plugin modules (SpliceConsensus.pm and SpliceConsensusFilter.pm) which should be installed in your VEP cache 'Plugins' folder if you want to use them. The SpliceConsensus.pm annotations can be used for variant filtering purposes in getFunctionalVariants.pl and findBiallelic.pl.
 
@@ -49,6 +49,36 @@ Other perl modules required by these scripts are installable via CPAN - perl wil
 
 
 ## UPDATE
+
+## VERSION 0.2.1:
+
+30/03/16
+
+### Release Information
+
+This release fixes some issues with the previous (v0.2.0) release and adds a small number of new features.
+
+-Fixes an issue which would prevent any scripts running with certain versions of perl
+
+-Added addFilterField.pl script for quickly tagging all variants in a VCF with a FILTER annotation
+
+-Fixed an issue with annovcfToSimple.pl not outputting the advertised default fields.
+
+-Prevented getVariantsByLocation.pl or geneAnnotator.pl from making too many REST queries in too short a time
+
+-Added --vcf_af and --min_af_counts options to findBiallelic.pl to allow filtering on alleles based on frequency within the input VCF
+
+-Added option to filterOnSample.pl to allow filtering on allele frequency only when a minimum number of alleles have been called (--min_alleles_for_freq) 
+
+-filterOnSample.pl can now be run to filter on allele frequency without specifying --samples, --reject or --reject_except options
+
+-scripts that read a VCF index will now check age of index and warn if the index is older than the VCF
+
+-added a temporary fix for OMIM's new download arrangements to geneAnnotator.pl
+
+-rankOnCaddScore.pl now has --keep_unscored option for not filtering variants without a CADD score when using the --filter option
+
+
 
 ## VERSION 0.2.0:
 
