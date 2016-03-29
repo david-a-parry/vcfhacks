@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More ;#tests => 27;
+use Test::More tests => 6;
 use FindBin qw($RealBin);
 use lib "$RealBin/../lib";
 use lib "$RealBin/../lib/Bioperl";
@@ -87,8 +87,19 @@ $n_tests++;
 
 
 done_testing($n_tests);
+cleanup();
 
+###############################################################################
+sub cleanup{
+    foreach my $f ($tmpsort, $index, $tbi){
+        if (-e $f){
+            unlink($f) 
+             or warn "Could not remove test output ($f): $! "; 
+        }
+    }
+}
 
+###############################################################################
 sub getBiallelicData{
     open (my $IN, "$RealBin/test_data/biallelic_test1.vcf")
         or die "Can't open findBiallelic.pl test data: $!\n";
@@ -99,3 +110,4 @@ sub getBiallelicData{
     close $IN;
     return $data;
 }
+
