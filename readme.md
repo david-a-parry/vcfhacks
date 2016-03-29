@@ -47,6 +47,13 @@ Other perl modules required by these scripts are installable via CPAN - perl wil
     Excel::Writer::XLSX (annovcfToSimple.pl only)
     Bio::DB::Sam (hgmdMartToVcf.pl only)
 
+#### Testing scripts
+
+If you are using the scripts rather than the binaries, you can test your installation by simply running the following command from within the vcfhacks directory:
+   
+    prove
+    
+The 'prove' command will run all tests in the 't' folder. The tests are not exhaustive, but should give you a good idea about whether there is an issue with your installation.
 
 ## UPDATE
 
