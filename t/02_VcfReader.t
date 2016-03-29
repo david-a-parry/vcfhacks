@@ -250,3 +250,11 @@ is
 $n_tests++; 
 
 done_testing($n_tests);
+foreach my $f ($tmpsort, $index, $tbi){
+    if (-e $f){
+        unlink($f) 
+         or warn "Could not remove test output ($f): $! "; 
+    }
+}
+
+
