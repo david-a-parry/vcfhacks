@@ -49,7 +49,7 @@ Other perl modules required by these scripts are installable via CPAN - perl wil
 
 #### Testing scripts
 
-If you are using the scripts rather than the binaries, you can test your installation by simply running the following command from within the vcfhacks directory:
+If you are using the scripts (v0.2.1 or later) rather than the binaries, you can test your installation by simply running the following command from within the vcfhacks directory:
    
     prove
     
@@ -65,25 +65,25 @@ The 'prove' command will run all tests in the 't' folder. The tests are not exha
 
 This release fixes some issues with the previous (v0.2.0) release and adds a small number of new features.
 
--Fixes an issue which would prevent any scripts running with certain versions of perl
+ * Fixes an issue which would prevent any scripts running with certain versions of perl
 
--Added addFilterField.pl script for quickly tagging all variants in a VCF with a FILTER annotation
+ * Added addFilterField.pl script for quickly tagging all variants in a VCF with a FILTER annotation
 
--Fixed an issue with annovcfToSimple.pl not outputting the advertised default fields.
+ * Fixed an issue with annovcfToSimple.pl not outputting the advertised default fields.
 
--Prevented getVariantsByLocation.pl or geneAnnotator.pl from making too many REST queries in too short a time
+ * Prevented getVariantsByLocation.pl or geneAnnotator.pl from making too many REST queries in too short a time
 
--Added --vcf_af and --min_af_counts options to findBiallelic.pl to allow filtering on alleles based on frequency within the input VCF
+ * Added --vcf_af and --min_af_counts options to findBiallelic.pl to allow filtering on alleles based on frequency within the input VCF
 
--Added option to filterOnSample.pl to allow filtering on allele frequency only when a minimum number of alleles have been called (--min_alleles_for_freq) 
+ * Added option to filterOnSample.pl to allow filtering on allele frequency only when a minimum number of alleles have been called (--min_alleles_for_freq) 
 
--filterOnSample.pl can now be run to filter on allele frequency without specifying --samples, --reject or --reject_except options
+ * filterOnSample.pl can now be run to filter on allele frequency without specifying --samples, --reject or --reject_except options
 
--scripts that read a VCF index will now check age of index and warn if the index is older than the VCF
+ * scripts that read a VCF index will now check age of index and warn if the index is older than the VCF
 
--added a temporary fix for OMIM's new download arrangements to geneAnnotator.pl
+ * added a temporary fix for OMIM's new download arrangements to geneAnnotator.pl
 
--rankOnCaddScore.pl now has --keep_unscored option for not filtering variants without a CADD score when using the --filter option
+ * rankOnCaddScore.pl now has --keep_unscored option for not filtering variants without a CADD score when using the --filter option
 
 
 
