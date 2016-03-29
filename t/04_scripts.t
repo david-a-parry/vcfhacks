@@ -1,6 +1,7 @@
 use strict;
 use warnings;
-use Test::More tests => 9;
+#use Test::More;
+use Test::More tests => 12;
 use FindBin qw($RealBin);
 use lib "$RealBin/../lib";
 use lib "$RealBin/../lib/Bioperl";
@@ -19,6 +20,8 @@ my $shuf = "$RealBin/test_data/test1_shuffled.vcf";
 my $tmpsort = "$shuf.tmpsort2";
 my $gz = "$RealBin/test_data/test1.vcf.gz";
 my $tbi = "$gz.tbi";
+my $dref = "$RealBin/test_data/dbSnpTestRef.vcf.gz";
+my $dtest = "$RealBin/test_data/dbSnpTestCommonAndRare.vcf";
 
 my $script_prefix = "perl $RealBin/..";
 my $output = `$script_prefix/findBiallelic.pl -s Sample_133 Sample_76 -r Sample_139  -i $vcf | grep -v '#'`;
@@ -98,6 +101,33 @@ is
 );
 $n_tests++; 
 
+chomp ($output = `$script_prefix/annotateSnps.pl -i $dtest -d $dref -f 1 | grep -v '#' | wc -l `);
+is
+(
+    $output,
+    12,
+    "annotateSnps.pl filters on frequency "
+);
+$n_tests++; 
+
+
+chomp ($output = `$script_prefix/annotateSnps.pl -i $dtest -d $dref -b 129 | grep -v '#' | wc -l `);
+is
+(
+    $output,
+    22,
+    "annotateSnps.pl filters on build"
+);
+$n_tests++; 
+
+chomp ($output = `$script_prefix/annotateSnps.pl -i $dtest -d $dref -f 1 -b 129 | grep -v '#' | wc -l `);
+is
+(
+    $output,
+    10,
+    "annotateSnps.pl filters on frequency and build"
+);
+$n_tests++; 
 
 done_testing($n_tests);
 cleanup();
