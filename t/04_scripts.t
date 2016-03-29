@@ -1,18 +1,22 @@
 use strict;
 use warnings;
-use Test::More tests => 6;
+use Test::More tests => 9;
 use FindBin qw($RealBin);
 use lib "$RealBin/../lib";
 use lib "$RealBin/../lib/Bioperl";
 use lib "$RealBin/../lib/BioASN1EntrezGene/lib";
-
-my $n_tests = 0;
+BEGIN 
+{ 
+    use_ok("VcfReader");
+    use_ok("Tabix");
+}
+my $n_tests = 2;
 
 #Set up our input files
 my $vcf = "$RealBin/test_data/test1.vcf";
 my $index = "$vcf.vridx";
 my $shuf = "$RealBin/test_data/test1_shuffled.vcf";
-my $tmpsort = "$shuf.tmpsort";
+my $tmpsort = "$shuf.tmpsort2";
 my $gz = "$RealBin/test_data/test1.vcf.gz";
 my $tbi = "$gz.tbi";
 
@@ -82,6 +86,15 @@ is(
     $output,
     $expected,
     "get expected number of variants with filterOnSample.pl"
+);
+$n_tests++; 
+
+`$script_prefix/sortVcf.pl -i $shuf -o $tmpsort`;
+is
+(
+    VcfReader::checkCoordinateSorted($tmpsort),
+    1,
+    "check sortVcf.pl output is sorted"
 );
 $n_tests++; 
 
