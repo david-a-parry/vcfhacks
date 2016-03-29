@@ -211,7 +211,7 @@ else {
     }
     display_error_and_exit
     (
-        "Missing database files - rerun with the --DOWNLOAD_NEW option ".
+        "Missing database files - rerun with the --REPAIR option ".
         "to correct this. Can't find following files:\n" . 
         join( "\n", @missing_files ) . "\n"
     ) if @missing;
@@ -238,10 +238,11 @@ if (@missing) {
     }
     display_error_and_continue(
         "Missing Indexes",
-        "Need to make indexes for files:\n"
+        "Making indexes for files:\n"
           . join( "\n", @files_to_index ) . "\n"
     );
     prepare_files( \@missing, \%database );
+    print STDERR ">Finished making indexes.\n";
 }
 
 my $next_update  = 0;
