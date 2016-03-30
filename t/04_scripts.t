@@ -65,6 +65,7 @@ $n_tests++;
 
 $expected = 647;
 chomp($output = `$script_prefix/getFunctionalVariants.pl -i $vcf | wc -l `);
+$output =~ s/^\s+//;
 is(
     $output,
     $expected,
@@ -74,6 +75,7 @@ $n_tests++;
 
 $expected = 114;
 chomp($output = `$script_prefix/filterOnSample.pl -s Sample_100 -i $vcf | wc -l `);
+$output =~ s/^\s+//;
 is(
     $output,
     $expected,
@@ -91,6 +93,7 @@ is
 $n_tests++; 
 
 chomp ($output = `$script_prefix/annotateSnps.pl -i $dtest -d $dref -f 1 | grep -v '#' | wc -l `);
+$output =~ s/^\s+//;
 is
 (
     $output,
@@ -101,6 +104,7 @@ $n_tests++;
 
 
 chomp ($output = `$script_prefix/annotateSnps.pl -i $dtest -d $dref -b 129 | grep -v '#' | wc -l `);
+$output =~ s/^\s+//;
 is
 (
     $output,
@@ -110,6 +114,7 @@ is
 $n_tests++; 
 
 chomp ($output = `$script_prefix/annotateSnps.pl -i $dtest -d $dref -f 1 -b 129 | grep -v '#' | wc -l `);
+$output =~ s/^\s+//;
 is
 (
     $output,
