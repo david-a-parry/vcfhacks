@@ -333,20 +333,49 @@ sub process_regions{
     my $reg_obj;
     if (%contigs){
         my %invalid_contigs = ();
+        my %converted_contigs = ();
         my @indices_to_remove = ();
         for (my $i = 0; $i <  @regions; $i++){
             my $c = (split /[:-]/, $regions[$i])[0];
             if (not exists $contigs{$c}){
-                $invalid_contigs{$c}++;
-                unshift @indices_to_remove, $i;
+                if (exists $contigs{"chr$c"}){
+                    $converted_contigs{$c} = "chr$c";
+                    $regions[$i] =~ s/^$c/chr$c/;
+                }else{
+                    (my $cc = $c) =~ s/^chr//;
+                    if (exists $contigs{$cc}){
+                        $converted_contigs{$c} = $cc;
+                        $regions[$i] =~ s/^$c/$cc/;
+                    }else{
+                        $invalid_contigs{$c}++;
+                        unshift @indices_to_remove, $i;
+                    }
+                }
             }
         }
         if (@indices_to_remove){
             my $inv_contigs = keys %invalid_contigs;
-            warn "$inv_contigs contigs in regions not found in VCF (". scalar(@indices_to_remove)." regions).\n" unless $opts{s};
+            warn "$inv_contigs contigs in regions not found in VCF ("
+                . scalar(@indices_to_remove)." regions).\n" unless $opts{s};
             foreach my $i (@indices_to_remove){
                 splice(@regions, $i, 1);
             }
+        }
+        if (my $conv = keys %converted_contigs){
+            warn "$conv contigs in regions were converted assuming only ". 
+                "difference between VCF contigs is prepended 'chr'.\n".
+                "The Following contigs were altered:\n" 
+                .join
+                (  "\n", 
+                    map { 
+                        sprintf
+                        (
+                                "%38s => %s", 
+                                $_ , 
+                                $converted_contigs{$_}
+                        ) 
+                    } sort keys %converted_contigs
+                ) . "\n";
         }
         die "No valid regions to parse.\n" if not @regions;
         $reg_obj = SortGenomicCoordinates->new( 
