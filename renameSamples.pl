@@ -16,6 +16,7 @@ GetOptions(
     'o|output=s',
     's|sample_file=s', #old name -> new name
     'd|delimiter=s',
+    'r|rename_duplicates',
     'h|?|help' ,
 ) or usage("Syntax error");
 usage() if $opts{h};
@@ -91,12 +92,45 @@ sub readSampleFile{
 sub checkDuplicates{
     my $ar = shift;
     my %seen = ();
-    my @dups = grep { $seen{$_}++ } @$ar;
-    if (@dups){
-        die "ERROR: Detected duplicate samples after conversion:\n" . join("\n", @dups) . "\nExiting\n";
+    if ($opts{r}){
+        renameDuplicates($ar);
+    }else{
+        my @dups = grep { $seen{$_}++ } @$ar;
+        if (@dups){
+            die "ERROR: Detected duplicate samples after conversion:\n" 
+                . join("\n", @dups) . 
+                "\nExiting\nUse the -r/--rename_duplicates option to rename ".
+                "duplicate samples rather than exiting.";
+        }
     }
 }
 
+#################################################a
+sub renameDuplicates{
+    my $ar = shift;
+    my %dups = ();
+    foreach my $s (@$ar){
+        if (exists $dups{$s}){
+            print STDERR "Renaming duplicate sample $s -> ";
+            $s = renameSample($s, \%dups);
+            print STDERR "$s\n";
+        }
+        $dups{$s}++;
+    }
+}
+
+#################################################
+sub renameSample{
+    my $s = shift;
+    my $d = shift;
+    my $r = $s . "_$d->{$s}";
+    if (exists $d->{$r}){
+        $d->{$s}++;
+        return renameSample($s, $d);
+    }
+    return $r;
+}
+    
 #################################################
 sub usage{
     my $error = shift;
@@ -113,11 +147,12 @@ sub usage{
 
     Options:
 
-    -i,--input       [vcf input]
-    -o,--output      [optional output file]
-    -s,--sample_file [text file with one column for old names and another for new names]
-    -d,--delimiter   [string separator for columns in --sample_file. Default is any whitespace]
-    -h,-?,--help     [show this help message and exit]
+    -i,--input              [vcf input]
+    -o,--output             [optional output file]
+    -s,--sample_file        [text file with one column for old names and another for new names]
+    -d,--delimiter          [string separator for columns in --sample_file. Default is any whitespace]
+    -r,--rename_duplicates  [use this flag if duplicate samples should be renamed (e.g. for duplicate Sample_A this would be renamed Sample_A_1)]
+    -h,-?,--help            [show this help message and exit]
 
     Sample mapping file must contain two columns separated by whitespace or a delimiter as specified by the --delimiter option. The first column must be the old sample name and the second the new sample name. Lines beginning with # will be ignored. Extra columns will also be ignored. Any samples in the VCF not present in the sample file will remain unchanged. 
 
