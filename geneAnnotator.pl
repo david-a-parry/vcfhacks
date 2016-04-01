@@ -184,6 +184,15 @@ my %database     = (
         dir       => "downloads/archives/Release%20Archive/BIOGRID-3.4.134",
         file      => "BIOGRID-ALL-3.4.134.tab2.zip"
     },
+    pli        => {
+        localfile => "$opts{d}/fordist_cleaned_exac_r03_march16_z_pli_rec_null_data.txt",
+        col       => 1,
+        delimiter => "\t",
+        url       => "ftp.broadinstitute.org",
+        dir       => "pub/ExAC_release/release0.3/functional_gene_constraint",
+        file      => "fordist_cleaned_exac_r03_march16_z_pli_rec_null_data.txt",
+    },
+
 );
 
 #NEED TO FIND ALTERNATIVE TO "HMD_Human5.rpt" - deprecated in current MGI scheme
@@ -259,6 +268,8 @@ qw(
     SUMMARY
     OMIM
     MGI_PHENOTYPE
+    EXAC_MISSENSE_Z_SCORE
+    pLI
 );
 if (@annotations){
     foreach my $anno (@annotations){
@@ -744,75 +755,17 @@ sub searchWithEntrezId{
         $an{go_id}   = $humsum_line[4];
         $an{go_description} = $humsum_line[5];
         $an{generifs}     = $humsum_line[6];
-
-        my $mim_accession = $humsum_line[7];
-        if ( $mim_accession ne "-" ) {
-            my $j = binSearchLineWithIndex(
-                $mim_accession,
-                $database{mim_morbid}->{fh},
-                $database{mim_morbid}->{idx},
-                $database{mim_morbid}->{length},
-                $database{mim_morbid}->{col},
-                $database{mim_morbid}->{delimiter}
-            );
-            if ( $j > 0 ) {
-              MIM_UP:
-                for ( my $line_no = $j ; $line_no > 0 ; $line_no-- ) {
-                    my @mim_line = split(
-                        /\|/,
-                        line_with_index(
-                            $database{mim_morbid}->{fh},
-                            $database{mim_morbid}->{idx},
-                            $line_no
-                        )
-                    );
-                    if ( $mim_line[2] eq $mim_accession ) {
-                        push( @{ $an{omim} },
-                            $mim_line[0] );
-                    }
-                    else {
-                        last MIM_UP;
-                    }
-                }
-              MIM_DOWN:
-                for (
-                    my $line_no = $j + 1 ;
-                    $line_no <= $database{mim_morbid}->{length} ;
-                    $line_no++
-                  )
-                {
-                    my @mim_line = split(
-                        /\|/,
-                        line_with_index(
-                            $database{mim_morbid}->{fh},
-                            $database{mim_morbid}->{idx},
-                            $line_no
-                        )
-                    );
-                    if ( $mim_line[2] eq $mim_accession ) {
-                        push( @{ $an{omim} },
-                            $mim_line[0] );
-                    }
-                    else {
-                        last MIM_DOWN;
-                    }
-                }
-            }
-            else {
-                push( @{ $an{omim} }, "" );
-            }
-        }
-        else {
-            push( @{ $an{omim} }, "" );
-        }
+        push @{ $an{omim} }, get_omim($humsum_line[7] );
+        ($an{exac_missense_z_score}, $an{pli}) = get_pLI($an{symbol});
     }else {
         $an{symbol}  = "";
         $an{summary} = "";
         $an{go_id}   = "";
         $an{go_description} = "";
         $an{generifs}     = "";
-
         push( @{ $an{omim} }, "" );
+        $an{pli} = "";
+        $an{exac_missense_z_score} = "";
     }
     my @interactants = get_interactants($entrez_id);
     @interactants 
@@ -824,6 +777,89 @@ sub searchWithEntrezId{
       : push @{ $an{mgi_phenotype} }, "";
     return \%an;
 }
+
+######################################################
+sub get_pLI{
+    my $symbol = shift;
+    my $mis_z_score = '';
+    my $pli = ''; 
+    my $i = binSearchLineWithIndex(
+        $symbol,
+        $database{pli}->{fh},
+        $database{pli}->{idx},
+        $database{pli}->{length},
+        $database{pli}->{col}
+    );
+    if ($i > 0){
+        my $line = line_with_index(
+            $database{pli}->{fh},
+            $database{pli}->{idx},
+            $i,
+        );
+        ($mis_z_score, $pli) = (split "\t", $line)[17, 19];
+    }
+    return $mis_z_score, $pli;
+}
+
+######################################################
+sub get_omim{
+    my $mim_accession = shift;
+    return "" if $mim_accession eq "-";
+    my @omim = (); 
+    my $i = binSearchLineWithIndex(
+        $mim_accession,
+        $database{mim_morbid}->{fh},
+        $database{mim_morbid}->{idx},
+        $database{mim_morbid}->{length},
+        $database{mim_morbid}->{col},
+        $database{mim_morbid}->{delimiter}
+    );
+    if ( $i > 0 ) {
+MIM_UP:
+        for ( my $line_no = $i ; $line_no > 0 ; $line_no-- ) {
+            my @mim_line = split(
+                /\|/,
+                line_with_index(
+                    $database{mim_morbid}->{fh},
+                    $database{mim_morbid}->{idx},
+                    $line_no
+                )
+            );
+            if ( $mim_line[2] eq $mim_accession ) {
+                push( @omim, $mim_line[0] );
+            }
+            else {
+                last MIM_UP;
+            }
+        }
+MIM_DOWN:
+        for (
+            my $line_no = $i + 1 ;
+            $line_no <= $database{mim_morbid}->{length} ;
+            $line_no++
+          )
+        {
+            my @mim_line = split(
+                /\|/,
+                line_with_index(
+                    $database{mim_morbid}->{fh},
+                    $database{mim_morbid}->{idx},
+                    $line_no
+                )
+            );
+            if ( $mim_line[2] eq $mim_accession ) {
+                push( @omim, $mim_line[0] );
+            }
+            else {
+                last MIM_DOWN;
+            }
+        }
+    }else{
+        return "";
+    }
+    return @omim;
+}
+
 ######################################################
 sub informUser{
     my $msg = shift;
