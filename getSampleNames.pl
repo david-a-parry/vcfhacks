@@ -19,17 +19,25 @@ getSampleNames.pl -i [vars.vcf] [options]
 
 One or more VCF files to get sample names from. Sample names and counts will be given for each file separately.
 
-=item B<-s    --sort>
+=item B<-l    --list_only>
 
-Sort sample names in alphabetical order (normally samples are given in the order they appear in the VCF).
+Output the sample names only, ommiting the number of samples.
 
 =item B<-c    --count_only>
 
 Output the number of samples only, do not output sample names.
 
+=item B<-d    --delimiter>
+
+By default sample names are separated by commas and spaces. Specify a different delimiter with this option.
+
 =item B<-n    --new_lines>
 
-Print each sample name on a new line instead of separating them with commas and spaces.
+Print each sample name on a new line instead of separating them with commas and spaces (i.e. like specifying a new line to the --delimiter option)
+
+=item B<-s    --sort>
+
+Sort sample names in alphabetical order (by default samples are given in the order they appear in the VCF, which is usually alphabetical anyway).
 
 =item B<-h    --help>
 
@@ -69,35 +77,47 @@ use lib "$RealBin/lib";
 use ParseVCF;
 
 my @vcfs = ();
-my $delimiter = ", ";
-my $use_newlines;
-my $count_only;
-my $sort;
-my $help;
-my $manual;
+my %opts = 
+(
+    input       => \@vcfs,
+    delimiter   => ", ",
+);
 GetOptions(
+    \%opts,
     'input=s{,}' => \@vcfs,
-    'count_only' => \$count_only,
-    'new_lines' => \$use_newlines,
-    'sort' => \$sort,
-    'help' => \$help,
-    'manual' => \$manual,
+    'delimiter=s',
+    'count_only',
+    'list_only',
+    'new_lines',
+    'sort',
+    'help',
+    'manual',
 ) or pod2usage (-message => 'Syntax error.', -exitval => 2);
-pod2usage( -verbose => 2 ) if ($manual);
-pod2usage( -verbose => 1 ) if ($help);
+pod2usage( -verbose => 2 ) if ($opts{manual});
+pod2usage( -verbose => 1 ) if ($opts{help});
 pod2usage (-message => '--input argument is required. For help run the --help or --manual option', -exitval => 2) if not @vcfs;
-$delimiter = "\n" if $use_newlines;
+if ($opts{count_only} and $opts{list_only}){
+    pod2usage 
+    (
+        -message => 
+        '--list_only and --count_only are mutually exculsive. For help run the --help or --manual option', -exitval => 2
+    );
+}
+$opts{delimiter} = "\n" if $opts{new_lines};
 foreach my $vcf (@vcfs){ 
     my $obj = ParseVCF->new(file => $vcf, noLineCount => 1);
     my @samples = ();
     eval{@samples = $obj->getSampleNames();};
-    print "$vcf has " . scalar @samples . " sample";
-    print "s" if @samples != 1;
-    if (not $count_only){
+    unless ($opts{list_only}){
+        print "$vcf has " . scalar @samples . " sample";
+        print "s" if @samples != 1;
         my $spacer = "\t";
-        $spacer = "\n" if $use_newlines;
-        @samples = sort @samples if $sort;
-        print ":$spacer" . join($delimiter, @samples)  if @samples;
+        $spacer = "\n" if $opts{new_lines};
+        print ":$spacer" unless $opts{count_only};
+    }
+    if (not $opts{count_only}){
+        @samples = sort @samples if $opts{sort};
+        print join($opts{delimiter}, @samples)  if @samples;
     }
     print "\n";
 }
