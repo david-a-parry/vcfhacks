@@ -195,8 +195,6 @@ my %database     = (
 
 );
 
-#NEED TO FIND ALTERNATIVE TO "HMD_Human5.rpt" - deprecated in current MGI scheme
-
 my @ref_files = ();
 foreach my $k ( keys %database ) {
     push @ref_files, $database{$k};
