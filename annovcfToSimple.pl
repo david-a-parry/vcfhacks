@@ -659,6 +659,10 @@ sub getCsqFields{
             eas_maf
             eur_maf
             sas_maf
+            lof
+            lof_filter
+            lof_flags
+            lof_info
         /){
             push @default_fields, $f 
                 if exists $csq_header{$f};
