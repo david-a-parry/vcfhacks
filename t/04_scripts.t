@@ -26,7 +26,7 @@ my $biallelic = "$RealBin/test_data/biallelic_test1.vcf";
 my $annoremote = "$RealBin/test_data/annoTestRemote.vcf";
 
 my $script_prefix = "perl $RealBin/..";
-my $output = `$script_prefix/findBiallelic.pl -s Sample_133 Sample_76 -r Sample_139  -i $vcf | grep -v '#'`;
+my $output = `$script_prefix/findBiallelic.pl -s Sample_133 Sample_76 -r Sample_139  -i $vcf 2> /dev/null |  grep -v '#'`;
 my $expected = getBiallelicData();
 is
 (
@@ -38,7 +38,7 @@ $n_tests++;
 
 $expected = getLocationData();
 
-$output = `$script_prefix/getVariantsByLocation.pl -i $vcf -r 6:24658070-25581425  | cut -sf 1-9`;
+$output = `$script_prefix/getVariantsByLocation.pl -i $vcf -r 6:24658070-25581425  2> /dev/null |  cut -sf 1-9`;
 is(
     $output,
     $expected,
@@ -46,7 +46,7 @@ is(
 );
 $n_tests++; 
 
-$output = `$script_prefix/getVariantsByLocation.pl -i $gz -r 6:24658070-25581425  | cut -sf 1-9`;
+$output = `$script_prefix/getVariantsByLocation.pl -i $gz -r 6:24658070-25581425  2> /dev/null |  cut -sf 1-9`;
 is(
     $output,
     $expected,
@@ -55,7 +55,7 @@ is(
 $n_tests++; 
 
 $expected = getLocatioGeneData();
-$output = `$script_prefix/getVariantsByLocation.pl -i $gz -g COL3A1 COL13A1  | cut -sf 1-9`;
+$output = `$script_prefix/getVariantsByLocation.pl -i $gz -g COL3A1 COL13A1  2> /dev/null |  cut -sf 1-9`;
 is(
     $output,
     $expected,
@@ -64,7 +64,7 @@ is(
 $n_tests++; 
 
 $expected = 647;
-chomp($output = `$script_prefix/getFunctionalVariants.pl -i $vcf | wc -l `);
+chomp($output = `$script_prefix/getFunctionalVariants.pl -i $vcf 2> /dev/null |  wc -l `);
 $output =~ s/^\s+//;
 is(
     $output,
@@ -74,7 +74,7 @@ is(
 $n_tests++; 
 
 $expected = 114;
-chomp($output = `$script_prefix/filterOnSample.pl -s Sample_100 -i $vcf | wc -l `);
+chomp($output = `$script_prefix/filterOnSample.pl -s Sample_100 -i $vcf 2> /dev/null |  wc -l `);
 $output =~ s/^\s+//;
 is(
     $output,
@@ -83,7 +83,7 @@ is(
 );
 $n_tests++; 
 
-`$script_prefix/sortVcf.pl -i $shuf -o $tmpsort`;
+`$script_prefix/sortVcf.pl -i $shuf -o $tmpsort 2>/dev/null`;
 is
 (
     VcfReader::checkCoordinateSorted($tmpsort),
@@ -92,7 +92,7 @@ is
 );
 $n_tests++; 
 
-chomp ($output = `$script_prefix/annotateSnps.pl -i $dtest -d $dref -f 1 | grep -v '#' | wc -l `);
+chomp ($output = `$script_prefix/annotateSnps.pl -i $dtest -d $dref -f 1 2> /dev/null |  grep -v '#' | wc -l `);
 $output =~ s/^\s+//;
 is
 (
@@ -103,7 +103,7 @@ is
 $n_tests++; 
 
 
-chomp ($output = `$script_prefix/annotateSnps.pl -i $dtest -d $dref -b 129 | grep -v '#' | wc -l `);
+chomp ($output = `$script_prefix/annotateSnps.pl -i $dtest -d $dref -b 129 2> /dev/null |  grep -v '#' | wc -l `);
 $output =~ s/^\s+//;
 is
 (
@@ -113,7 +113,7 @@ is
 );
 $n_tests++; 
 
-chomp ($output = `$script_prefix/annotateSnps.pl -i $dtest -d $dref -f 1 -b 129 | grep -v '#' | wc -l `);
+chomp ($output = `$script_prefix/annotateSnps.pl -i $dtest -d $dref -f 1 -b 129 2> /dev/null |  grep -v '#' | wc -l `);
 $output =~ s/^\s+//;
 is
 (
@@ -124,7 +124,7 @@ is
 $n_tests++; 
 
 $expected = getAnnoData();
-$output = `$script_prefix/geneAnnotator.pl -i $biallelic | cut -sf 1-9`;
+$output = `$script_prefix/geneAnnotator.pl -i $biallelic 2> /dev/null |  cut -sf 1-9`;
 like
 (
     $output,
@@ -135,7 +135,7 @@ $n_tests++;
 
 
 $expected = getAnnoDataRemote();
-$output = `$script_prefix/geneAnnotator.pl -i $annoremote | cut -sf 1-9`;
+$output = `$script_prefix/geneAnnotator.pl -i $annoremote 2> /dev/null |  cut -sf 1-9`;
 like
 (
     $output,
