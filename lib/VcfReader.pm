@@ -149,26 +149,41 @@ my $REGION_SPANS = 100000;
 
 =item B<getHeader>
 
-Retrieve the whole header from a VCF file including meta header lines.  Returns an array if called in an array context and a string if not. Takes a VCF file as an argument.
+Retrieve the whole header from a VCF file including meta header lines.  Returns an array if called in an array context and a string if not. Takes a VCF file or filehandle as an argument. If a filehandle is provided seek will be used to position back to the first non-header line (this will NOT work for STDIN or pipes, you will lose the first non-header line if used with non-seekable filehandles like these).
 
  my @head_lines = VcfReader::getHeader("file.vcf");
+ 
+ my @head_lines = VcfReader::getHeader($FH);
 
 =cut
 sub getHeader{
     my $vcf = shift; 
     croak "getHeader method requires a file as an argument" if not $vcf;
-    my $FH = _openFileHandle($vcf);
+    my $FH;
+    my $is_fh = 0;
+    if (fileno($vcf)){
+        $FH = $vcf;
+        $is_fh = 1;
+    }else{
+        $FH = _openFileHandle($vcf);
+    }
     my @header = ();
+    my $offset = tell($FH); 
     while (my $vcf_line = scalar readline $FH){
         if ($vcf_line =~ /^#/){
             chomp $vcf_line;
             push(@header, $vcf_line);
+            my $offset = tell($FH); 
         }else{
             croak "No header found for VCF file $vcf " if not @header;
             last;
         }
     }
-    close $FH;
+    if ($is_fh){
+        seek($FH, $offset, 0);#if user provided a FH, return to first non-header line
+    }else{
+        close $FH;
+    }
     croak "No header found for VCF file $vcf " if not @header;
     return @header if wantarray;
     return join("\n", @header) ."\n" if defined wantarray;
@@ -212,6 +227,83 @@ sub getColumnHeader{
     }
     return "$header[-1]";
 }
+
+=item B<getHeaderAndFilehandle>
+
+Retrieve the whole header from a VCF file including meta header lines from a given file/filehandle. Returns a ref to an array of header lines and the filehandle, which is positioned to read the first non-header line. Because this method uses seek to return to the first non-header line, it should NOT be used with data from STDIN or pipes. If you use this with STDIN or pipes the first non-header line will be skipped without warning - instead use the getHeaderAndFirstVariant method below.
+ 
+ my ($head_lines, $FH) = VcfReader::getHeaderFromFilehandle("file.vcf");
+
+ my ($head_lines, $FH) = VcfReader::getHeaderFromFilehandle($FH);
+ 
+
+=cut
+sub getHeaderAndFilehandle{
+    my $vcf = shift; 
+    croak "getHeader method requires a file or filehandle as an argument" if not $vcf;
+    my $FH;
+    if (fileno($vcf)){
+        $FH = $vcf;
+    }else{
+        $FH = _openFileHandle($vcf);
+    }
+    my @header = ();
+    my $offset = tell($FH); 
+    while (my $vcf_line = scalar readline $FH){
+        if ($vcf_line =~ /^#/){
+            chomp $vcf_line;
+            push(@header, $vcf_line);
+            $offset = tell($FH);
+        }else{
+            croak "No header found for VCF file " if not @header;
+            last;
+        }
+    }
+    seek($FH, $offset, 0);
+    croak "No header found for VCF file " if not @header;
+    return (\@header, $FH) if defined wantarray;
+    carp "getHeader called in void context ";
+}
+
+=item B<getHeaderAndFirstVariant>
+
+Retrieve the whole header from a VCF file including meta header lines from a given file/filehandle. Returns a ref to an array of header lines, the first variant and the filehandle, which will be positioned to read the second line after the header. The idea being that this allows you to work with data from STDIN, giving you the header, the first non-header line for processing and a filehandled positioned to allow you to process remaining lines. 
+ 
+ my ($head_lines, $first, $FH) = VcfReader::getHeaderAndFirstVariant("file.vcf");
+
+ my ($head_lines, $first, $FH) = VcfReader::getHeaderAndFirstVariant($FH);
+ 
+
+=cut
+
+sub getHeaderAndFirstVariant{
+    my $vcf = shift; 
+    croak "getHeader method requires a file or filehandle as an argument" if not $vcf;
+    my $FH;
+    if (fileno($vcf)){
+        $FH = $vcf;
+    }else{
+        $FH = _openFileHandle($vcf);
+    }
+    my @header = ();
+    my $first_var = '';
+    while (my $vcf_line = scalar readline $FH){
+        chomp $vcf_line;
+        if ($vcf_line =~ /^#/){
+            push(@header, $vcf_line);
+        }else{
+            croak "No header found for VCF file " if not @header;
+            $first_var = $vcf_line;
+            last;
+        }
+    }
+    croak "No header found for VCF file " if not @header;
+    return (\@header, $first_var, $FH) if defined wantarray;
+    carp "getHeader called in void context ";
+}
+
+
+
 
 =item B<checkHeader>
 
