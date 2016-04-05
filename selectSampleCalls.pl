@@ -31,10 +31,10 @@ if ($opts{f}){
     }
 }
 
-my @header  = VcfReader::getHeader($opts{i});
-die "Bad header!\n" if (not VcfReader::checkHeader(header => \@header));
+my ($header, $first_var, $IN)  = VcfReader::getHeaderAndFirstVariant($opts{i});
+die "Bad header!\n" if (not VcfReader::checkHeader(header => $header));
 my %samples_to_col = VcfReader::getSamples(
-        header => \@header,
+        header => $header,
         get_columns => 1
 );
 foreach my $s (@samples){
@@ -48,12 +48,11 @@ if ($opts{o}){
     open ($OUT, ">$opts{o}") or die "Couldn't open $opts{o} for writing: $!\n";
 }
 
-print $OUT join("\n", @header[0..$#header-1]) . "\n";
+print $OUT join("\n", @$header[0..$#{$header}-1]) . "\n";
 print $OUT "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t";
 print $OUT join("\t", @samples) . "\n";
 
-my $IN = VcfReader::_openFileHandle($opts{i});
-while (my $line = <$IN>){
+foreach my $line ($first_var,  <$IN>){
     next if $line =~ /^#/;
     chomp $line;
     my @split = split("\t", $line);
