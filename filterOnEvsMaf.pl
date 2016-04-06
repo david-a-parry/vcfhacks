@@ -186,7 +186,6 @@ VAR: while (my $line = <$VCF> ) {
 close $VCF;
 process_buffer() if $forks > 1;
 close $OUT;
-my $vp = int($n / 3);
 $progressbar->message( "[INFO - $time] $vars variants processed" );
 $progressbar->update($n) if $n >= $next_update;
 
@@ -204,7 +203,7 @@ sub processLine{
     next if $line =~ /^#/;
     $n++;
     $vars++;
-    checkProgress($n);
+    checkProgress();
     if ($forks > 1){
         push @lines_to_process, $line;
         if ( @lines_to_process >= $buffer_size ) {
@@ -221,7 +220,7 @@ sub processLine{
         $found++ if $res{found};
         $filtered++ if $res{filter};
         $n += 2;
-        checkProgress($n);
+        checkProgress();
     }
 }
 
@@ -287,7 +286,7 @@ sub process_buffer {
                     $filtered += $res{filter} ;
                 }
                 $n += $res{batch_size};
-                checkProgress($n);
+                checkProgress();
             }
             else
             { 
@@ -320,14 +319,14 @@ sub process_buffer {
                 $kept++;
                 if ($progressbar) {
                     $n += $incr_per_line;
-                    checkProgress($n);
+                    checkProgress();
                 }
             }
         }
     }else{
         if ($progressbar) {
             $n += @lines_to_process;
-            checkProgress($n);
+            checkProgress();
         }
 
     }
