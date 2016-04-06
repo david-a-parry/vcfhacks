@@ -52,8 +52,8 @@ print $OUT join("\n", @$header[0..$#{$header}-1]) . "\n";
 print $OUT "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t";
 print $OUT join("\t", @samples) . "\n";
 
-foreach my $line ($first_var,  <$IN>){
-    next if $line =~ /^#/;
+my $line = $first_var;
+while (defined $line){
     chomp $line;
     my @split = split("\t", $line);
     my @output;
@@ -64,6 +64,7 @@ foreach my $line ($first_var,  <$IN>){
         push @output, VcfReader::getSampleVariant(\@split, $samples_to_col{$s});
     }
     print $OUT join("\t", @output) . "\n";
+    $line = <$IN>;
 }
 close $IN;
 close $OUT;
