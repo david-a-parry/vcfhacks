@@ -67,29 +67,25 @@ if ($opts{output}){
         $OUT = *STDOUT;
 }
 my $time = strftime("%H:%M:%S", localtime);
-my $total_vcf;
+my $total_vcf = -1;
 print STDERR "[$time] Initializing input VCF... ";
+my ($header, $first_var, $VCF)  = VcfReader::getHeaderAndFirstVariant($opts{input});
 die "Header not ok for input ($opts{input}) "
-    if not VcfReader::checkHeader( vcf => $opts{input} );
+    if not VcfReader::checkHeader( header => $header );
 if ( defined $opts{Progress} ) {
-    if ( $opts{input} eq "-" ) {
-        print STDERR "Can't use --progress option when input is from STDIN\n";
-        delete $opts{Progress};
-    }
-    else {
+    if (-p $opts{input} or $opts{input} eq "-" ) {
+        $time = strftime( "%H:%M:%S", localtime );
+        print STDERR "\n[$time] INFO - Input is from STDIN or pipe - will report progress per 10000 variants. ";
+    }else {
         $total_vcf= VcfReader::countVariants($opts{input});
         print STDERR "$opts{input} has $total_vcf variants. ";
     }
 }
-my %contigs = ();
-if ($forks){
-    %contigs       = VcfReader::getContigOrder( $opts{input} );
-}
 my %sample_to_col = ();
 if (@samples) {
     %sample_to_col = VcfReader::getSamples(
-        vcf         => $opts{input},
         get_columns => 1,
+        header      => $header,
     );
 }
 
@@ -173,9 +169,8 @@ my $filtered = 0; #variants filtered
 my $found = 0; #variants that match a known SNP
 
 my $n                = 0;
+my $vars             = 0;
 my @lines_to_process = ();
-my $VCF              = VcfReader::_openFileHandle( $opts{input} )
-  ;    # or die "Can't open $opts{input} for reading: $!\n";
 my %no_fork_args = ();
 if ($forks < 2){
     foreach my $e (@evs) {
@@ -183,12 +178,33 @@ if ($forks < 2){
         $no_fork_args{$e} = \%s;
     }
 }
-VAR: while ( my $line = <$VCF> ) {
+processLine($first_var);
+VAR: while (my $line = <$VCF> ) {
+    processLine($line);
+}
+
+close $VCF;
+process_buffer() if $forks > 1;
+close $OUT;
+my $vp = int($n / 3);
+$progressbar->message( "[INFO - $time] $vars variants processed" );
+$progressbar->update($n) if $n >= $next_update;
+
+$time = strftime("%H:%M:%S", localtime);
+print STDERR "Time finished: $time\n";
+print STDERR "$found matching variants identified.\n";
+print STDERR "$filtered variants filtered, $kept variants retained.\n";
+
+
+################################################
+#####################SUBS#######################
+################################################
+sub processLine{
+    my $line = shift;
     next if $line =~ /^#/;
     $n++;
-    if ($progressbar) {
-        $next_update = $progressbar->update($n) if $n >= $next_update;
-    }
+    $vars++;
+    checkProgress($n);
     if ($forks > 1){
         push @lines_to_process, $line;
         if ( @lines_to_process >= $buffer_size ) {
@@ -205,28 +221,24 @@ VAR: while ( my $line = <$VCF> ) {
         $found++ if $res{found};
         $filtered++ if $res{filter};
         $n += 2;
-        if ($progressbar) {
-            $next_update = $progressbar->update($n) if $n >= $next_update;
+        checkProgress($n);
+    }
+}
+
+################################################
+sub checkProgress{
+    return if not $progressbar;
+    if ($prog_total > 0){
+        $next_update = $progressbar->update($n) if $n >= $next_update;
+    }else{#input from STDIN/pipe
+        if (not $vars % 10000) {
+            my $time = strftime( "%H:%M:%S", localtime );
+            $progressbar->message( "[INFO - $time] $vars variants processed" );
         }
     }
 }
-close $VCF;
-process_buffer() if $forks > 1;
-close $OUT;
-if ( defined $opts{Progress} ) {
-    $progressbar->update($prog_total) if $prog_total >= $next_update;
-}
-
-$time = strftime("%H:%M:%S", localtime);
-print STDERR "Time finished: $time\n";
-print STDERR "$found matching variants identified.\n";
-print STDERR "$filtered variants filtered, $kept variants retained.\n";
-
 
 ################################################
-#####################SUBS#######################
-################################################
-
 sub process_buffer {
 
     #this arrays is an array of refs to batches
@@ -266,7 +278,7 @@ sub process_buffer {
                 my %res = %{$data_structure_reference}
                   ;        
                 if ( ref $res{keep} eq 'ARRAY' ) {
-                    push @lines_to_print, \@{ $res{keep} } if @{ $res{keep} };
+                    $lines_to_print[$res{order}] = \@{ $res{keep} } if @{ $res{keep} };
                 }
                 if ( $res{found} ) {
                     $found += $res{found} ;
@@ -274,11 +286,8 @@ sub process_buffer {
                 if ( $res{filter} ) {
                     $filtered += $res{filter} ;
                 }
-                if ($progressbar) {
-                    $n += $res{batch_size};
-                    $next_update = $progressbar->update($n)
-                      if $n >= $next_update;
-                }
+                $n += $res{batch_size};
+                checkProgress($n);
             }
             else
             { 
@@ -286,22 +295,20 @@ sub process_buffer {
             }
         }
     );
+    my $order = 0;
     foreach my $b (@batch) {
         $pm->start() and next;
-        my %results = process_batch($b);
+        my %results = process_batch($b, $order);
+        $order++;
         $pm->finish( 0, \%results );
     }
     $pm->wait_all_children;
 
     #print them
-    @lines_to_print = sort {
-        VcfReader::by_first_last_line($a, $b, \%contigs) 
-        } @lines_to_print;
-
-
     if (@lines_to_print){
         my $incr_per_batch = @lines_to_process / @lines_to_print;
         foreach my $batch (@lines_to_print) {
+            next if not defined $batch;
             my $incr_per_line = $incr_per_batch / @$batch;
             foreach my $l (@$batch) {
                 if ( ref $l eq 'ARRAY' ) {
@@ -313,14 +320,14 @@ sub process_buffer {
                 $kept++;
                 if ($progressbar) {
                     $n += $incr_per_line;
-                    $next_update = $progressbar->update($n) if $n >= $next_update;
+                    checkProgress($n);
                 }
             }
         }
     }else{
         if ($progressbar) {
             $n += @lines_to_process;
-            $next_update = $progressbar->update($n) if $n >= $next_update;
+            checkProgress($n);
         }
 
     }
@@ -330,8 +337,12 @@ sub process_buffer {
 sub process_batch {
 
     #filter a set of lines
-    my ($batch) = @_;
-    my %results = ( batch_size => scalar(@$batch) );
+    my ($batch, $order) = @_;
+    my %results = 
+    ( 
+        batch_size => scalar(@$batch),
+        order      => $order,
+    );
     my %sargs;
     foreach my $e (@evs) {
 
@@ -515,7 +526,7 @@ sub checkEvsInfoFields{
 
 #####################################
 sub writeHeaders{
-    my $meta_head = VcfReader::getMetaHeader( $opts{input} );
+    my $meta_head = join("\n", grep {/^##/} @$header);
     print $OUT "$meta_head\n";
     print $OUT "##INFO=<ID=EVS_EA_AF,Number=A,Type=Float,"
       ."Description=\"European American allele frequencies calculated from NHLBI EVS VCFs\">\n";
@@ -542,8 +553,7 @@ sub writeHeaders{
             }
         }
     }
-    my $col_header = VcfReader::getColumnHeader( $opts{input} );
-    print $OUT join( " ", @opt_string ) . "\"\n" . $col_header . "\n";
+    print $OUT join( " ", @opt_string ) . "\"\n" . $header->[-1] . "\n";
 }
 
 #####################################
