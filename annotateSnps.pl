@@ -12,6 +12,7 @@ use FindBin qw($RealBin);
 use lib "$RealBin/lib";
 use VcfReader;
 use ClinVarReader;
+use VcfhacksUtils;
 
 my @samples;
 my @dbsnp ;
@@ -218,57 +219,7 @@ if ( $opts{freq} ) {
     print STDERR $warning if $warning;
 }
 
-my $meta_head = join("\n", grep {/^##/} @$header);
-print $OUT "$meta_head\n";
-print $KNOWN "$meta_head\n" if $KNOWN;
-my $headstring = '';
-if (%add_head) {
-    foreach my $k (keys %add_head){
-        $headstring .= join("\n", @{$add_head{$k}}) . "\n";
-    }
-}
-if ($opts{clinvar_file}){
-    $headstring .= <<EOT
-##INFO=<ID=ClinVarPathogenic,Number=A,Type=Integer,Description="For each allele, a value of 1 is given if the variant has ever been asserted 'Pathogenic' or 'Likely pathogenic' by any submitter for any phenotype, and 0 if present in ClinVar but does not meet this criteria">
-##INFO=<ID=ClinVarConflicted,Number=A,Type=Integer,Description="For each allele, a value of 1 is given if the variant has ever been asserted 'Pathogenic' or 'Likely pathogenic' by any submitter for any phenotype, and has also been asserted 'Benign' or 'Likely benign' by any submitter for any phenotype, and 0 if present in ClinVar but does not meet this criteria">
-##INFO=<ID=ClinVarTraits,Number=A,Type=String,Description="Any traits associated with this allele in ClinVar">
-##INFO=<ID=ClinVarClinicalSignificance,Number=A,Type=String,Description="Clinical significance terms for this allele given in ClinVar">
-EOT
-    ;
-}
-if ($headstring){
-    print $OUT $headstring;
-    print $KNOWN $headstring if $KNOWN;
-}
-
-print $OUT "##annotateSnps.pl=\"";
-print $KNOWN "##annotateSnps.pl=\"" if $KNOWN;
-
-my @opt_string = ();
-foreach my $k ( sort keys %opts ) {
-    if ( not ref $opts{$k} ) {
-        push @opt_string, "$k=$opts{$k}";
-    }
-    elsif ( ref $opts{$k} eq 'SCALAR' ) {
-        if ( defined ${ $opts{$k} } ) {
-            push @opt_string, "$k=${$opts{$k}}";
-        }
-        else {
-            push @opt_string, "$k=undef";
-        }
-    }
-    elsif ( ref $opts{$k} eq 'ARRAY' ) {
-        if ( @{ $opts{$k} } ) {
-            push @opt_string, "$k=" . join( ",", @{ $opts{$k} } );
-        }
-        else {
-            push @opt_string, "$k=undef";
-        }
-    }
-}
-print $OUT join( " ", @opt_string ) . "\"\n" . $header->[-1] . "\n";
-print $KNOWN join( " ", @opt_string ) . "\"\n" . $header->[-1] . "\n"
-  if $KNOWN;
+print_header();
 
 $time = strftime( "%H:%M:%S", localtime );
 print STDERR "[$time] INFO - SNP annotation starting\n";
@@ -399,6 +350,27 @@ sub processLine{
 }
 
 ################################################
+sub print_header{
+    my $meta_head = join("\n", grep {/^##/} @$header);
+    my $headstring = '';
+    if (%add_head) {
+        foreach my $k (keys %add_head){
+            $headstring .= join("\n", @{$add_head{$k}}) . "\n";
+        }
+    }
+    my $optstring = VcfhacksUtils::getOptsVcfHeader(%opts) . "\n".$header->[-1] ."\n" ; 
+    print $OUT "$meta_head\n";
+    print $KNOWN "$meta_head\n" if $KNOWN;
+    if ($headstring){
+        print $OUT $headstring;
+        print $KNOWN $headstring if $KNOWN;
+    }
+
+    print $OUT $optstring; 
+    print $KNOWN $optstring if $KNOWN;
+}
+
+################################################
 sub checkProgress{
     return if not $progressbar;
     my $do_count_check = shift;
@@ -407,7 +379,7 @@ sub checkProgress{
     }elsif($do_count_check){#input from STDIN/pipe
         if (not $vars % 10000) {
             my $time = strftime( "%H:%M:%S", localtime );
-            $progressbar->message( "[INFO - $time] $vars variants processed" );
+            $progressbar->message( "[INFO - $time] $vars variants read" );
         }
     }
 }
@@ -995,13 +967,61 @@ DBSNP:      foreach my $d (@dbsnp){
                 if ( $dbsnp_to_info{$d}->{$field} ){
                     print STDERR "[$time] INFO - $field field found in $d...\n";
                     (my $desc = $dbsnp_to_info{$d}->{$field}->{Description}) =~ s/\"//;
-               
-                    $inf_head = "##INFO=<ID=AS_$field,Number=A,Type=$dbsnp_to_info{$d}->{$field}->{Type},Description=\"This annotation has been altered by annotateSnps.pl to ".
-                                "report consequences per ALT allele. Original description was as follows: $desc>";
-                    push @{$inf_heads{$type}}, $inf_head;
+                    my %d_info = 
+                    (
+                        ID          => $field,
+                        Number      => "A",
+                        Type        => $dbsnp_to_info{$d}->{$field}->{Type},
+                        Description => "This annotation has been altered by ".
+                                       "annotateSnps.pl to report consequences".
+                                       " per ALT allele. Original description ".
+                                       "was as follows: $desc",
+                    );
+                    push @{$inf_heads{$type}}, VcfhacksUtils::getInfoHeader(%d_info);
                     last DBSNP;#keep first
                 }
             }
+        }
+    }
+    if ($opts{clinvar_file}){
+        my %cvp_info = 
+        (
+            ID          => "ClinVarPathogenic",
+            Number      => "A",
+            Type        => "Integer",
+            Description => "For each allele, a value of 1 is given if the variant".
+                           " has ever been asserted 'Pathogenic' or 'Likely ".
+                           "pathogenic' by any submitter for any phenotype, and 0 ".
+                           "if present in ClinVar but does not meet this criteria",
+        );
+        my %cvc_info = 
+        (
+            ID          => "ClinVarConflicted",
+            Number      => "A",
+            Type        => "Integer",
+            Description => "For each allele, a value of 1 is given if the variant".
+                           " has ever been asserted 'Pathogenic' or 'Likely ".
+                           "pathogenic' by any submitter for any phenotype, and ".
+                           "has also been asserted 'Benign' or 'Likely benign' by ".
+                           "any submitter for any phenotype, and 0 if present in ".
+                           "ClinVar but does not meet this criteria",
+        );
+        my %cvt_info = 
+        (
+            ID          =>  "ClinVarTraits",
+            Number      =>  "A",
+            Type        =>  "String",
+            Description => "Any traits associated with this allele in ClinVar",
+        );
+        my %cvcs_info = 
+        (
+            ID          =>  "ClinVarClinicalSignificance",
+            Number      =>  "A",
+            Type        =>  "String",
+            Description => "Clinical significance terms for this allele given in ClinVar",
+        );
+        foreach my $infhash (\%cvp_info, \%cvc_info, \%cvt_info, \%cvcs_info){
+            push @{$inf_heads{cv}}, VcfhacksUtils::getInfoHeader(%{$infhash});
         }
     }
     return %inf_heads; 

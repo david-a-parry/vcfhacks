@@ -14,6 +14,7 @@ use FindBin qw($RealBin);
 use lib "$RealBin/lib";
 use VcfReader;
 use VcfhacksUtils;
+
 my @samples;
 my @evs;
 my @evs_pop = qw ( EVS_EA_AF EVS_AA_AF EVS_ALL_AF ) ;
@@ -239,7 +240,7 @@ sub checkProgress{
     }elsif($do_count_check){#input from STDIN/pipe
         if (not $vars % 10000) {
             my $time = strftime( "%H:%M:%S", localtime );
-            $progressbar->message( "[INFO - $time] $vars variants processed" );
+            $progressbar->message( "[INFO - $time] $vars variants read" );
         }
     }
 }
@@ -536,32 +537,37 @@ sub checkEvsInfoFields{
 sub writeHeaders{
     my $meta_head = join("\n", grep {/^##/} @$header);
     print $OUT "$meta_head\n";
-    print $OUT "##INFO=<ID=EVS_EA_AF,Number=A,Type=Float,"
-      ."Description=\"European American allele frequencies calculated from NHLBI EVS VCFs\">\n";
-    print $OUT "##INFO=<ID=EVS_AA_AF,Number=A,Type=Float,"
-      ."Description=\"African American allele frequencies calculated from NHLBI EVS VCFs\">\n";
-    print $OUT "##INFO=<ID=EVS_ALL_AF,Number=A,Type=Float,"
-      ."Description=\"Total allele frequencies calculated from NHLBI EVS VCFs\">\n";
-    print $OUT  "##filterOnEvsMaf.pl=\"";
-    my @opt_string = ();
-    foreach my $k (sort keys %opts){
-        if (not ref $opts{$k}){
-            push @opt_string, "$k=$opts{$k}";
-        }elsif (ref $opts{$k} eq 'SCALAR'){
-            if (defined ${$opts{$k}}){
-                push @opt_string, "$k=${$opts{$k}}";
-            }else{
-                push @opt_string, "$k=undef";
-            }
-        }elsif (ref $opts{$k} eq 'ARRAY'){
-            if (@{$opts{$k}}){
-                push @opt_string, "$k=" .join(",", @{$opts{$k}});
-            }else{
-                push @opt_string, "$k=undef";
-            }
-        }
+    my %ea_af = 
+    (
+        ID          => "EVS_EA_AF",
+        Number      => "A",
+        Type        => "Float",
+        Description => "European American allele frequencies calculated ".
+                       "from NHLBI EVS VCFs"
+    );
+    
+    my %aa_af = 
+    (
+        ID          => "EVS_AA_AF",
+        Number      => "A",
+        Type        => "Float",
+        Description => "African American allele frequencies calculated ".
+                       "from NHLBI EVS VCFs",
+    );
+
+    my %all_af = 
+    (
+        ID          => "EVS_ALL_AF",
+        Number      => "A",
+        Type        => "Float",
+        Description => "Total allele frequencies calculated from NHLBI ".
+                       "EVS VCFs",
+    );
+    foreach my $inf_hash( \%ea_af, \%aa_af, \%all_af){
+        print $OUT VcfhacksUtils::getInfoHeader(%{$inf_hash}) . "\n";
     }
-    print $OUT join( " ", @opt_string ) . "\"\n" . $header->[-1] . "\n";
+    my $optstring = VcfhacksUtils::getOptsVcfHeader(%opts);
+    print $OUT "$optstring\n$header->[-1]\n"; 
 }
 
 #####################################
