@@ -111,9 +111,10 @@ print $OUT join(" ", @opt_string) . "\"\n" .  $vcf_obj->getHeader(1);
 
 my $time = strftime("%H:%M:%S", localtime);
 print STDERR "CADD annotation commencing: $time\n";
-my $filtered = 0;
+my $n         = 0; #variants/lines
+my $scored    = 0;
 my $not_found = 0;
-my $n = 0;
+my $filtered  = 0;
 my $progressbar;
 my $next_update = 0;
 if (defined $opts{progress} and $total_vcf){
@@ -124,12 +125,13 @@ while (my $line = $vcf_obj->readLine){
     my %min_vars = $vcf_obj->minimizeAlleles();
     #get score for each allele or '-' if it can't be found
     my @cadd_scores = findCaddScore(\%min_vars, \%cadd_iters);
+    my @nf_alts = getAltsWithoutScore(\@cadd_scores, \%min_vars);
+    $not_found += @nf_alts;
+    $scored += @cadd_scores - @nf_alts;
     if (grep {/^\.$/} @cadd_scores){
         if ($opts{not_found}){
-            my @alts = getAltsWithoutScore(\@cadd_scores, \%min_vars);
-            foreach my $al (@alts){
+            foreach my $al (@nf_alts){
                 next if $min_vars{$al}->{ALT} eq '*';
-                $not_found++;
                 print $NOT_FOUND "$min_vars{$al}->{CHROM}\t$min_vars{$al}->{POS}".
                     "\t.\t$min_vars{$al}->{REF}\t$min_vars{$al}->{ALT}\n";
             }
@@ -211,12 +213,11 @@ if (not $opts{do_not_rank}){
 }
 $time = strftime("%H:%M:%S", localtime);
 print STDERR "Time finished: $time\n";
+print STDERR "$n variants processed\n";
+print STDERR "$scored alleles scored\n";
+print STDERR "$not_found alleles not found.\n";
 if ($opts{filter}){
-    print "$filtered variants filtered on CADD score.";
-    if ($not_found){
-        print " $not_found variants not found.";
-    }
-    print "\n";
+    print STDERR "$filtered variants filtered on CADD score.\n";
 }
 ##########################
 sub findCaddScore{
@@ -322,6 +323,9 @@ sub getAltsWithoutScore{
     }
     return @alts;
 }
+
+
+##########################
 =head1 NAME
 
 rankOnCaddScore.pl - annotate, rank and/or filter variants using CADD PHRED scores.
