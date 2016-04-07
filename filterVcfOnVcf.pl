@@ -12,6 +12,7 @@ use POSIX qw(strftime);
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
 use VcfReader;
+use VcfhacksUtils;
 
 =head1 NAME
 
@@ -340,29 +341,24 @@ else {
 }
 
 my $time = strftime( "%H:%M:%S", localtime );
-my $total_variants;
+my $total_variants = 0;
 print STDERR "[$time] Initializing input VCF...\n";
+my ($header, $first_var, $VCF)  = VcfReader::getHeaderAndFirstVariant($vcf);
 die "[ERROR] Header not ok for input ($vcf) "
-  if not VcfReader::checkHeader( vcf => $vcf );
+    if not VcfReader::checkHeader( header => $header );
 if ( defined $progress ) {
-    if ( $vcf eq "-" ) {
-        print STDERR "[WARNING] Can't use --progress option when input is from STDIN\n";
-        $progress = 0;
-    }
-    else {
+    if (-p $vcf or $vcf eq "-" ) {
+        print STDERR "\n[INFO] - Input is from STDIN or pipe - will report progress per 10000 variants. ";
+    }else {
         $total_variants = VcfReader::countVariants($vcf);
         print STDERR "[INFO] $vcf has $total_variants variants.\n";
     }
 }
-my %contigs = ();
-if ($forks){
-    %contigs       = VcfReader::getContigOrder( $vcf );
-}
 my %sample_to_col = ();
 if (@samples) {
     %sample_to_col = VcfReader::getSamples(
-        vcf         => $vcf,
         get_columns => 1,
+        header      => $header,
     );
     foreach my $samp (@samples){ 
         if (not exists $sample_to_col{$samp}){
@@ -438,10 +434,11 @@ my $prev_chrom = 0;
 my $progressbar;
 my $next_update = 0;
 if ($progress) {
+    my $count = $total_variants ? $total_variants * 3 : -1;
     $progressbar = Term::ProgressBar->new(
         {
             name  => "Filtering",
-            count => $total_variants * 3,
+            count => $count,
 
             #ETA   => "linear",
         }
@@ -456,19 +453,36 @@ my $filtered         = 0;
 my $n                = 0;
 my $variants_done    = 0;
 my @lines_to_process = ();
-my $VCF              = VcfReader::_openFileHandle($vcf);
 my %no_fork_args     = ();
 
 if ( $forks < 2 ) {
     %no_fork_args = VcfReader::getSearchArguments( $filter_vcf, $filter_vcf_index );
 }
+
+processLine($first_var);
 LINE: while ( my $line = <$VCF> ) {
-    next if $line =~ /^#/;
+    processLine($line);
+}
+process_buffer() if $forks > 1;
+if ($progressbar) {
+    $progressbar->update( $total_variants * 3 )
+      if $total_variants * 3 >= $next_update;
+    $progressbar->message( "[INFO - $time] $variants_done variants processed" );
+}
+$time = strftime( "%H:%M:%S", localtime );
+print STDERR "[$time] $filtered variants filtered, $kept printed ";
+print STDERR "($total_variants total)" if $total_variants;
+print STDERR "\n";
+
+################################################
+#####################SUBS#######################
+################################################
+sub processLine{
+    my $line = shift;
+    return if $line =~ /^#/;
     $variants_done++;
     $n++;
-    if ($progress) {
-        $next_update = $progressbar->update($n) if $n >= $next_update;
-    }
+    checkProgress(1);
     if ( $forks > 1 ) {
         push @lines_to_process, $line;
         if ($progressbar) {
@@ -491,25 +505,25 @@ LINE: while ( my $line = <$VCF> ) {
             $filtered++;
         }
         $n += 2;
-        if ($progressbar) {
-            $next_update = $progressbar->update($n) if $n >= $next_update;
+        checkProgress();
+    }
+}
+
+################################################
+sub checkProgress{
+    return if not $progressbar;
+    my $do_count_check = shift;
+    if ($total_variants > 0){
+        $next_update = $progressbar->update($n) if $n >= $next_update;
+    }elsif($do_count_check){#input from STDIN/pipe
+        if (not $variants_done % 10000) {
+            my $time = strftime( "%H:%M:%S", localtime );
+            $progressbar->message( "[INFO - $time] $variants_done variants processed" );
         }
     }
 }
-process_buffer() if $forks > 1;
-if ($progressbar) {
-    $progressbar->update( $total_variants * 3 )
-      if $total_variants * 3 >= $next_update;
-}
-close $VCF;
-close $OUT;
-$time = strftime( "%H:%M:%S", localtime );
-print STDERR "[$time] $filtered variants filtered, $kept printed ";
-print STDERR "($total_variants total)" if $total_variants;
-print STDERR "\n";
 
-################################################
-#####################SUBS#######################
+
 ################################################
 sub process_buffer {
     return if not @lines_to_process;
@@ -545,15 +559,14 @@ sub process_buffer {
             if ( defined($data_structure_reference) ) {
                 my %res = %{$data_structure_reference};
                 if ( ref $res{keep} eq 'ARRAY' ) {
-                    push @lines_to_print, \@{ $res{keep} } if @{ $res{keep} };
+                    $lines_to_print[$res{order}] = \@{ $res{keep} } if @{ $res{keep} };
                 }
                 if ( $res{filter} ) {
                     $filtered += $res{filter};
                 }
                 if ($progressbar) {
                     $n += $res{batch_size};
-                    $next_update = $progressbar->update($n)
-                      if $n >= $next_update;
+                    checkProgress();
                 }
             }
             else {
@@ -561,20 +574,24 @@ sub process_buffer {
             }
         }
     );
+    my $order = -1;
     foreach my $b (@batch) {
+        $order++;
         $pm->start() and next;
-        my %results = process_batch($b);
+        my %results = process_batch($b, $order);
         $pm->finish( 0, \%results );
     }
     $pm->wait_all_children;
 
     #print them
-    @lines_to_print =
-      sort { VcfReader::by_first_last_line( $a, $b, \%contigs ) }
-      @lines_to_print;
     if (@lines_to_print) {
         my $incr_per_batch = @lines_to_process / @lines_to_print;
         foreach my $batch (@lines_to_print) {
+            if (not defined $batch){
+                $n += $incr_per_batch;
+                checkProgress();
+                next;
+            }
             my $incr_per_line = $incr_per_batch / @$batch;
             foreach my $l (@$batch) {
                 if ( ref $l eq 'ARRAY' ) {
@@ -584,18 +601,15 @@ sub process_buffer {
                     print $OUT "$l\n";
                 }
                 $kept++;
-                if ($progressbar) {
-                    $n += $incr_per_line;
-                    $next_update = $progressbar->update($n)
-                      if $n >= $next_update;
-                }
+                $n += $incr_per_line;
+                checkProgress();
             }
         }
     }
     else {
         if ($progressbar) {
             $n += @lines_to_process;
-            $next_update = $progressbar->update($n) if $n >= $next_update;
+            checkProgress();
         }
     }
 }
@@ -604,9 +618,13 @@ sub process_buffer {
 sub process_batch {
 
     #filter a set of lines
-    my ($batch) = @_;
+    my ($batch, $order) = @_;
     my %sargs = VcfReader::getSearchArguments( $filter_vcf, $filter_vcf_index );
-    my %results = ( batch_size => scalar(@$batch) );
+    my %results = 
+    ( 
+        batch_size => scalar(@$batch),
+        order      => $order,
+    );
     foreach my $line ( @{$batch} ) {
         chomp $line;
         my @split = split( "\t", $line );
@@ -623,50 +641,56 @@ sub process_batch {
 
 ################################################
 sub printHeader{
-    my $meta_head = VcfReader::getMetaHeader($vcf);
+    my $meta_head = join("\n", grep {/^##/} @$header);
     print $OUT "$meta_head\n";
     
     foreach my $pop (@pop_acs){
         my $desc = $filter_info->{"AC_$pop"}->{Description} ;
         $desc =~ s/\"/\'/g;
-        print $OUT "##INFO=<ID=FVOV_AF_$pop,Number=A,Type=Float,Description=\"Putative population frequency calculated using AC_$pop and AN_$pop annotations from $filter_vcf. ".
-                    "Description of original AC_$pop was as follows: $desc\">\n";
         my $an_desc = $filter_info->{"AN_$pop"}->{Description} ;
-        print $OUT "##INFO=<ID=FVOV_AN_$pop,Number=A,Type=Integer,Description=\"Putative population allele number from $filter_vcf. ".
-                    "Description of original AN_$pop was as follows: $an_desc\">\n";
+        $an_desc =~ s/\"/\'/g;
+        my %af_info = 
+        (
+            ID          => "FVOV_AF_$pop",
+            Number      => "A",
+            Type        => "Float",
+            Description => "Putative population allele number from $filter_vcf. ".
+                           "Description of original AC_$pop was as follows: $desc",
+        );
+        my %ac_info = 
+        (
+            ID          => "FVOV_AN_$pop",
+            Number      => "A",
+            Type        => "Integer",
+            Description => "Putative population allele number from $filter_vcf. ".
+                           "Description of original AN_$pop was as follows: $an_desc",
+        );  
+        print $OUT VcfhacksUtils::getInfoHeader(%af_info) . "\n"; 
+        print $OUT VcfhacksUtils::getInfoHeader(%ac_info) . "\n"; 
+        
     }
     if ($annotate_af){
         $annotate_af =~ s/\s/_/g;#no white space in INFO field
+        my %af_info = 
+        (
+            ID          => "$annotate_af" ."_AF",
+            Number      => "A",
+            Type        => "Float",
+            Description => "Allele frequency calculated by filterVcfOnVcf.pl from $filter_vcf."
+        );
+        my %ac_info = 
+        (
+            ID          => "$annotate_af" ."_AN",
+            Number      => "A",
+            Type        => "Integer",
+            Description => "Allele number annotated by filterVcfOnVcf.pl from $filter_vcf.",
+        );  
         print STDERR "[INFO] Adding INFO fields $annotate_af" ."_AF and $annotate_af" ."_AN to output for allele frequency and allele numbers calculated from $filter_vcf...\n";
-        print $OUT "##INFO=<ID=$annotate_af" ."_AF,Number=A,Type=Float,Description=\"Allele frequency calculated by filterVcfOnVcf.pl from $filter_vcf.\">\n";
-        print $OUT "##INFO=<ID=$annotate_af" . "_AN,Number=A,Type=Integer,Description=\"Allele number annotated by filterVcfOnVcf.pl from $filter_vcf.\">\n";
+        print $OUT VcfhacksUtils::getInfoHeader(%af_info) . "\n"; 
+        print $OUT VcfhacksUtils::getInfoHeader(%ac_info) . "\n"; 
     }
-    print $OUT "##filterVcfOnVcf.pl=\"";
-    my @opt_string = ();
-    foreach my $k ( sort keys %opts ) {
-        if ( not ref $opts{$k} ) {
-            push @opt_string, "$k=$opts{$k}";
-        }
-        elsif ( ref $opts{$k} eq 'SCALAR' ) {
-            if ( defined ${ $opts{$k} } ) {
-                push @opt_string, "$k=${$opts{$k}}";
-            }
-            else {
-                push @opt_string, "$k=undef";
-            }
-        }
-        elsif ( ref $opts{$k} eq 'ARRAY' ) {
-            if ( @{ $opts{$k} } ) {
-                push @opt_string, "$k=" . join( ",", @{ $opts{$k} } );
-            }
-            else {
-                push @opt_string, "$k=undef";
-            }
-        }
-    } 
-    print $OUT join( " ", @opt_string ) . "\"\n";
-    my $col_header = VcfReader::getColumnHeader($vcf);
-    print $OUT "$col_header\n";
+    print $OUT VcfhacksUtils::getOptsVcfHeader(%opts) . "\n"; 
+    print $OUT "$header->[-1]\n";
 }
 ################################################
 sub filter_on_info_fields {
