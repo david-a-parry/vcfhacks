@@ -315,7 +315,7 @@ print STDERR
 ################################################
 sub processLine{
     my $line = shift;
-    next if $line =~ /^#/;
+    return if $line =~ /^#/;
     $n++;
     $vars++;
     checkProgress(1);#always check progress here

@@ -204,7 +204,7 @@ print STDERR "$filtered variants filtered, $kept variants retained.\n";
 ################################################
 sub processLine{
     my $line = shift;
-    next if $line =~ /^#/;
+    return if $line =~ /^#/;
     $n++;
     $vars++;
     checkProgress(1);
