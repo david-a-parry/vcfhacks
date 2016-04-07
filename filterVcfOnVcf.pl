@@ -518,7 +518,7 @@ sub checkProgress{
     }elsif($do_count_check){#input from STDIN/pipe
         if (not $variants_done % 10000) {
             my $time = strftime( "%H:%M:%S", localtime );
-            $progressbar->message( "[INFO - $time] $variants_done variants processed" );
+            $progressbar->message( "[INFO - $time] $variants_done variants read" );
         }
     }
 }
