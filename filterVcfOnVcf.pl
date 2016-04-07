@@ -342,16 +342,17 @@ else {
 
 my $time = strftime( "%H:%M:%S", localtime );
 my $total_variants = 0;
-print STDERR "[$time] Initializing input VCF...\n";
+print STDERR "[$time] INFO - Initializing input VCF...\n";
 my ($header, $first_var, $VCF)  = VcfReader::getHeaderAndFirstVariant($vcf);
 die "[ERROR] Header not ok for input ($vcf) "
     if not VcfReader::checkHeader( header => $header );
 if ( defined $progress ) {
+    $time = strftime( "%H:%M:%S", localtime );
     if (-p $vcf or $vcf eq "-" ) {
-        print STDERR "\n[INFO] - Input is from STDIN or pipe - will report progress per 10000 variants. ";
+        print STDERR "\n[$time] INFO - Input is from STDIN or pipe - will report progress per 10000 variants. ";
     }else {
         $total_variants = VcfReader::countVariants($vcf);
-        print STDERR "[INFO] $vcf has $total_variants variants.\n";
+        print STDERR "[$time] - INFO $vcf has $total_variants variants.\n";
     }
 }
 my %sample_to_col = ();
@@ -362,17 +363,17 @@ if (@samples) {
     );
     foreach my $samp (@samples){ 
         if (not exists $sample_to_col{$samp}){
-            die "[ERROR] Sample $samp was not found in input VCF ($vcf)\n"; 
+            die "[$time] ERROR - Sample $samp was not found in input VCF ($vcf)\n"; 
         }
     }
 }
 
 $time = strftime( "%H:%M:%S", localtime );
-print STDERR "\n[$time] Finished initializing input VCF\n";
+print STDERR "[$time] INFO - Finished initializing input VCF\n";
 
-print STDERR "[$time] Initializing filter VCF ($filter_vcf)...\n";
+print STDERR "[$time] INFO - Initializing filter VCF ($filter_vcf)...\n";
 my ($filter_vcf_index, $filter_vcf_samples, $filter_info) = initializeFilterVcfs( $filter_vcf );
-print STDERR "[$time] Finished initializing filter VCF.\n";
+print STDERR "[$time] INFO - Finished initializing filter VCF.\n";
 if ($filter_with_info) {
     check_filter_vcf_info_fields();
 }
@@ -445,7 +446,7 @@ if ($progress) {
     );
 }else{
     $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "[$time] Filtering started.\n";
+    print STDERR "[$time] INFO - Filtering started.\n";
 }
 
 my $kept             = 0;
@@ -465,12 +466,13 @@ LINE: while ( my $line = <$VCF> ) {
 }
 process_buffer() if $forks > 1;
 if ($progressbar) {
+    $time = strftime( "%H:%M:%S", localtime );
     $progressbar->update( $total_variants * 3 )
       if $total_variants * 3 >= $next_update;
     $progressbar->message( "[INFO - $time] $variants_done variants processed" );
 }
 $time = strftime( "%H:%M:%S", localtime );
-print STDERR "[$time] $filtered variants filtered, $kept printed ";
+print STDERR "[$time] INFO - $filtered variants filtered, $kept printed ";
 print STDERR "($total_variants total)" if $total_variants;
 print STDERR "\n";
 
@@ -607,10 +609,8 @@ sub process_buffer {
         }
     }
     else {
-        if ($progressbar) {
-            $n += @lines_to_process;
-            checkProgress();
-        }
+        $n += @lines_to_process;
+        checkProgress();
     }
 }
 

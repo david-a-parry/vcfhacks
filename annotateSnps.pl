@@ -111,7 +111,7 @@ my $found            = 0;    #variants that match a known SNP
 my $printed_to_known = 0;
 my $total_vcf        = 0;
 my $time = strftime( "%H:%M:%S", localtime );
-print STDERR "[$time] INFO - Initializing input VCF... ";
+print STDERR "[$time] INFO - Initializing input VCF...\n";
 
 my ($header, $first_var, $VCF)  = VcfReader::getHeaderAndFirstVariant($opts{input});
 die "Header not ok for input ($opts{input}) "
@@ -119,10 +119,10 @@ die "Header not ok for input ($opts{input}) "
 if ( defined $opts{progress} and not -p $opts{input} and  $opts{input} ne '-') {
     $total_vcf = VcfReader::countVariants( $opts{input} );
     $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "\n[$time] INFO - $opts{input} has $total_vcf variants. ";
+    print STDERR "\n[$time] INFO - $opts{input} has $total_vcf variants.\n";
 }elsif(defined $opts{progress}){
     $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "\n[$time] INFO - Input is from STDIN or pipe - will report progress per 10000 variants. ";
+    print STDERR "\n[$time] INFO - Input is from STDIN or pipe - will report progress per 10000 variants.\n";
 }
 my %sample_to_col = ();
 if (@samples) {
@@ -133,7 +133,7 @@ if (@samples) {
 }
 
 $time = strftime( "%H:%M:%S", localtime );
-print STDERR "\n[$time] INFO - Finished initializing input VCF\n";
+print STDERR "[$time] INFO - Finished initializing input VCF\n";
 
 if ($opts{clinvar_file}){
     $time = strftime( "%H:%M:%S", localtime );
@@ -295,6 +295,7 @@ process_buffer() if $forks > 1;
 close $OUT;
 close $KNOWN if $KNOWN;
 if ($progressbar){
+    $time = strftime( "%H:%M:%S", localtime );
     $progressbar->message( "[INFO - $time] $vars variants processed" );
     $progressbar->update($prog_total) if $prog_total >= $next_update;
 }

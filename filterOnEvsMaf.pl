@@ -70,17 +70,17 @@ if ($opts{output}){
 }
 my $time = strftime("%H:%M:%S", localtime);
 my $total_vcf = -1;
-print STDERR "[$time] Initializing input VCF... ";
+print STDERR "[$time] Initializing input VCF...\n";
 my ($header, $first_var, $VCF)  = VcfReader::getHeaderAndFirstVariant($opts{input});
 die "Header not ok for input ($opts{input}) "
     if not VcfReader::checkHeader( header => $header );
 if ( defined $opts{Progress} ) {
+    $time = strftime( "%H:%M:%S", localtime );
     if (-p $opts{input} or $opts{input} eq "-" ) {
-        $time = strftime( "%H:%M:%S", localtime );
         print STDERR "\n[$time] INFO - Input is from STDIN or pipe - will report progress per 10000 variants. ";
     }else {
         $total_vcf= VcfReader::countVariants($opts{input});
-        print STDERR "$opts{input} has $total_vcf variants. ";
+        print STDERR "[$time] INFO - $opts{input} has $total_vcf variants.\n";
     }
 }
 my %sample_to_col = ();
@@ -92,7 +92,7 @@ if (@samples) {
 }
 
 $time = strftime( "%H:%M:%S", localtime );
-print STDERR "\n[$time] Finished initializing input VCF\n";
+print STDERR "[$time] Finished initializing input VCF\n";
 
 if ($opts{dir}){
     opendir (my $DIR, $opts{dir}) or die "Can't read directory $opts{dir}: $!\n";
@@ -189,6 +189,7 @@ process_buffer() if $forks > 1;
 close $VCF;
 close $OUT;
 if ($progressbar){
+    $time = strftime("%H:%M:%S", localtime);
     $progressbar->message( "[INFO - $time] $vars variants processed" );
     $progressbar->update($prog_total) if $prog_total >= $next_update;
 }
