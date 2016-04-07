@@ -13,6 +13,7 @@ use POSIX qw/strftime/;
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
 use VcfReader;
+use VcfhacksUtils;
 my @samples;
 my @evs;
 my @evs_pop = qw ( EVS_EA_AF EVS_AA_AF EVS_ALL_AF ) ;
@@ -183,11 +184,13 @@ VAR: while (my $line = <$VCF> ) {
     processLine($line);
 }
 
-close $VCF;
 process_buffer() if $forks > 1;
+close $VCF;
 close $OUT;
-$progressbar->message( "[INFO - $time] $vars variants processed" );
-$progressbar->update($n) if $n >= $next_update;
+if ($progressbar){
+    $progressbar->message( "[INFO - $time] $vars variants processed" );
+    $progressbar->update($prog_total) if $prog_total >= $next_update;
+}
 
 $time = strftime("%H:%M:%S", localtime);
 print STDERR "Time finished: $time\n";
@@ -203,7 +206,7 @@ sub processLine{
     next if $line =~ /^#/;
     $n++;
     $vars++;
-    checkProgress();
+    checkProgress(1);
     if ($forks > 1){
         push @lines_to_process, $line;
         if ( @lines_to_process >= $buffer_size ) {
@@ -215,7 +218,10 @@ sub processLine{
         #our VcfReader methods should be more efficient on pre-split lines
         my @split_line = split( "\t", $line );
         my %res = filter_on_evs_maf( \@split_line, \%no_fork_args);
-        print $OUT "$line\n" if $res{keep};
+        if ($res{keep}){
+            print $OUT join("\t", @{$res{keep}}) ."\n"; 
+            $kept++;
+        }
         $kept++ if $res{keep};
         $found++ if $res{found};
         $filtered++ if $res{filter};
@@ -227,9 +233,10 @@ sub processLine{
 ################################################
 sub checkProgress{
     return if not $progressbar;
+    my $do_count_check = shift;
     if ($prog_total > 0){
         $next_update = $progressbar->update($n) if $n >= $next_update;
-    }else{#input from STDIN/pipe
+    }elsif($do_count_check){#input from STDIN/pipe
         if (not $vars % 10000) {
             my $time = strftime( "%H:%M:%S", localtime );
             $progressbar->message( "[INFO - $time] $vars variants processed" );
@@ -294,11 +301,11 @@ sub process_buffer {
             }
         }
     );
-    my $order = 0;
+    my $order = -1;
     foreach my $b (@batch) {
+        $order++;
         $pm->start() and next;
         my %results = process_batch($b, $order);
-        $order++;
         $pm->finish( 0, \%results );
     }
     $pm->wait_all_children;
@@ -307,7 +314,11 @@ sub process_buffer {
     if (@lines_to_print){
         my $incr_per_batch = @lines_to_process / @lines_to_print;
         foreach my $batch (@lines_to_print) {
-            next if not defined $batch;
+            if (not defined $batch){
+                $n += $incr_per_batch;
+                checkProgress();
+                next;
+            }
             my $incr_per_line = $incr_per_batch / @$batch;
             foreach my $l (@$batch) {
                 if ( ref $l eq 'ARRAY' ) {
@@ -317,10 +328,8 @@ sub process_buffer {
                     print $OUT "$l\n";
                 }
                 $kept++;
-                if ($progressbar) {
-                    $n += $incr_per_line;
-                    checkProgress();
-                }
+                $n += $incr_per_line;
+                checkProgress();
             }
         }
     }else{
