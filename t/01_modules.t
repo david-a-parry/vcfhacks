@@ -12,7 +12,7 @@ require_ok("ClinVarReader");
 require_ok("ParsePedfile");
 require_ok("VcfhacksUtils");
 require_ok("TextToExcel");
-require_ok("Tabix");
+require_ok("Bio::DB::HTS::Tabix");
 require_ok("SortGenomicCoordinates");
 require_ok("IdParser");
 require_ok("Bio::SeqIO::entrezgene");
