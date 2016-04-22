@@ -390,13 +390,15 @@ sub parseAsList{
                         }
                         
                         my $joined = join("|", @conv);
-                        if ($joined =~ /\s/){
+                        if ($joined =~ /[\s\,]/){
+                            $joined =~ s/"/'/g;
                             push @single_anno, "\"$joined\"";
                         }else{
                             push @single_anno, $joined;
                         }
                     }else{
-                        if ($gene_annot->{lc($annot)} =~ /\s/){
+                        if ($gene_annot->{lc($annot)} =~ /[\s\,]/){
+                            $gene_annot->{lc($annot)} =~ s/"/'/g;
                             push @single_anno, "\"$gene_annot->{lc($annot)}\"";
                         }else{
                             push @single_anno, "$gene_annot->{lc($annot)}";
