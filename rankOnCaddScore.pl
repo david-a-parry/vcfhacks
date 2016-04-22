@@ -126,15 +126,13 @@ while (my $line = $vcf_obj->readLine){
     #get score for each allele or '-' if it can't be found
     my @cadd_scores = findCaddScore(\%min_vars, \%cadd_iters);
     my @nf_alts = getAltsWithoutScore(\@cadd_scores, \%min_vars);
-    $not_found += @nf_alts;
     $scored += @cadd_scores - @nf_alts;
-    if (grep {/^\.$/} @cadd_scores){
+    foreach my $al (@nf_alts){
+        next if $min_vars{$al}->{ALT} eq '*';
+        $not_found++;
         if ($opts{not_found}){
-            foreach my $al (@nf_alts){
-                next if $min_vars{$al}->{ALT} eq '*';
-                print $NOT_FOUND "$min_vars{$al}->{CHROM}\t$min_vars{$al}->{POS}".
-                    "\t.\t$min_vars{$al}->{REF}\t$min_vars{$al}->{ALT}\n";
-            }
+            print $NOT_FOUND "$min_vars{$al}->{CHROM}\t$min_vars{$al}->{POS}".
+                "\t.\t$min_vars{$al}->{REF}\t$min_vars{$al}->{ALT}\n";
         }
     }
     my $max = ( sort {$b <=> $a} 
@@ -312,7 +310,7 @@ sub reduceRefAlt{
 
 ##########################
 sub getAltsWithoutScore{
-    my ($cadd_scores, $vars) = @_;
+    my ($cadd_scores) = @_;
     my @alts = ();
     for (my $i = 0; $i < @$cadd_scores; $i++ ){
         if ($cadd_scores->[$i] eq '.'){
