@@ -8,7 +8,7 @@ use Getopt::Long;
 use Pod::Usage;
 use Data::Dumper;
 use Term::ProgressBar;
-use Tabix;
+use Bio::DB::HTS::Tabix; 
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
 use ParseVCF;
@@ -66,7 +66,7 @@ foreach my $dir (@{$opts{dir}}){
 }
 foreach my $cadd_file (@{$opts{cadd_file}}){
     checkCaddFile($cadd_file);
-    $cadd_iters{$cadd_file} = Tabix->new(-data =>  $cadd_file, -index => "$cadd_file.tbi");
+    $cadd_iters{$cadd_file} = Bio::DB::HTS::Tabix->new(filename =>  $cadd_file);
 }
 
 my $vcf_obj = ParseVCF->new(file=> $opts{input});
@@ -223,16 +223,12 @@ if ($opts{filter}){
 sub findCaddScore{
     my ($vars, $tabix_iter) = @_;
     my @scores = ();#return score for each allele
-ALLELE:    foreach my $al (sort {$a<=>$b} keys %{$vars}){
+ALLELE: foreach my $al (sort {$a<=>$b} keys %{$vars}){
         foreach my $iter (keys %{$tabix_iter}){
-            my $it = $tabix_iter->{$iter}->query
-                (
-                $vars->{$al}->{CHROM},
-                $vars->{$al}->{POS} -1, 
-                $vars->{$al}->{POS},
-                );
-            next if not defined $it->{_};#not found
-            while (my $result = $tabix_iter->{$iter}->read($it)){
+                my $it = $tabix_iter->{$iter}->query
+                    ("$vars->{$al}->{CHROM}:$vars->{$al}->{POS}-" .  
+                    ($vars->{$al}->{POS} + 1) );
+            while (my $result = $it->next){
                 chomp($result);
                 my @res = split("\t", $result);
                 next if $res[0] ne $vars->{$al}->{CHROM};

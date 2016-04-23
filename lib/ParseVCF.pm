@@ -693,9 +693,9 @@ sub searchForPosition{
     return if not exists $args{pos} or not exists $args{chrom};
     #if compressed assume bgzip compression and try to read with tabix
     if ($self->{_file} =~ /\.gz$/){
-        eval "use Tabix; 1" 
-            or croak "Tabix module is not installed and VCF file $self->{_file} appears to be bgzip compressed.  ".
-            "  Please install Tabix.pm in order to search compressed VCFs.\n";
+        eval "use Bio::DB::HTS::Tabix; 1" 
+            or croak "Bio::DB::HTS::Tabix module is not installed and VCF file $self->{_file} appears to be bgzip compressed.  ".
+            "  Please install Bio::DB::HTS::Tabix in order to search compressed VCFs.\n";
         if (not -e "$self->{_index}"){
             $self->setTabix if not $self->{_tabix}; 
             print STDERR "Indexing $self->{_file} with tabix.\n";
@@ -703,12 +703,11 @@ sub searchForPosition{
             croak "Tabix indexing failed, code $?: $er\n" if $?;
         }
         if (not $self->{_tabixIterator}){
-            $self->{_tabixIterator} = Tabix->new(-data =>  $self->{_file}, -index => $self->{_index});
+            $self->{_tabixIterator} = Bio::DB::HTS::Tabix->new(filename =>  $self->{_file});
         }
-        my $iter = $self->{_tabixIterator}->query($args{chrom}, $args{pos} -1, $args{pos});
-        return if not defined $iter->{_}; #$iter->{_} will be undef if our chromosome isn't in the vcf file
+        my $iter = $self->{_tabixIterator}->query("$args{chrom}:$args{pos}-" .  ($args{pos} + 1) );
         my @matches;
-        while (my $result = $self->{_tabixIterator} ->read($iter)){ 
+        while (my $result = $iter->next){
             push @matches, $result;
         }
         $self->{_searchMatches} = \@matches;
