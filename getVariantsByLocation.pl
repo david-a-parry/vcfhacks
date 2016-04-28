@@ -525,9 +525,14 @@ sub get_region_from_gene{
             print STDERR "Identifying Ensembl gene via transcript cross-reference...\n";
         }
         my $transcript = $restQuery->getTranscriptViaXreg($id, $opts{species});
-        if ($transcript and ref $transcript eq 'HASH'){
-            if (exists $transcript->{id}){
-                $gene_hash = geneFromEnst($transcript->{id});
+        if ($transcript and ref $transcript eq 'ARRAY'){
+            if (@$transcript > 1){
+                print STDERR "WARNING: Multiple transcripts identified by ".
+                  "cross-reference search for $id - picking the first.\n";
+            }
+            my $tr = $transcript->[0];
+            if (exists $tr->{id}){
+                $gene_hash = geneFromEnst($tr->{id});
             }
         }else{
             if (not $opts{s}){
