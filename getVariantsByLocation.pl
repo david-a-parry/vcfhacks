@@ -174,7 +174,7 @@ GetOptions
     'e|matching',
     'q|quiet',
     's|silent',
-    'species',
+    'species=s',
     'd|defaultRestServer',
     'h|?|help',
     'm|manual',
