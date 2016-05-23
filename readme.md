@@ -24,7 +24,7 @@ The .pl scripts must remain in the same directory as the 'lib' and 'data' folder
 
 To run the scripts either add the enclosing directory to your PATH and make sure the scripts are executable (e.g. 'chmod +x vcfhacks/*.pl'), run the scripts directly from the folder (e.g. ./annotateSnps.pl) or run each script using 'perl [location of script]' followed by the required arguments. Help information is available for most scripts by running the script with either '--help' or '--manual' options. 
 
-If you want to use scripts to search bgzip compressed VCFs or use rankOnCaddScore.pl you will also need to build and install the Tabix.pm perl module by Heng Li. From the vcfhacks directory:
+If you want to use scripts to search bgzip compressed VCFs or use rankOnCaddScore.pl, as of version 0.2.2 you will also need to build and install the Bio::DB::HTS::Tabix. Note, that this replaces the Tabix.pm perl module used in previous versions of these scripts. For pre-v0.2.2 versions installation of the Tabix.pm module could be acheived using the following command:
 
     cd lib/Tabix/
     make
@@ -41,6 +41,7 @@ Other perl modules required by these scripts are installable via CPAN - perl wil
     Parallel::ForkManager
     Sys::CPU
     Term::ProgressBar
+    Bio::DB::HTS::Tabix
     LWP::Simple (geneAnnotator.pl only)
     HTTP::Tiny (geneAnnotator.pl for remote retrieval of gene IDs only)
     JSON (geneAnnotator.pl for remote retrieval of gene IDs only)
