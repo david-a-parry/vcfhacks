@@ -3236,7 +3236,7 @@ sub searchByRegionCompressed{
             croak "Tabix indexing failed? $index does not exist " if (not -e $index);
             print STDERR " Done.\n";
         }
-        $tabixIterator = Tabix->new(-data =>  $args{vcf}, -index => $index) ;
+        $tabixIterator = Bio::DB::HTS::Tabix->new(filename =>  $args{vcf}) ;
     }
     my $iter = $tabixIterator->query("$args{chrom}:$args{start}-" . ($args{end} + 1) );
     my @matches = ();
