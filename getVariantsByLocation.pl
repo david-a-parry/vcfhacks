@@ -115,7 +115,7 @@ Show this script's manual page.
 
 Outputs variants from a VCF that overlap given regions. Regions can be specified on the commandline or in a BED file. Alternatively, another VCF file can be supplied in order to output overlapping or matching variants or gene IDs can be supplied to output variants that lie withing those genes.
  
-The VCF input must be sorted in coordinate order but can be either uncompressed (a .vridx index file will be created if it does not exist) or bgzip compressed (a tabix index will be created if it does not exist). Use with bgzip compressed VCFs requires Tabix.pm to be installed and tabix index creation requires the tabix executable to be installed and in your PATH.
+The VCF input must be sorted in coordinate order but can be either uncompressed (a .vridx index file will be created if it does not exist) or bgzip compressed (a tabix index will be created if it does not exist). Use with bgzip compressed VCFs requires the Bio::DB::HTS::Tabix module to be installed and tabix index creation requires the tabix executable to be installed and in your PATH.
 
 
 =cut
