@@ -3,7 +3,6 @@ use strict;
 use warnings;
 use Getopt::Long;
 use Pod::Usage;
-use Term::ProgressBar;
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
 use VcfReader;

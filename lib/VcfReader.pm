@@ -590,18 +590,18 @@ sub getContigOrder{
     }
     print STDERR "Failed to retrieve contigs from header - reading/creating index.\n";
     if ($vcf =~ /\.(b){0,1}gz$/){
-        eval "use Tabix; 1" 
-            or croak "Tabix module is not installed and VCF file $vcf appears to be (b)gzip compressed.  ".
-            "  Please install Tabix.pm in order to quickly extract contigs from bgzip compressed VCFs.\n";
+        eval "use Bio::DB::HTS::Tabix; 1" 
+            or croak "Bio::DB::HTS::Tabix module is not installed and VCF file $vcf appears to be (b)gzip compressed.  ".
+            "  Please install Bio::DB::HTS::Tabix in order to quickly extract contigs from bgzip compressed VCFs.\n";
         my $index = "$vcf.tbi";
         if (not -e $index){
             print STDERR "Indexing $vcf with tabix...\n";
             indexVcf($vcf);
             croak "Tabix indexing failed? $index does not exist " if (not -e $index);
         }
-        my $t = getTabixIterator($vcf, $index);
+        my $t = getTabixIterator($vcf);
         my $n = 0;
-        %contigs = map {$_ => $n++} $t->getnames();
+        %contigs = map {$_ => $n++} @{$t->seqnames()};
     }else{
         my %idx = readIndex($vcf);
         foreach my $k (keys %idx){
@@ -893,12 +893,12 @@ sub readIndex{
         }else{
             carp "\nWARNING: Tabix index $index is older than $vcf " if (-M $vcf) < (-M $index); 
         }
-        eval "use Tabix; 1" 
-            or croak "Tabix module is not installed and VCF file $vcf appears to be (b)gzip compressed.  ".
-            "  Please install Tabix.pm in order to read index from bgzip compressed VCFs.\n";
-        my $t = getTabixIterator($vcf, $index);
+        eval "use Bio::DB::HTS::Tabix; 1" 
+            or croak "Bio::DB::HTS::Tabix module is not installed and VCF file $vcf appears to be (b)gzip compressed.  ".
+            "  Please install Bio::DB::HTS::Tabix in order to read index from bgzip compressed VCFs.\n";
+        my $t = getTabixIterator($vcf);
         my $n = 0;
-        %contigs = map {$_ => $n++} $t->getnames();
+        %contigs = map {$_ => $n++} @{$t->seqnames()};
         return %contigs;
     }
     my $index = "$vcf.vridx"; 
@@ -3026,17 +3026,16 @@ sub by_first_last_line{
 For a given VCF returns a tabix iterator object generated using Tabix.pm. The first argument must be the filename of a VCF and the optional second argument may be the name of the index if not the same as the VCF filename plus '.tbi'.
 
  my $iter = VcfReader::getTabixIterator('file.vcf.gz');
- my $i = $tabixIterator->query('chr1',  10001, 10002);
- while (my $line =  $iter->read($i)){
+ my $i = $iter->query('chr1:10001-10002");
+ while (my $line =  $iter->next ){
     #do something with line...
  }
 
 =cut
 sub getTabixIterator{
-    my ($vcf, $index) = @_;
-    eval "use Tabix; 1" or croak "Tabix module is not installed - can't use getTabixIterator method ";
-    $index ||= "$vcf.tbi";
-    return Tabix->new(-data =>  $vcf, -index => $index) ;
+    my $vcf = shift;
+    eval "use Bio::DB::HTS::Tabix; 1" or croak "Bio::DB::HTS::Tabix module is not installed - can't use getTabixIterator method ";
+    return Bio::DB::HTS::Tabix->new(filename =>  $vcf);
 }
 
 =item B<getSearchArguments>
@@ -3062,9 +3061,9 @@ sub getSearchArguments{
 #or tabix_iterator for bgzip compressed files
     my ($vcf, $contig_index) = @_;
     if ($vcf =~ /\.(b){0,1}gz$/){ 
-        eval "use Tabix; 1" 
-            or croak "Tabix module is not installed and VCF file $vcf appears to be (b)gzip compressed.  ".
-            "  Please install Tabix.pm in order to search bgzip compressed VCFs.\n";
+        eval "use Bio::DB::HTS::Tabix; 1" 
+            or croak "Bio::DB::HTS::Tabix module is not installed and VCF file $vcf appears to be (b)gzip compressed.  ".
+            "  Please install Bio::DB::HTS::Tabix in order to search bgzip compressed VCFs.\n";
         my $index = "$vcf.tbi";
         if (not -e $index){
             print STDERR "Indexing $vcf with tabix...";
@@ -3072,7 +3071,7 @@ sub getSearchArguments{
             croak "Tabix indexing failed? $index does not exist " if (not -e $index);
             print STDERR " Done.\n";
         }
-        return (tabix_iterator => getTabixIterator($vcf, $index));
+        return (tabix_iterator => getTabixIterator($vcf));
     }else{
         my $FH = _openFileHandle($vcf);
         if ($contig_index){
@@ -3222,9 +3221,9 @@ sub searchByRegionCompressed{
     croak "end argument is required for searchByRegionCompressed method " if not exists $args{end};
     croak "vcf or tabix_iterator arguments are required for searchForPositionCompressed method " 
         if not exists $args{vcf} and not exists $args{tabix_iterator};
-    eval "use Tabix; 1" 
-        or croak "Tabix module is not installed and VCF file $args{vcf} appears to be (b)gzip compressed.  ".
-        "  Please install Tabix.pm in order to search bgzip compressed VCFs.\n";
+    eval "use Bio::DB::HTS::Tabix; 1" 
+        or croak "Bio::DB::HTS::Tabix module is not installed and VCF file $args{vcf} appears to be (b)gzip compressed.  ".
+        "  Please install Bio::DB::HTS::Tabix in order to search bgzip compressed VCFs.\n";
     
     my $tabixIterator; 
     if ($args{tabix_iterator}){
@@ -3237,12 +3236,11 @@ sub searchByRegionCompressed{
             croak "Tabix indexing failed? $index does not exist " if (not -e $index);
             print STDERR " Done.\n";
         }
-        $tabixIterator = Tabix->new(-data =>  $args{vcf}, -index => $index) ;
+        $tabixIterator = Bio::DB::HTS::Tabix->new(filename =>  $args{vcf}) ;
     }
-    my $iter = $tabixIterator->query($args{chrom}, $args{start} -1, $args{end});
-    return if not defined $iter->{_}; #$iter->{_} will be undef if our chromosome isn't in the vcf file
+    my $iter = $tabixIterator->query("$args{chrom}:$args{start}-" . ($args{end} + 1) );
     my @matches = ();
-    while (my $m =  $tabixIterator->read($iter)){
+    while (my $m =  $iter->next() ){ 
         push @matches, $m;
     } 
     return @matches if defined wantarray;
@@ -3507,9 +3505,9 @@ sub searchForPositionCompressed{
     croak "pos argument is required for searchForPositionCompressed method " if not exists $args{pos};
     croak "vcf or tabix_iterator arguments are required for searchForPositionCompressed method " 
         if not exists $args{vcf} and not exists $args{tabix_iterator};
-    eval "use Tabix; 1" 
+    eval "use Bio::DB::HTS::Tabix; 1" 
         or croak "Tabix module is not installed and VCF file $args{vcf} appears to be (b)gzip compressed.  ".
-        "  Please install Tabix.pm in order to search bgzip compressed VCFs.\n";
+        "  Please install Bio::DB::HTS::Tabix in order to search bgzip compressed VCFs.\n";
     
     my $tabixIterator; 
     if ($args{tabix_iterator}){
@@ -3522,12 +3520,11 @@ sub searchForPositionCompressed{
             croak "Tabix indexing failed? $index does not exist " if (not -e $index);
             print STDERR " Done.\n";
         }
-        $tabixIterator = Tabix->new(-data =>  $args{vcf}, -index => $index) ;
+        $tabixIterator = Bio::DB::HTS::Tabix->new(filename =>  $args{vcf}) ;
     }
-    my $iter = $tabixIterator->query($args{chrom}, $args{pos} -1, $args{pos});
-    return if not defined $iter->{_}; #$iter->{_} will be undef if our chromosome isn't in the vcf file
+    my $iter = $tabixIterator->query("$args{chrom}:$args{pos}-" .  ($args{pos} + 1) );
     my @matches = ();
-    while (my $m =  $tabixIterator->read($iter)){
+    while (my $m =  $iter->next()){
         push @matches, $m;
     } 
     return @matches if defined wantarray;

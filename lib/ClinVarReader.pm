@@ -71,7 +71,7 @@ use strict;
 use warnings;
 use Carp;
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
-use Tabix;
+use Bio::DB::HTS::Tabix; 
 
 =item B<checkClinVarFile>
 
@@ -198,7 +198,7 @@ sub getClinVarSearchArgs{
     #use bgzip compressed version of clinvar file from https://github.com/macarthur-lab/clinvar
     my ($bgz, $clinVarCols) = checkClinVarFile($file);
     my $index = "$bgz.tbi";
-    my $iterator = Tabix->new(-data =>  $bgz, -index => $index) ;
+    my $iterator = Bio::DB::HTS::Tabix->new(filename =>  $bgz);
     my %sargs = ( tabix_iterator => $iterator, col_hash => $clinVarCols ); 
     return %sargs;
 }
@@ -253,15 +253,11 @@ sub searchClinVar {
         $args{end} = $args{start};
     }
 
-    my $iter = $args{tabix_iterator}
-      ->query( $args{chrom}, $args{start} - 1, $args{end} );
-    return
-      if not defined $iter->{_}
-      ;    #$iter->{_} will be undef if our chromosome isn't in the vcf file
+    my $iter = $args{tabix_iterator}->query("$args{chrom}:$args{start}-" . ($args{end} + 1) );
     my @matches = ();
-    while ( my $m = $args{tabix_iterator}->read($iter) ) {
+    while (my $m =  $iter->next() ){ 
         push @matches, $m;
-    }
+    } 
     return @matches if defined wantarray;
     carp "searchClinVar called in void context ";
 }

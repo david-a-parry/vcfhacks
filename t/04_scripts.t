@@ -9,7 +9,7 @@ use lib "$RealBin/../lib/BioASN1EntrezGene/lib";
 BEGIN 
 { 
     use_ok("VcfReader");
-    use_ok("Tabix");
+    use_ok("Bio::DB::HTS::Tabix");
 }
 my $n_tests = 2;
 
