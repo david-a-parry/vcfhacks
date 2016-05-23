@@ -86,7 +86,7 @@ You may then want to submit your 'not_found_cadd_scores.tsv' to http://cadd.gs.w
 
 Having filtered/ranked you variant calls you may want to annotate gene information using geneAnnotator.pl. If you downloaded a release of 0.2.0 or higher you should already have the geneAnnotatorDb folder in the data subdirectory. If instead you retrieved the scripts by cloning this repository you may either create your own database with geneAnnotator or download a pre-built database from: 
 
-    https://github.com/gantzgraf/vcfhacks/releases/tag/v.0.1.18
+    https://github.com/gantzgraf/vcfhacks/releases/latest
 
 Remember to unzip the database and place the geneAnnotatorDb folder within the data directory in your vcfhacks folder if you have downloaded the pre-built version. Alternatively pass the location of the geneAnnotatorDb folder to the --directory argument when running geneAnnotator. Annotation requires gene IDs annotated using Ensembl's variant effect predictor or SnpEff. 
 
