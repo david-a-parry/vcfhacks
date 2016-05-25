@@ -37,11 +37,11 @@ Output file name. Defaults to [input name].xlsx (or [input name].txt if --text_o
 
 =item B<-u    --summarise>
 
-Use this flag to summarise the number of alleles and genotypes found in samples rather than outputting genotype columns for each individual sample. If sample IDs are specified with --samples or --pedigree options only these samples will be counted in the summarised allele and genotype counts. This can be overriden by adding the word 'all' after this argument, in which case all samples in the VCF will be summarised and any samples specified by --samples or --pedigree options will still have their individual genotypes written to the output.
+Use this flag to summarise the number of alleles and genotypes found in samples rather than outputting genotype columns for each individual sample. If sample IDs are specified with --samples or --pedigree options only these samples will be counted in the summarised allele and genotype counts. This can be overriden by adding the word 'all' after this argument, in which case all samples in the VCF will be summarised and any samples specified by --samples or --pedigree options will still have their individual genotypes written to the output. Alternatively you may specify the word 'and' after this argument if you are not using the --samples argument in order to print both a summary of all samples in addition to columns for the individual genotypes, allele depths etc. for every sample in the VCF.
 
 =item B<--contains_variant>
 
-Use this flag alongside the -u/--summarise option to add a columns summarising which samples contain variant genotypes. 
+Use this flag alongside the -u/--summarise option to add a column summarising which samples contain variant genotypes, plus two additional columns (ADs and GQs) to give allele depths and genotype quality scores for samples with variants.
 
 =item B<-s    --samples>
 
@@ -418,13 +418,13 @@ if (@ped_samples){
     push @samples, @sample_found;
 }
 #check samples or get them if none specified
-if (not @samples and ( 
-    (defined $summarise_counts and $summarise_counts ne 'all' ) or not defined $summarise_counts) 
-){
-    @samples = VcfReader::getSamples
-    (
-        header => \@header,
-    );
+if (not @samples){
+    if (not defined $summarise_counts or $summarise_counts ne 'all'){
+        @samples = VcfReader::getSamples
+        (
+            header => \@header,
+        );
+    }
 }else{
     foreach my $s (@samples){
         die "Can't find sample $s in header line.\nHeader:\n$header[-1]\n" 
@@ -777,7 +777,7 @@ sub get_simplified_fields{
     if (defined $summarise_counts){
         my %allele_counts = ();
         my %genotype_counts = ();
-        if ($summarise_counts eq 'all'){
+        if ($summarise_counts eq 'all' or $summarise_counts eq 'and'){
             %allele_counts = VcfReader::countAlleles(line => $line);
             %genotype_counts = VcfReader::countGenotypes(line => $line);
         }else{
@@ -798,6 +798,8 @@ sub get_simplified_fields{
         my @al_count_string = ();
         my @gt_count_string = ();
         my @sample_var_string = ();
+        my @sample_ad_string = ();
+        my @sample_gq_string = ();
         foreach my $allele (sort keys %allele_counts){
             if (defined $config->{do_not_simplify}){
                 push @al_count_string, "$allele=$allele_counts{$allele}";
@@ -844,6 +846,26 @@ sub get_simplified_fields{
                 next if ($calls{$sample} =~/^0[\|\/]0$/);
                 next if ($calls{$sample} =~/^\.[\|\/]\.$/);
                 push @{$var_to_samples{$calls{$sample}}}, $sample;
+                my @ads = VcfReader::getSampleAlleleDepths 
+                (
+                    sample =>$sample,
+                    line => $line,
+                    sample_to_columns => \%sample_to_col,
+                );
+                my @allele_depth = ();
+                for (my $n = 0; $n < @ads and $n < @all_alleles; $n++){
+                    push (@allele_depth, "$all_alleles[$n]=$ads[$n]");
+                }
+                my $allele_depths = join("/", @allele_depth);
+                push @sample_ad_string, "$sample:$allele_depths";
+                my $gq = VcfReader::getSampleGenotypeField
+                (
+                    sample  => $sample, 
+                    line => $line,
+                    sample_to_columns => \%sample_to_col,
+                    field => "GQ",
+                );
+                push @sample_gq_string, "$sample=$gq";
             }
             foreach my $genotype (sort keys %var_to_samples){
                 my $sum_string = join(",", @{$var_to_samples{$genotype}});
@@ -865,9 +887,16 @@ sub get_simplified_fields{
         }
         push @vcf_values, join(";", @al_count_string);
         push @vcf_values, join(";", @gt_count_string);
-        push @vcf_values, join(";", @sample_var_string) if defined $summarise_samples_with_variants;
+        if (defined $summarise_samples_with_variants){
+            push @vcf_values, join(";", @sample_var_string);
+            push @vcf_values, join(";", @sample_ad_string);
+            push @vcf_values, join(";", @sample_gq_string);
+        }
     }
-    if (not defined $summarise_counts or (defined $summarise_counts and $summarise_counts eq 'all' and @samples)){
+    if (not defined $summarise_counts 
+        or ($summarise_counts eq 'all' and @samples)
+        or $summarise_counts eq 'and'
+    ){
         my @sample_calls = ();
         my @sample_allele_depths = ();
         my @sample_genotype_quality = ();
@@ -1145,10 +1174,13 @@ sub get_header{
             push @head, "Allele Counts";
             push @head, "Genotype Counts";
             if (defined $summarise_samples_with_variants){
-                push @head, "Samples with variant";
+                push @head, "Samples with variant", "ADs", "GQs";
             }
         }
-        if (not defined $summarise_counts or (defined $summarise_counts and $summarise_counts eq 'all' )){
+        if (not defined $summarise_counts 
+            or $summarise_counts eq 'all' 
+            or $summarise_counts eq 'and'
+         ){
             foreach my $sample (@samples){
                 push @head, $sample;
             }
