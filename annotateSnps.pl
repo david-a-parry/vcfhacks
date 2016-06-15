@@ -970,7 +970,7 @@ DBSNP:      foreach my $d (@dbsnp){
                     (my $desc = $dbsnp_to_info{$d}->{$field}->{Description}) =~ s/\"//;
                     my %d_info = 
                     (
-                        ID          => $field,
+                        ID          => "AS_$field",
                         Number      => "A",
                         Type        => $dbsnp_to_info{$d}->{$field}->{Type},
                         Description => "This annotation has been altered by ".
