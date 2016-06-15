@@ -37,6 +37,8 @@ my $allele_depth_cutoff = 0
   ; #even if genotype isn't called use this value to filter on reported allele depth
 my $allele_ratio_cutoff = 0
   ; #even if genotype isn't called use this value to filter on relative reported allele depth
+my $allele_balance_cutoff = 0
+  ;#for require an ALT allele balance of at least this value in --samples
 my $aff_genotype_quality
   ;    #will convert to $genotype_quality value if not specified
 my $unaff_genotype_quality
@@ -51,6 +53,7 @@ my $manual;
 my $progress;
 my %opts = (
     'a'                   => \$aff_genotype_quality,
+    'ab'                  => \$allele_balance_cutoff,
     'b'                   => \$progress,
     'c'                   => \$confirm_missing,
     'cache'               => \$buffer_size,
@@ -93,6 +96,7 @@ GetOptions(
     'u|un_quality=i',
     'depth_sample=i',
     'depth_allele_cutoff=f',
+    'ab|allele_balance_cutoff=f',
     'z|allele_ratio_cutoff=f',
     'num_matching=i',
     'h|?|help',
@@ -121,6 +125,11 @@ pod2usage(
       "--depth_allele_cutoff must be a value between 0.00 and 1.00.\n",
     -exitval => 2
 ) if ( $allele_depth_cutoff < 0 or $allele_depth_cutoff > 1.0 );
+pod2usage(
+    -message =>
+      "-ab/--allele_balance_cutoff must be a value between 0.00 and 1.00.\n",
+    -exitval => 2
+) if ( $allele_balance_cutoff < 0 or $allele_balance_cutoff > 1.0 );
 pod2usage(
     -message => "--allele_ratio_cutoff must be greater than 0.00.\n",
     -exitval => 2
@@ -502,7 +511,7 @@ sub filter_on_sample {
                     }
                     push( @{ $alleles{$sample} }, $1, $2 );
 
-                    if ($allele_ratio_cutoff)
+                    if ($allele_ratio_cutoff or $allele_balance_cutoff)
                     {    #find the min ad ratios for --samples
                         my @ads = VcfReader::getSampleAlleleDepths(
                             column => $sample_to_col{$sample},
@@ -516,6 +525,15 @@ sub filter_on_sample {
                             if ($dp) {
                                 for ( my $i = 0 ; $i < @ads ; $i++ ) {
                                     my $ratio = $ads[$i] / $dp;
+                                    if ($allele_balance_cutoff > $ratio){
+                                        if ( $check_presence_only or $num_matching ) {
+                                            next SAMPLE;
+                                        }
+                                        else {
+                                            return
+                                        }
+                                    }
+                                        
                                     if ( exists $min_allele_ratios{$i} ) {
                                         $min_allele_ratios{$i} = (
                                               $ratio >= $min_allele_ratios{$i}
@@ -597,13 +615,18 @@ sub filter_on_sample {
                     if ($dp) {
                         for ( my $i = 0 ; $i < @ads ; $i++ ) {
                             next if exists $called_alleles{$i};
+                            my $ratio = $ads[$i] / $dp;
+                            if ($allele_balance_cutoff > $ratio){
+                                $reject_alleles{$i}++;
+                            }
                             $reject_alleles{$i}++
-                              if $ads[$i] / $dp >= $allele_depth_cutoff;
+                              if $ratio >= $allele_depth_cutoff;
                         }
                     }
                 }
             }
-            if ($allele_ratio_cutoff) {    #find the max ad ratios for --reject
+            if ($allele_ratio_cutoff or $allele_balance_cutoff){
+                #find the max ad ratios for --reject
                 my @ads = VcfReader::getSampleAlleleDepths(
                     column => $sample_to_col{$reject},
                     line   => $vcf_line,
@@ -849,7 +872,11 @@ Use this flag to look only for variants that are present only in --samples and a
 
 =item B<--depth_sample>
 
-Minimum per sample depth for a genotype call to be considered. Variants will only be considered for --samples if they were covered by this many reads or more. Similarly, any calls for --reject samples will only be used to filter variants if that --reject sample was covered by this many reads or more.
+Minimum per sample depth for a genotype call to be considered. Variants will only be considered for --samples if they were covered by this many reads or more. Similarly, any calls for --reject samples will only be used to filter variants if that --reject sample was covered by this many reads or more. Default = 0.
+
+=item B<-ab   --allele_balance_cutoff>
+
+Minimum fraction of ALT allele reads for for a genotype call to be considered. Must be a value between 0.0 and 1.0. Default = 0.
 
 =item B<--depth_allele_cutoff>
 
