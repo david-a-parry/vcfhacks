@@ -67,7 +67,7 @@ This option can also be used without using --allele_frequency_filter/--threshold
 
 =item B<-y    --allele_frequency_filter>
 
-Reject variants if the allele frequency in your --filter VCF is equal to or greater than this value. All samples will be used to calculate allele frequency regardless of --reject or --not_samples settings, although variants will only be counted if the genotype quality is greater than the value given for --un_quality. The value must be a float between 0 and 1. 
+Reject variants if the allele frequency in your --filter VCF is equal to or greater than this value. If samples from the filter VCF have been specified using the --reject or --not_samples argument, only the relevant samples will be used for calculating allele frequency. Variants will only be counted if the genotype quality is greater than the value given for --un_quality. The value must be a float between 0 and 1. 
 
 =item B<--population_ids>
 
@@ -1210,8 +1210,10 @@ FILTER_LINE: foreach my $snp_line (@snp_hits) {
                 }
                 if ($maf or $annotate_af) {
                     my %f_allele_counts = VcfReader::countAlleles(
-                        line  => \@snp_split,
-                        minGQ => $unaff_quality
+                        line                => \@snp_split,
+                        minGQ               => $unaff_quality,
+                        samples             => \@temp_reject,
+                        sample_to_columns   => $filter_vcf_samples,
                     );
                     foreach my $f_al ( keys %f_allele_counts ) {
                         if ( $f_al eq $filter_match ) {
