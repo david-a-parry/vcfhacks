@@ -967,7 +967,7 @@ DBSNP:      foreach my $d (@dbsnp){
                 $time = strftime( "%H:%M:%S", localtime );
                 if ( $dbsnp_to_info{$d}->{$field} ){
                     print STDERR "[$time] INFO - $field field found in $d...\n";
-                    (my $desc = $dbsnp_to_info{$d}->{$field}->{Description}) =~ s/\"//;
+                    (my $desc = $dbsnp_to_info{$d}->{$field}->{Description}) =~ s/\"//g;
                     my %d_info = 
                     (
                         ID          => "AS_$field",
