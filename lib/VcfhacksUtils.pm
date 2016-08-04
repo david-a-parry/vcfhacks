@@ -297,14 +297,14 @@ sub getAndCheckInSilicoPred{
         }elsif ( exists $pred{$prog} ){
             if (not $label){
                 foreach my $j ( keys %{$pred{$prog}} ){
-                    push @{ $filters{$prog} }, $j if $pred{$prog}->{$j} eq 'default';
+                    push @{ $filters{$prog} }, $j if $pred{$prog}->{$j} =~ /(default|score)/;
                 }
             }else{
                 if ($label =~ /^\d+(\.\d+)*$/){#add scores
                     push @{ $filters{$prog} } , $label;
                 }else{
                     if (not exists $pred{$prog}->{lc($label)}){
-                        die <<EOT;
+                        croak <<EOT
 ERROR: Unrecognised filter ('$label') for $prog passed to --damaging argument.
 See --help/--manual for more info.
 EOT
