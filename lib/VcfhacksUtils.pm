@@ -324,7 +324,99 @@ EOT
     return %filters;
 }
 
+=item B<getScoreFilter>
 
+Takes an expression to filter on numeric values annotations and creates a hash that can be used by the 'scoreFilter' function of this module. No whitespace is permitted in the expressions but multiple expressions can be used together along with the logical operators 'and', 'or' or 'xor'.
+
+ my %exp = VcfhacksUtils::getScoreFilter("ada_score>0.6");
+ 
+ my %exp = VcfhacksUtils::getScoreFilter
+ (
+     "(ada_score>0.6 and rf_score>0.6) or maxentscan_diff>5"
+ );
+
+=cut
+
+sub getScoreFilter{
+    my $s = shift;
+    my $open_brackets = () = $s =~ /\(/g;   
+    my $close_brackets = () = $s =~ /\)/g;
+    if ($open_brackets > $close_brackets){
+        croak "ERROR: Unclosed brackets in expression '$s' passed to --score_filter\n";
+    }elsif ($open_brackets < $close_brackets){
+        croak "ERROR: Trailing brackets in expression '$s' passed to --score_filter\n";
+    }
+    my %exp = 
+    (
+        field => [], 
+        operator => [], 
+        expression => []
+    );
+    $s =~ s/^\s+//;#remove preceding whitespace
+    $s =~ s/\s+$//;#remove trailing whitespace
+    my @split = split(/\s/, $s);#split on whitespace
+    for(my $i = 0; $i<@split; $i++){
+    #every second array element must be an operator (and/or/xor)
+        if ($i % 2){
+            if ($split[$i] !~ /(and|or|xor)/){#check operator
+                my $pos = $i + 1;
+                croak "ERROR: Expected operator (or/and/xor) at position $pos in --score_filter argument '$s' but got '$split[$i]'\n";
+            }
+            push @{$exp{operator}}, $split[$i];
+        }else{#if index % 2 == 0 check expression
+            if ($split[$i] =~ /(\S+)([><]=?)(\S+)/){
+                my $fld = $1;
+                my $cmp = $2;
+                my $val = $3;
+                
+                if ($val !~ /^\d+(\.\d+)\)?$/){
+                    $val =~ s/\)$//;
+                    croak "Expected numeric value in --score_filter ".
+                        "expression '$s' but found '$val'\n";
+                }
+                push @{$exp{field}}, lc($fld);
+                push @{$exp{expression}}, "$cmp$val";
+            }
+        }
+    }
+    return %exp;
+}
+
+
+=item B<scoreFilter>
+
+Using a hash created using the getScoreFilter function (above), and a hash of field names to values, this function returns 1 if the expression is matched and 0 if not.
+
+ my %exp = VcfhacksUtils::getScoreFilter("ada_score>0.6");
+ if (VcfhacksUtils::scoreFilter(\%exp, \%values)){
+     ...
+ }
+
+=cut
+
+sub scoreFilter{
+    my ($exps, $vals) = @_;
+    my @eval = (); 
+    for (my $i = 0; $i < @{$exps->{field}}; $i++){
+        (my $field = $exps->{field}->[$i]) =~ s/^\(//;#remove preceding bracket
+        my $v = $vals->{$field};
+        push @eval, "(" if $exps->{field}->[$i] =~ s/^\(//;
+        if (defined $v){#if not defined we'll test remainder of expression
+            push @eval, $v; 
+            push @eval, $exps->{expression}->[$i];
+        }else{
+            push @eval, 0 ;
+        }
+        push @eval, ")" if $exps->{expression}->[$i] =~ s/^\)//;
+        if ($i < @{$exps->{operator}}){
+            push @eval, $exps->{operator}->[$i];
+        }
+    }
+    my $ev =eval join(" ", @eval);
+    carp "$@\n" if $@;
+    return $ev;
+}
+  
 =back
 
 =head2 Misc Utilities
