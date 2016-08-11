@@ -317,12 +317,12 @@ sub getAllUnaffecteds{
 
 =head1 NAME
 
-ParsePed.pm - reads and parses .ped pedigree files.
+ParsePedfile.pm - reads and parses .ped pedigree files.
 
 =head1 SYNOPSIS
 
 
-$ped = ParsePed -> new(file => $ped);
+$ped = ParsePedfile -> new(file => $ped);
 #(initialise object with a ped file)
 
 my @affected = $ped->getAffectedsFromFamily($family);
@@ -362,7 +362,7 @@ Affection status, by default, should be coded:
 
 To initialise call the 'new' method specifying a .ped file to read.
 
-$ped = ParsePed -> new(file => "fam1.ped");
+$ped = ParsePedfile -> new(file => "fam1.ped");
 
 The information in the .ped file will be read and stored in $ped for access with the methods detailed below. 
 
