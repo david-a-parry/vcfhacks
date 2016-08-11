@@ -5,7 +5,7 @@ use Getopt::Long;
 use Pod::Usage;
 use POSIX qw/strftime/;
 use Data::Dumper;
-use List::Util qw ( first ) ;
+use List::Util qw ( first max min ) ;
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
 use ParsePedfile;
@@ -20,16 +20,18 @@ my @damaging = ();
 my @biotypes = ();
 my @gene_lists = ();
 my @custom_af = ();
+my @score_filters = (); 
 
 my %opts = 
 (
-    classes             => \@classes,
-    add_classes         => \@add_classes,
-    d                   => \@damaging,
-    list                => \@gene_lists,
-    s                   => \@samples,
-    biotype_filters     => \@biotypes,
-    j                   => \@custom_af,
+    classes          => \@classes,
+    add_classes      => \@add_classes,
+    d                => \@damaging,
+    list             => \@gene_lists,
+    s                => \@samples,
+    biotype_filters  => \@biotypes,
+    j                => \@custom_af,
+    score_filters    => \@score_filters,
 );
 
 GetOptions(
@@ -59,6 +61,7 @@ GetOptions(
     "pass" ,
     "pl=f", 
     "s|samples=s{,}",
+    "score_filters=s{,}",
     "skip_unpredicted" ,
     "v|var_quality=i",
     "u|max_sample_allele_frequency=f",
@@ -190,6 +193,7 @@ my %class_filters = map { $_ => undef } getAndCheckClasses();
 #check in silico prediction classes/scores are acceptable
 my %in_silico_filters = getAndCheckInSilicoPred();
   #hash of prediction program names and values to filter
+my @score_exp = getAndCheckScoreFilters();
 
 #and check biotype classes are acceptable
 my %biotype_filters = map { $_ => undef } getAndCheckBiotypes();
@@ -777,9 +781,47 @@ sub getAndCheckInSilicoPred{
     return if not @damaging;
     my %filters = VcfhacksUtils::getAndCheckInSilicoPred($opts{m}, \@damaging);
     if ($opts{m} eq 'vep'){#VEP prediction results will be in CSQ field
+        foreach my $d (@damaging){
+            if ($d ne 'all' and not exists $csq_header{$d}){
+                informUser
+                (
+                    "WARNING: No '$d' field found in CSQ header of VCF. ".
+                    "No in silico filtering will be performed for $d.\n"
+                ); 
+            }
+        }
+        %filters = map  { $_ => $filters{$_} } 
+                   grep { exists $csq_header{$_} } 
+                   keys %filters;
         push @csq_fields, keys %filters;
     }#SnpEff predictions will be added via SnpSift
     return %filters;
+}
+
+#################################################
+sub getAndCheckScoreFilters{
+    return if not @score_filters;
+    my @filters = (); 
+    my %csq_add = ();
+FLT: foreach my $s (@score_filters){
+        my %f =  VcfhacksUtils::getScoreFilter($s);
+        foreach my $fld (@{$f{field}}){
+            (my $fb = $fld) =~ s/^\(//;#we may have used ( to specify precedence
+            if (not exists $csq_header{lc($fb)}){
+                informUser
+                (
+                    "WARNING: No '$fb' field found in CSQ header of ".
+                    "VCF. Cannot use --score_filter expression '$s' ".
+                    "for filtering.\n"
+                ); 
+                next FLT;
+            }
+            $csq_add{lc($fb)}++;
+        }
+        push @filters, \%f;
+    }
+    push @csq_fields, keys %csq_add;
+    return @filters;
 }
 
 #################################################
@@ -1006,6 +1048,11 @@ sub consequenceMatchesVepClass{
     #skip NMD transcripts
     return 0 if ( grep { /NMD_transcript_variant/i } @anno_csq );
 
+    #score filters trump annotation class
+    foreach my $scf (@score_exp){
+        return 1 if VcfhacksUtils::scoreFilter($scf, $annot);
+    }
+
 ANNO: foreach my $ac (@anno_csq){
         $ac = lc($ac);#we've already converted %class_filters to all lowercase
         if ( exists $class_filters{$ac} ){
@@ -1038,6 +1085,12 @@ sub consequenceMatchesSnpEffClass{
     return if not defined $annot->{feature_id};
     #skip unwanted biotypes
     return 0 if exists $biotype_filters{lc $annot->{transcript_biotype} };
+
+    #score filters trump annotation class
+    foreach my $scf (@score_exp){
+        return 1 if VcfhacksUtils::scoreFilter($scf, $annot);
+    }
+    
     my @anno_csq = split( /\&/, $annot->{annotation} );
 ANNO: foreach my $ac (@anno_csq){
         $ac = lc($ac);#we've already converted %class_filters to all lowercase
@@ -1066,38 +1119,18 @@ PROG: foreach my $k ( sort keys %in_silico_filters) {
             $filter_matched{$k}++ unless $opts{skip_unpredicted};
             next;
         }
-SCORE: foreach my $f ( @{ $in_silico_filters{$k} } ) {
-            if ( $f =~ /^\d(\.\d+)*$/ ) {
-                my $prob;
-                if ( $score =~ /\((\d(\.\d+)*)\)/ ) {
-                    $prob = $1;
-                }else {
-                    next SCORE
-                      ; #if score not available for this feature ignore and move on
-                }
-                if ( lc $k eq 'polyphen'){
-                    if ( $prob >= $f ){
-                    #higher is more damaging for polyphen - damaging
-                        return 1 if $opts{k};
-                        $filter_matched{$k}++;
-                        next PROG;
-                    }
-                }elsif( $prob <= $f ){
-                    #lower is more damaging for sift and condel - damaging
-                    return 1 if $opts{k};
-                    $filter_matched{$k}++;
-                    next PROG;
-                }
+SCORE:  foreach my $f ( @{ $in_silico_filters{$k} } ) {
+            my $do_filter = 0;
+            if ($f =~ /^(polyphen|sift|condel)$/){
+                $do_filter = isDamagingVepInsilico($k, $f, $score);
             }else{
-                $score =~ s/\(.*\)//;
-                if ( lc $f eq lc $score ) {    #damaging
-                    return 1 if $opts{k};
-                    $filter_matched{$k}++;
-                    next PROG;
-                }
+                $do_filter = isDamagingDbnsfpInsilico($k, $f, $score);
+            }
+            if ($do_filter){
+                return 1 if $opts{keep_any_damaging};
+                $filter_matched{$k}++;
             }
         }
-
     }
     foreach my $k ( keys %in_silico_filters ) {
         #filter if any of sift/condel/polyphen haven't matched our deleterious settings
@@ -1105,6 +1138,50 @@ SCORE: foreach my $f ( @{ $in_silico_filters{$k} } ) {
     }
     return 1;
 }
+
+#################################################
+sub isDamagingDbnsfpInsilico{
+    my ($tool, $f, $score) = @_;
+    my @pred =  split("&", $score); #multiple scores are separated by '&'
+    if ( $f =~ /^\d+(\.\d+)*$/ ) {#if we want to filter on score
+        if ($tool =~ /^(fathmm_score|provean_score|sift_score)$/){
+            #lower is more damaging for these tools
+            my $min = min(@pred); 
+            return $min <= $f;
+        }else{
+            #higher = more damaging
+            my $max = max(@pred); 
+            return $max >= $f;
+        }
+    }else{#if we want to filter on prediction
+        return grep { lc($_) eq lc($f) } @pred;
+    }
+}
+
+#################################################
+sub isDamagingVepInsilico{
+    my ($tool, $f, $score) = @_;
+    if ( $f =~ /^\d(\.\d+)*$/ ) {#if we want to filter on score
+        my $prob;
+        if ( $score =~ /\((\d(\.\d+)*)\)/ ) {#get score
+            $prob = $1;
+        }else {
+            return 0;
+        }
+        if ( lc $tool eq 'polyphen'){
+            return $prob >= $f;
+            #higher is more damaging for polyphen 
+        }else{
+            return $prob <= $f;
+            #lower is more damaging for sift and condel 
+        }
+    }else{#if we want to filter on prediction
+        $score =~ s/\(.*\)//;#get prediction
+        return  lc $f eq lc $score ; #damaging if match
+    }
+}
+
+
 
 #################################################
 sub damagingMissenseSnpEff{
