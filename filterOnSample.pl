@@ -101,7 +101,7 @@ GetOptions(
     'num_matching=i',
     'h|?|help',
     'm|manual',
-    'b|progress',
+    'b|progress:i',
     'forks=i',
     'cache=i',
 ) or pod2usage(-message => "Syntax error", -exitval => 2);
@@ -192,11 +192,11 @@ die "Header not ok for input ($vcf) "
     if not VcfReader::checkHeader( header => $header );
 if ( defined $progress ) {
     $time = strftime( "%H:%M:%S", localtime );
-    if (-p $vcf or $vcf eq "-" ) {
-        print STDERR "[$time] INFO - - Input is from STDIN or pipe - will report progress per 10000 variants. ";
-    }else {
+    if (-p $vcf or $vcf eq "-") {
+        print STDERR "[$time] INFO - - Input is from STDIN or pipe - will report progress per 10000 variants.\n";
+    }elsif($progress != 1){
         $total_variants = VcfReader::countVariants($vcf);
-        print STDERR "[$time] INFO - $vcf has $total_variants variants. ";
+        print STDERR "[$time] INFO - $vcf has $total_variants variants.\n";
     }
 }
 
@@ -914,7 +914,7 @@ Cache size. Variants are processed in batches to allow for efficient parallelisa
 
 =item B<-b    --progress>
 
-Show a progress bar.
+Show a progress bar. Add 1 after this option to report progress for every 10,000 variants instead of counting total variants in the VCF and showing a bar (prevents startup delay for large files).
 
 =item B<-h    --help>
 
