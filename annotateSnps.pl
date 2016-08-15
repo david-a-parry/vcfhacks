@@ -655,7 +655,7 @@ sub filterSnps {
                         #get snp info and perform 
                         #filtering if fiters are set
                         $line_should_not_be_filtered += 
-                          evaluate_snp( $min_vars{$allele},  \@snp_split, $match );
+                          evaluate_snp( $min_vars{$allele},  \@snp_split, $match, $k );
                     }
                 }
             }
@@ -794,10 +794,11 @@ sub evaluate_snp {
 
 #returns 1 if shouldn't be filtered under any circumstance (at the moment only if
 #pathogenic flag is set and snp is clinically associated) and 0 otherwise
-    my ( $min_allele, $snp_line, $snp_alt ) = @_;
+    my ( $min_allele, $snp_line, $snp_alt, $file ) = @_;
     my %info_values = ();
     my @al =  VcfReader::readAlleles(line => $snp_line);
     foreach my $f (qw (SCS dbSNPBuildID G5 G5A GMAF CAF AF COMMON)) {
+        next if not exists $dbsnp_to_info{$file}->{$f};
         my $value = VcfReader::getVariantInfoField( $snp_line, $f );
         if ( defined $value ) {
             if (not exists $min_allele->{snp_info}->{$f} 
@@ -824,7 +825,7 @@ sub evaluate_snp {
             }
         }
     }
-    annotateClnVarVcf($min_allele, $snp_line, $snp_alt);
+    annotateClnVarVcf($min_allele, $snp_line, $snp_alt, $file);
 
     if ($opts{pathogenic}) {
         if ( exists $info_values{SCS} ) {
@@ -942,11 +943,12 @@ sub checkVarMatches {
 
 #################################################
 sub annotateClnVarVcf{
-    my ( $min_allele, $snp_line, $snp_alt ) = @_;
+    my ( $min_allele, $snp_line, $snp_alt, $file ) = @_;
     my %inf = ();
     foreach my $f ( qw/ CLNSIG CLNALLE CLNHGVS CLNDSDBID CLNDBN / ){ 
         #only take annotations from first file with matching variant
         return if exists $min_allele->{snp_info}->{$f};
+        next if not exists $dbsnp_to_info{$file}->{$f};
         $inf{$f} = VcfReader::getVariantInfoField( $snp_line, $f);
     } 
     return if not exists $inf{CLNALLE}; #required to deconvolute annotations
@@ -967,8 +969,11 @@ sub check_info_found{
     my $string; 
     if (  not exists $add_head{$type} 
          or not @{$add_head{$type}} ){ 
-        return 
-"WARNING - can't find $type fields (" . join(", ", @{$head_info_fields{$type}} ) . ") in dbSNP file headers, your SNP reference files probably don't have $annot.\n";
+        return "WARNING - can't find $type fields (" 
+                . join(", ", @{$head_info_fields{$type}} ) .
+                 ") in dbSNP file headers, your SNP reference files"
+                ." probably don't have $annot.\n"
+                ."WARNING - No filtering on $type fields will take place.\n";
     }
     return; 
 }
