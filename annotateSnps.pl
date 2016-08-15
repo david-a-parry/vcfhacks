@@ -58,7 +58,7 @@ pod2usage( -verbose => 2 ) if $opts{manual};
 pod2usage( -verbose => 1 ) if $opts{help};
 pod2usage( -exitval => 2, -message => "Syntax error" )
   if not $opts{input}
-  or not @{ $opts{dbsnp_file} };
+  or (not @{ $opts{dbsnp_file} } and not $opts{clinvar_file});
 
 if ( $forks < 2 ) {
     $forks = 0;    #no point having overhead of forks for one fork
