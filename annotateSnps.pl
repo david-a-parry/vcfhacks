@@ -7,6 +7,7 @@ use Sys::CPU;
 use Pod::Usage;
 use Term::ProgressBar;
 use Data::Dumper;
+use List::MoreUtils qw(first_index);
 use POSIX qw/strftime/;
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
@@ -196,6 +197,7 @@ $dbpm->wait_all_children;
 #get dbSNP category headers
 my %head_info_fields = (
     "clinical significance" => [ qw / CLNSIG SCS / ] ,
+    "clinvar annotations"   => [ qw / CLNALLE CLNDBN CLNDSDBID / ] ,
     "dbSNPBuildID"          => [ qw / dbSNPBuildID / ],
     "allele frequency"      => [ qw / AF CAF G5A G5 COMMON / ] ,
 );
@@ -665,7 +667,6 @@ sub filterSnps {
     my $filter_count = 0;
     my %snp_info = ();
     my %clinvar_info = ();
-    #TO DO
     #Get all snp_info fields present in %min_vars and create undef hash entries
     foreach my $allele ( keys %min_vars ) {
         map { $snp_info{$_} = undef }  keys %{ $min_vars{$allele}->{snp_info} } ;
@@ -796,7 +797,7 @@ sub evaluate_snp {
     my ( $min_allele, $snp_line, $snp_alt ) = @_;
     my %info_values = ();
     my @al =  VcfReader::readAlleles(line => $snp_line);
-    foreach my $f (qw (SCS CLNSIG dbSNPBuildID G5 G5A GMAF CAF AF COMMON)) {
+    foreach my $f (qw (SCS dbSNPBuildID G5 G5A GMAF CAF AF COMMON)) {
         my $value = VcfReader::getVariantInfoField( $snp_line, $f );
         if ( defined $value ) {
             if (not exists $min_allele->{snp_info}->{$f} 
@@ -823,6 +824,8 @@ sub evaluate_snp {
             }
         }
     }
+    annotateClnVarVcf($min_allele, $snp_line, $snp_alt);
+
     if ($opts{pathogenic}) {
         if ( exists $info_values{SCS} ) {
             my @scs = split( /[\,\|]/, $info_values{SCS} );
@@ -834,18 +837,13 @@ sub evaluate_snp {
                 }
             }
         }
-        else {
+        #else {
 #die "No SCS field in snp line $snp_line" if $strict; #the SCS field appears to be dropped from the GATK bundle now
 #print STDERR "Warning, no SCS field in snp line $snp_line\n" unless $quiet;
-        }
-        if ( exists $info_values{CLNSIG} ) {
-            my @scs = split( /[\,\|]/, $info_values{CLNSIG} );
-            foreach my $s (@scs) {
-
-#SCS=4 indicates probable-pathogenic, SCS=5 indicates pathogenic, print regardless of freq or build if --pathogenic option in use
-                if ( $s eq '4' or $s eq '5' ) {
-                    return 1;
-                }
+        #}
+        if ( exists $min_allele->{snp_info}->{CLNSIG} ) {
+            if ( grep {$_ == 4 or $_ == 5} split(/\|/, $min_allele->{snp_info}->{CLNSIG}) ){#4 or 5 == prob/pathognic
+                return 1;
             }
         }
     }
@@ -940,6 +938,26 @@ sub checkVarMatches {
         return $snp_allele;
     }
     return 0;
+}
+
+#################################################
+sub annotateClnVarVcf{
+    my ( $min_allele, $snp_line, $snp_alt ) = @_;
+    my %inf = ();
+    foreach my $f ( qw/ CLNSIG CLNALLE CLNHGVS CLNDSDBID CLNDBN / ){ 
+        #only take annotations from first file with matching variant
+        return if exists $min_allele->{snp_info}->{$f};
+        $inf{$f} = VcfReader::getVariantInfoField( $snp_line, $f);
+    } 
+    return if not exists $inf{CLNALLE}; #required to deconvolute annotations
+    return if not exists $inf{CLNSIG};  #not much use without this field
+
+    my $al_index = first_index {$_ == $snp_alt} split(",", $inf{CLNALLE});
+    return if $al_index < 0;
+    foreach my $f ( qw/ CLNSIG CLNALLE CLNHGVS CLNDSDBID CLNDBN / ){ 
+        next if not exists $inf{$f}; 
+        $min_allele->{snp_info}->{$f}    = (split ",", $inf{$f})[$al_index];
+    }
 }
 
 #################################################
