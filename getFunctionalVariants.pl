@@ -620,16 +620,19 @@ sub checkClinVarInfo{
     if ($opts{clinvar} and lc($opts{clinvar}) eq 'disable'){
         return 0;
     }
-    if (exists $info_fields{ClinVarPathogenic}){
+    if (exists $info_fields{ClinVarPathogenic} or exists $info_fields{AS_CLNSIG}){
         if (not $opts{clinvar}){
             return 'all';
         }elsif (lc($opts{clinvar}) eq 'all'){
             return 'all';
         }elsif (lc($opts{clinvar}) eq 'no_conflicted'){
-            if (not exists $info_fields{ClinVarConflicted}){
+            if (not exists $info_fields{ClinVarConflicted} and 
+                not exists $info_fields{AS_CLNSIG}
+                #can glean from CLNSIG field if more than one type of assertion made
+            ){
                 informUser
                 ( 
-                    "WARNING: no ClinVarConflicted INFO field found in header.".
+                    "WARNING: no ClinVarConflicted or CLNSIG INFO field found in header.".
                     " All variants with ClinVarPathogenic annotations will be".
                     " kept."
                 );
@@ -643,8 +646,9 @@ sub checkClinVarInfo{
         if ($opts{clinvar}){
             informUser
             (
-                "WARNING: no ClinVarPathogenic INFO field was found in header.".
-                " ClinVarPathogenic variants will not be identified."
+                "WARNING: neither ClinVarPathogenic nor AS_CLNSIG INFO fields".
+                " were found in header. ClinVarPathogenic variants will not be".
+                " identified."
             );
         }
         return 0;
@@ -660,22 +664,71 @@ sub keepClinvar{
     if (not $keep_clinvar){
         return map { 0 } 0..$n_alts 
     }
-    my @path = split(",", VcfReader::getVariantInfoField
+    my @c_path = ();
+    my @d_path = ();
+    my @c_conf = ();
+    my @d_conf = ();
+    if (exists $info_fields{ClinVarPathogenic}){
+        my $path = VcfReader::getVariantInfoField
         (
             $v,
             'ClinVarPathogenic',
-        ) 
-    );
-    if ($keep_clinvar eq 'no_conflicted'){
-        my @conf = split(",", VcfReader::getVariantInfoField
-            (
-                $v,
-                'ClinVarConflicted',
-            )
         );
-        return map {$path[$_] == 1 and $conf[$_] == 0} 0..$#path;
+        if (defined $path){ 
+            @c_path = split(",", $path);
+            if ($keep_clinvar eq 'no_conflicted'){
+                my @c_conf = split(",", VcfReader::getVariantInfoField
+                    (
+                        $v,
+                        'ClinVarConflicted',
+                    )
+                );
+                @c_path = map {$c_path[$_] == 1 and $c_conf[$_] == 0} 0..$#c_path;
+            }
+        }
     }
-    return @path;
+    if (exists $info_fields{AS_CLNSIG}){
+        my $path =  VcfReader::getVariantInfoField
+        (
+            $v,
+            'AS_CLNSIG',
+        );
+        if (defined $path){ 
+            my @csig = split(",", $path);
+            foreach my $c (@csig){
+                my @path = split(/\|/, $c);
+                if (grep {$_ == 4 or $_ == 5} @path){
+                    push @d_path, 1;
+                    if (grep {$_ == 2 or $_ == 3} @path){
+                        push @d_conf, 1;
+                    }else{
+                        push @d_conf, 0;
+                    }
+                }else{
+                    push @d_path, 0;
+                    push @d_conf, 0;
+                }
+            }
+            if ($keep_clinvar eq 'no_conflicted'){
+                @d_path = map {$d_path[$_] == 1 and  $d_conf[$_] == 0} 0..$#d_path;
+            }
+        }
+    }
+    if (@c_path){
+        if (@d_path){
+            if ($keep_clinvar eq 'no_conflicted'){
+                return map {$d_path[$_] == 1 and $c_path[$_] == 1} 0..$#d_path;
+            }else{
+                return map {$d_path[$_] == 1 or $c_path[$_] == 1} 0..$#d_path;
+            }
+        }else{
+            return @c_path;
+        }
+    }elsif(@d_path){
+        return @d_path;
+    }else{
+        return map { 0 } 0..$n_alts 
+    }
 }
  
 #################################################
