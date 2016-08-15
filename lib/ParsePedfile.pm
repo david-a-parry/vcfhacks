@@ -222,6 +222,7 @@ sub getAllSiblings{
     foreach my $p ($self->getParents($sample)){
         push @sibs, $self->getChildren($p);
     }
+    @sibs = grep {$_ ne $sample} @sibs;
     return @sibs;
 }
 
@@ -241,6 +242,7 @@ sub getFullSiblings{
     }
     my %intersect = map {$_ => undef} @{$par{(keys%par)[0]}};
     @sibs = grep {exists ($intersect{$_}) } @{$par{(keys%par)[1]}};
+    @sibs = grep {$_ ne $sample} @sibs;
     return @sibs;
 }
 
