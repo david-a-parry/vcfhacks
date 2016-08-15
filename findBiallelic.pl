@@ -46,6 +46,7 @@ GetOptions(
     'canonical_only',
     'check_all_samples',
     'classes=s{,}',
+    'clinvar=s',
     'consensus_splice_site',
     'c|cadd_filter=f',
     'd|damaging=s{,}',
@@ -244,6 +245,9 @@ if ( defined $opts{a} ) {
     %af_info_fields = getAfAnnotations(\%info_fields);   
 }
 
+#by default keep variant if there's an associated pathogenic ClinVar field
+my $keep_clinvar = checkClinVarInfo();
+
 #if filtering on CADD score check we have a CaddPhredScore header
 if ( $opts{c} ){
     if (not exists $info_fields{CaddPhredScore}){
@@ -395,6 +399,7 @@ LINE: while (my $line = <$VCF>){
             }
         }
     }
+       
     #get alleles and consequences for each allele
     my @alleles = VcfReader::readAlleles(line => \@split);
     my @csq = getConsequences(\@split);
@@ -418,6 +423,10 @@ LINE: while (my $line = <$VCF>){
             @cadd_scores = split(",", $cadd);
         }
     }
+    #0 or 1 for each allele if pathogenic - i.e. we keep all annotations
+    # if allele is flagged as pathogenic in ClinVar
+    # ClinVar annotations come via annotateSnps.pl using a ClinVar file
+    my @clinvar_path = keepClinvar(\@split, scalar(@alleles)-1);
 ALT: for (my $i = 1; $i < @alleles; $i++){
         next ALT if $alleles[$i] eq '*';
         #if CADD filtering skip if less than user-specified cadd filter
@@ -461,7 +470,7 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
         #skip if VEP/SNPEFF annotation is not the correct class 
         # (or not predicted damaging if using that option)
         foreach my $annot (@a_csq){
-            if (consequenceMatchesClass($annot, \@split)){
+            if ($clinvar_path[$i-1] or consequenceMatchesClass($annot, \@split)){
                 #create variant ID for this allele
                 my $var_id = "$chrom:$pos-$i";
                 #add variant ID to transcript variants
@@ -1486,7 +1495,6 @@ sub getAfAnnotations{
     }
     return %af_found;
 }
-
 #################################################
 sub alleleAboveMaf{
     my $i = shift; #1-based index of alt allele to assess
@@ -1736,6 +1744,69 @@ PROG: foreach my $k ( sort keys %in_silico_filters) {
     return 1;
 }
 
+#################################################
+sub checkClinVarInfo{
+    if ($opts{clinvar} and lc($opts{clinvar}) eq 'disable'){
+        return 0;
+    }
+    if (exists $info_fields{ClinVarPathogenic}){
+        if (not $opts{clinvar}){
+            return 'all';
+        }elsif (lc($opts{clinvar}) eq 'all'){
+            return 'all';
+        }elsif (lc($opts{clinvar}) eq 'no_conflicted'){
+            if (not exists $info_fields{ClinVarConflicted}){
+                informUser
+                ( 
+                    "WARNING: no ClinVarConflicted INFO field found in header.".
+                    " All variants with ClinVarPathogenic annotations will be".
+                    " kept."
+                );
+                return 'all';
+            }
+            return 'no_conflicted';
+        }else{
+            die "Unrecognised value '$opts{clinvar}' passed to --clinvar option.\n";
+        }
+    }else{
+        if ($opts{clinvar}){
+            informUser
+            (
+                "WARNING: no ClinVarPathogenic INFO field was found in header.".
+                " ClinVarPathogenic variants will not be identified."
+            );
+        }
+        return 0;
+    }
+}
+
+#################################################
+sub keepClinvar{
+#returns an array with a value for each allele
+#values are 1 if pathogenic and and 0 if not
+    my $v = shift;
+    my $n_alts = shift;
+    if (not $keep_clinvar){
+        return map { 0 } 0..$n_alts 
+    }
+    my @path = split(",", VcfReader::getVariantInfoField
+        (
+            $v,
+            'ClinVarPathogenic',
+        ) 
+    );
+    if ($keep_clinvar eq 'no_conflicted'){
+        my @conf = split(",", VcfReader::getVariantInfoField
+            (
+                $v,
+                'ClinVarConflicted',
+            )
+        );
+        return map {$path[$_] == 1 and $conf[$_] == 0} 0..$#path;
+    }
+    return @path;
+}
+ 
 #################################################
 sub outputGeneList{
     return if not $LIST;

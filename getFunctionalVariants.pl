@@ -42,6 +42,7 @@ GetOptions(
     "b|progress" ,
     "canonical_only" ,
     "classes=s{,}" ,
+    'clinvar=s',
     "consensus_splice_site",
     "c|cadd_filter=f",
     "d|damaging=s{,}" ,
@@ -212,6 +213,9 @@ my %af_info_fields = (); #check available INFO fields for AF annotations
 if ( defined $opts{a} ) {
     %af_info_fields = getAfAnnotations(\%info_fields);   
 }
+
+#by default keep variant if there's an associated pathogenic ClinVar field
+my $keep_clinvar = checkClinVarInfo();
 
 #if filtering on CADD score check we have a CaddPhredScore header
 if ( $opts{c} ){
@@ -421,11 +425,16 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
             @a_csq = grep { $_->{allele} eq $alleles[$i] } @csq;
         }
         
+        #0 or 1 for each allele if pathogenic - i.e. we keep all annotations
+        # if allele is flagged as pathogenic in ClinVar
+        # ClinVar annotations come via annotateSnps.pl using a ClinVar file
+        my @clinvar_path = keepClinvar(\@split, scalar(@alleles)-1);
         #skip if VEP/SNPEFF annotation is not the correct class 
         # (or not predicted damaging if using that option)
+        # and allele is not flagged as pathogenic in ClinVar
         my @samp_with_allele = ();
 CSQ:    foreach my $annot (@a_csq){
-            if (consequenceMatchesClass($annot, \@split)){
+            if ($clinvar_path[$i-1] or consequenceMatchesClass($annot, \@split)){
                 if (defined $opts{f}){# if looking for matching genes 
                     if (not @samp_with_allele){
                     #only need to add samples once per allele
@@ -606,6 +615,69 @@ sub checkGtPl{
     return 1;
 }
 
+#################################################
+sub checkClinVarInfo{
+    if ($opts{clinvar} and lc($opts{clinvar}) eq 'disable'){
+        return 0;
+    }
+    if (exists $info_fields{ClinVarPathogenic}){
+        if (not $opts{clinvar}){
+            return 'all';
+        }elsif (lc($opts{clinvar}) eq 'all'){
+            return 'all';
+        }elsif (lc($opts{clinvar}) eq 'no_conflicted'){
+            if (not exists $info_fields{ClinVarConflicted}){
+                informUser
+                ( 
+                    "WARNING: no ClinVarConflicted INFO field found in header.".
+                    " All variants with ClinVarPathogenic annotations will be".
+                    " kept."
+                );
+                return 'all';
+            }
+            return 'no_conflicted';
+        }else{
+            die "Unrecognised value '$opts{clinvar}' passed to --clinvar option.\n";
+        }
+    }else{
+        if ($opts{clinvar}){
+            informUser
+            (
+                "WARNING: no ClinVarPathogenic INFO field was found in header.".
+                " ClinVarPathogenic variants will not be identified."
+            );
+        }
+        return 0;
+    }
+}
+
+#################################################
+sub keepClinvar{
+#returns an array with a value for each allele
+#values are 1 if pathogenic and and 0 if not
+    my $v = shift;
+    my $n_alts = shift;
+    if (not $keep_clinvar){
+        return map { 0 } 0..$n_alts 
+    }
+    my @path = split(",", VcfReader::getVariantInfoField
+        (
+            $v,
+            'ClinVarPathogenic',
+        ) 
+    );
+    if ($keep_clinvar eq 'no_conflicted'){
+        my @conf = split(",", VcfReader::getVariantInfoField
+            (
+                $v,
+                'ClinVarConflicted',
+            )
+        );
+        return map {$path[$_] == 1 and $conf[$_] == 0} 0..$#path;
+    }
+    return @path;
+}
+ 
 #################################################
 sub outputGeneList{
     return if not $LIST;
