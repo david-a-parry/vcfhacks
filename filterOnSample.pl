@@ -264,7 +264,7 @@ else {
 
 my $progressbar;
 my $next_update = 0;
-if ($progress) {
+if (defined $progress) {
     my $count = $total_variants ? $total_variants * 3 : -1;
     $progressbar = Term::ProgressBar->new(
         {
