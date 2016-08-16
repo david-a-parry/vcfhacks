@@ -1868,9 +1868,13 @@ sub keepClinvar{
             if ($keep_clinvar eq 'no_conflicted'){
                 #an annotation of 0 from the ClinVarPathogenic might mean 
                 #no info rather than designated as benign, so only consider as
-                #conflicted if ClinVarConflicted annotation is 1
-                return map { ($d_path[$_] == 1 or $c_path[$_] == 1) and $c_conf[$_] == 0} 0..$#d_path;
-            }else{
+                #conflicted if ClinVarConflicted annotation is 1 or $d_path[$_] == 0
+                #in this case, if we have annotations from VCF in @d_path,
+                #about what is in @c_path
+                return map { $d_path[$_] == 1  and $c_conf[$_] == 0} 0..$#d_path;
+            }else{  
+                #don't care about conflicted annotations
+                #keep if either source is flagged as pathogenic
                 return map {$d_path[$_] == 1 or $c_path[$_] == 1} 0..$#d_path;
             }
         }else{
