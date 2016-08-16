@@ -1749,7 +1749,27 @@ sub checkClinVarInfo{
     if ($opts{clinvar} and lc($opts{clinvar}) eq 'disable'){
         return 0;
     }
-    if (exists $info_fields{ClinVarPathogenic} or exists $info_fields{AS_CLNSIG}){
+    my $iclvar = 0;
+    foreach my $f ( qw / ClinVarPathogenic AS_CLNSIG / ) { 
+        if (exists $info_fields{$f} and $info_fields{$f}->{Number} eq 'A'){
+            informUser
+            (
+                "Identified '$f' INFO field - alleles marked as pathogenic ".
+                "will be used for identification of potential biallelic ".
+                "variation regardless of functional consequence. To change ".
+                "this behaviour run with the option '--clinvar disable'"
+            );
+            $iclvar++;
+        }elsif(exists $info_fields{$f}){
+            informUser
+            (
+                "WARNING: Ignoring INFO field '$f' because 'Number' is given ".
+                "as $info_fields{$f}->{Number} rather than the expected 'A'."
+            );
+            delete $info_fields{$f};#remove so we don't try using this annotation later
+        }
+    }
+    if ($iclvar){
         if (not $opts{clinvar}){
             return 'all';
         }elsif (lc($opts{clinvar}) eq 'all'){
@@ -1846,7 +1866,10 @@ sub keepClinvar{
     if (@c_path){
         if (@d_path){
             if ($keep_clinvar eq 'no_conflicted'){
-                return map {$d_path[$_] == 1 and $c_path[$_] == 1} 0..$#d_path;
+                #an annotation of 0 from the ClinVarPathogenic might mean 
+                #no info rather than designated as benign, so only consider as
+                #conflicted if ClinVarConflicted annotation is 1
+                return map { ($d_path[$_] == 1 or $c_path[$_] == 1) and $c_conf[$_] == 0} 0..$#d_path;
             }else{
                 return map {$d_path[$_] == 1 or $c_path[$_] == 1} 0..$#d_path;
             }
