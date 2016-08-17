@@ -1757,14 +1757,14 @@ sub checkClinVarInfo{
                 "Identified '$f' INFO field - alleles marked as pathogenic ".
                 "will be used for identification of potential biallelic ".
                 "variation regardless of functional consequence. To change ".
-                "this behaviour run with the option '--clinvar disable'"
+                "this behaviour run with the option '--clinvar disable'\n"
             );
             $iclvar++;
         }elsif(exists $info_fields{$f}){
             informUser
             (
                 "WARNING: Ignoring INFO field '$f' because 'Number' is given ".
-                "as $info_fields{$f}->{Number} rather than the expected 'A'."
+                "as $info_fields{$f}->{Number} rather than the expected 'A'.\n"
             );
             delete $info_fields{$f};#remove so we don't try using this annotation later
         }
@@ -1783,7 +1783,7 @@ sub checkClinVarInfo{
                 ( 
                     "WARNING: no ClinVarConflicted or CLNSIG INFO field found in header.".
                     " All variants with ClinVarPathogenic annotations will be".
-                    " kept."
+                    " kept.\n"
                 );
                 return 'all';
             }
@@ -1797,7 +1797,7 @@ sub checkClinVarInfo{
             (
                 "WARNING: neither ClinVarPathogenic nor AS_CLNSIG INFO fields".
                 " were found in header. ClinVarPathogenic variants will not be".
-                " identified."
+                " identified.\n"
             );
         }
         return 0;
