@@ -197,7 +197,7 @@ $dbpm->wait_all_children;
 #get dbSNP category headers
 my %head_info_fields = (
     "clinical significance" => [ qw / CLNSIG SCS / ] ,
-    "clinvar annotations"   => [ qw / CLNALLE CLNDBN CLNDSDBID / ] ,
+    "clinvar annotations"   => [ qw / CLNALLE CLNDBN CLNDSDBID CLNHGVS / ] ,
     "dbSNPBuildID"          => [ qw / dbSNPBuildID / ],
     "allele frequency"      => [ qw / AF CAF G5A G5 COMMON / ] ,
 );
