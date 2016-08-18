@@ -1846,9 +1846,9 @@ sub keepClinvar{
             my @csig = split(",", $path);
             foreach my $c (@csig){
                 my @path = split(/\|/, $c);
-                if (grep {$_ == 4 or $_ == 5} @path){
+                if (grep {$_ eq '4' or $_ eq '5'} @path){
                     push @d_path, 1;
-                    if (grep {$_ == 2 or $_ == 3} @path){
+                    if (grep {$_ eq '2' or $_ eq '3'} @path){
                         push @d_conf, 1;
                     }else{
                         push @d_conf, 0;
