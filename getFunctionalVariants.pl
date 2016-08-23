@@ -98,24 +98,35 @@ if (defined $opts{u} ){
             -exitval => 2
         );
     }
+    
     if (not @samples){
-        pod2usage
+        informUser
         (
-            -message =>  "-u/--max_sample_allele_frequency option requires ". 
-                         "samples to be specified with the -s/--samples ".
-                         "argument.\n", 
-            -exitval => 2
+            "WARNING: No 'samples specified - all samples will be used for ".
+            "-u/--max_sample_allele_frequency calculation\n"
         );
+#        pod2usage
+#        (
+#            -message =>  "-u/--max_sample_allele_frequency option requires ". 
+#                         "samples to be specified with the -s/--samples ".
+#                         "argument.\n", 
+#            -exitval => 2
+#        );
     }
 }
 
 if (defined $opts{f}){
-    pod2usage   
+    informUser
     (
-        -message => "--find_shared_genes option requires at least one " . 
-                    "sample to be specified with the -s/--samples argument.\n", 
-        -exitval => 2
+        "WARNING: No 'samples specified - all samples will be used for ".
+        "--find_shared_genes option\n"
     ) if not @samples;
+#    pod2usage   
+#    (
+#        -message => "--find_shared_genes option requires at least one " . 
+#                    "sample to be specified with the -s/--samples argument.\n", 
+#        -exitval => 2
+#    ) if not @samples;
 }
 
 #GQs are >= 0
@@ -159,6 +170,21 @@ my %sample_to_col = VcfReader::getSamples
     header => \@header,
     get_columns => 1,
 );
+if ( ( not @samples and ($opts{f} or $opts{u} ) )
+       or ( grep { /^all$/i } @samples )
+    ){
+    # if not samples specified but using --find_shared_genes 
+    # or --max_sample_allele_frequency option
+    # or if 'all' is listed in --samples option 
+    # add all samples
+    if (not %sample_to_col){
+        die "No samples found in VCF header!\n";
+    }
+    @samples = ();#need to remove 'all' if nothing else
+    push @samples, keys %sample_to_col;
+}
+@samples = VcfhacksUtils::removeDups(@samples);
+
 #get available INFO fields from header
 my %info_fields = VcfReader::getInfoFields(header => \@header);
 
@@ -199,13 +225,6 @@ my @score_exp = getAndCheckScoreFilters();
 #and check biotype classes are acceptable
 my %biotype_filters = map { $_ => undef } getAndCheckBiotypes();
 
-
-#if 'all' is listed in --samples option add all samples
-if (grep { /^all$/i } @samples){
-    @samples = ();
-    push @samples, keys %sample_to_col;
-}
-@samples = VcfhacksUtils::removeDups(@samples);
 
 # get available allele frequency annotations if filtering on AF
 # NOTE: we do not use VEP annotations as they do not necessarily match the variant allele
@@ -1405,11 +1424,11 @@ Only keep variants present in one of these samples.  You may specify 'all' (with
 
 =item B<-f    --find_shared_genes>
 
-If -s/--samples argument is specified use this switch to only output variants that make up 'functional' variants in the same genes for the given samples. This will also return a list of genes containing 'functional' variants in these samples. If a filename is passed to this option the list will be printed to file, otherwise the list will be printed to STDERR.
+Use this switch to only output variants that make up 'functional' variants in the same genes for the samples specified by the -s/--samples argument. If -s/--samples option is not specified this will act as if ALL samples in the VCF were specified.  This will also return a list of genes containing 'functional' variants in these samples. If a filename is passed to this option the list will be printed to file, otherwise the list will be printed to STDERR.
 
 =item B<-n    --num_matching>
 
-If -s/--samples and -f/--find_shared_genes arguments are specified use this option to specify the minimum number of samples with variants in the same gene before outputting variants (and genes). 
+If s/--samples or -f/--find_shared_genes arguments are specified use this option to specify the minimum number of samples with variants in the same gene before outputting variants (and genes). 
 
 =item B<-e    --equal_genotype>
 
@@ -1573,7 +1592,7 @@ If using the --af/--allele_frequency option and your data contains allele freque
 
 =item B<-u  --max_sample_allele_frequency>
 
-If -s/--samples argument is specified, use this option to specify an allele frequency (between 0.00 and 1.00) for filtering alleles. Alleles present at this frequency or higher in your samples of interest will be filtered.
+Use this option to specify an allele frequency (between 0.00 and 1.00) for filtering alleles in your VCF. Alleles present at this frequency or higher in your samples of interest will be filtered. If -s/--samples argument is specified, only these samples will be used for calculating the allele frequency, otherwise all samples in your VCF will be used.
 
 =item B<-v    --var_qual>
 
