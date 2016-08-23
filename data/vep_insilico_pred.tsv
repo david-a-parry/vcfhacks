@@ -39,6 +39,7 @@ Polyphen2_HVAR_pred	B	valid
 SIFT_pred	D	default
 SIFT_pred	T	valid
 #scores
+CADD_phred 10 score
 Eigen-phred	10	score
 fathmm-MKL_coding_score	0.5	score
 FATHMM_score	0	score	lower=damaging
@@ -52,6 +53,7 @@ Polyphen2_HDIV_score	0.5	score
 Polyphen2_HVAR_score	0.5	score
 SIFT_score	0.5	score	lower=damaging
 #rank	scores
+CADD_raw_rankscore 0.5 score
 fathmm-MKL_coding_rankscore	0.28317	score
 FATHMM_converted_rankscore	0.5	score
 LRT_converted_rankscore	0.5	score
