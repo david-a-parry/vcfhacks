@@ -1826,7 +1826,7 @@ sub keepClinvar{
         if (defined $path){ 
             @c_path = split(",", $path);
             if ($keep_clinvar eq 'no_conflicted'){
-                my @c_conf = split(",", VcfReader::getVariantInfoField
+                @c_conf = split(",", VcfReader::getVariantInfoField
                     (
                         $v,
                         'ClinVarConflicted',
