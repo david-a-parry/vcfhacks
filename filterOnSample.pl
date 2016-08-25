@@ -523,15 +523,11 @@ sub filter_on_sample {
                               ;   #sometimes with no reads an AD of '.' is given
                             my $dp = sum(@ads);
                             if ($dp) {
-                                for ( my $i = 0 ; $i < @ads ; $i++ ) {
-                                    my $ratio = $ads[$i] / $dp;
+                                for ( my $i = 0 ; $i < @{ $alleles{$sample} } ; $i++ ) {
+                                    next if $alleles{$sample}->[$i] == 0;
+                                    my $ratio = $ads[$alleles{$sample}->[$i]] / $dp;
                                     if ($allele_balance_cutoff > $ratio){
-                                        if ( $check_presence_only or $num_matching ) {
-                                            next SAMPLE;
-                                        }
-                                        else {
-                                            return
-                                        }
+                                        $alleles{$sample}->[$i] = 0;#call as REF if below allele balance cutoff
                                     }
                                         
                                     if ( exists $min_allele_ratios{$i} ) {
@@ -639,7 +635,10 @@ sub filter_on_sample {
                         for ( my $i = 0 ; $i < @ads ; $i++ ) {
                             next if exists $called_alleles{$i};
                             my $ratio = $ads[$i] / $dp;
-                            if ( exists $min_allele_ratios{$i} ) {
+                            if ($allele_balance_cutoff > $ratio){
+                                next;
+                            }
+                            if ($allele_ratio_cutoff and  exists $min_allele_ratios{$i} ) {
 
                  #compare the ratio of $rejects ad/dp ratio to the minimum ad/dp
                  #for this allele in @samples
