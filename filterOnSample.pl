@@ -53,7 +53,7 @@ my $manual;
 my $progress;
 my %opts = (
     'a'                   => \$aff_genotype_quality,
-    'ab'                  => \$allele_balance_cutoff,
+    'y'                   => \$allele_balance_cutoff,
     'b'                   => \$progress,
     'c'                   => \$confirm_missing,
     'cache'               => \$buffer_size,
@@ -96,7 +96,7 @@ GetOptions(
     'u|un_quality=i',
     'depth_sample=i',
     'depth_allele_cutoff=f',
-    'ab|allele_balance_cutoff=f',
+    'y|allele_balance_cutoff=f',
     'z|allele_ratio_cutoff=f',
     'num_matching=i',
     'h|?|help',
@@ -127,7 +127,7 @@ pod2usage(
 ) if ( $allele_depth_cutoff < 0 or $allele_depth_cutoff > 1.0 );
 pod2usage(
     -message =>
-      "-ab/--allele_balance_cutoff must be a value between 0.00 and 1.00.\n",
+      "-y/--allele_balance_cutoff must be a value between 0.00 and 1.00.\n",
     -exitval => 2
 ) if ( $allele_balance_cutoff < 0 or $allele_balance_cutoff > 1.0 );
 pod2usage(
@@ -874,7 +874,7 @@ Use this flag to look only for variants that are present only in --samples and a
 
 Minimum per sample depth for a genotype call to be considered. Variants will only be considered for --samples if they were covered by this many reads or more. Similarly, any calls for --reject samples will only be used to filter variants if that --reject sample was covered by this many reads or more. Default = 0.
 
-=item B<-ab   --allele_balance_cutoff>
+=item B<-y   --allele_balance_cutoff>
 
 Minimum fraction of ALT allele reads for for a genotype call to be considered. Must be a value between 0.0 and 1.0. Default = 0.
 
