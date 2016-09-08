@@ -670,6 +670,7 @@ sub filterSnps {
     #Get all snp_info fields present in %min_vars and create undef hash entries
     foreach my $allele ( keys %min_vars ) {
         map { $snp_info{$_} = undef }  keys %{ $min_vars{$allele}->{snp_info} } ;
+        map { $clinvar_info{$_} = undef } keys %{ $min_vars{$allele}->{cvar_info} } ;
     }
     #then work through each allele, adding value to array or '.' in if field is unavailable
     foreach my $allele ( sort { $a <=> $b } keys %min_vars ) {
@@ -681,8 +682,12 @@ sub filterSnps {
             }
         }
         #add clinvar info for allele
-        foreach my $k ( keys %{ $min_vars{$allele}->{cvar_info} } ) {
-            push @{$clinvar_info{$k}}, $min_vars{$allele}->{cvar_info}->{$k};
+        foreach my $k ( sort keys %clinvar_info ) {
+            if (exists $min_vars{$allele}->{cvar_info}->{$k} ) {
+                push @{$clinvar_info{$k}}, $min_vars{$allele}->{cvar_info}->{$k};
+            }else{
+                push @{$clinvar_info{$k}}, ".";
+            }
         }
     }
     foreach my $k ( sort keys %snp_info ) {
