@@ -935,8 +935,6 @@ sub checkVarMatches {
     my ( $min_allele, $snp_line ) = @_;
     my %snp_min = VcfReader::minimizeAlleles($snp_line);
     foreach my $snp_allele ( keys %snp_min ) {
-        $min_allele->{CHROM} =~ s/^chr//;
-        $snp_min{$snp_allele}->{CHROM} =~ s/^chr//;
         next if $min_allele->{CHROM} ne $snp_min{$snp_allele}->{CHROM};
         next if $min_allele->{POS} ne $snp_min{$snp_allele}->{POS};
         next if $min_allele->{REF} ne $snp_min{$snp_allele}->{REF};
