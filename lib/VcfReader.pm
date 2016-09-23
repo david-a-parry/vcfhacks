@@ -3956,7 +3956,7 @@ sub readSnpEffHeader{
     carp "Warning - multiple ANN fields found, ignoring all but the most recent field " if @info > 1;
    my $csq_line = $info[-1] ;#assume last applied SnpEff consequences are what we are looking for 
    my @csq_fields = ();    
-   if ($csq_line =~ /Description="Functional annotations: '(.+)' ">/){
+   if ($csq_line =~ /Description="Functional annotations: '(.+)'\s*">/){
        @csq_fields = split(/\s+\|\s+/, $1);
    }else{
        croak "Method 'readSnpEffHeader' couldn't properly read the ANN format from the corresponding INFO line: $csq_line ";
