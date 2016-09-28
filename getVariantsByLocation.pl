@@ -294,7 +294,6 @@ sub process_regions{
                 }elsif ( $temp =~ /\S+\t\d+\t\d+\s/ or $temp =~ /\S+\t\d+\t\d+$/){
                     ($chr, $start, $stop) = split(/\t/, $temp); 
                     $start++;#BED should be 0-based 
-                    $stop--;
                 }else{
                     $invalid++;
                     next;
