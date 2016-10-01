@@ -49,6 +49,7 @@ GetOptions(
     "e|equal_genotypes",
     "f|find_shared_genes:s", 
     "g|gq=i",
+    "gene_counts=s",
     "h|?|help" ,
     "i|input=s" ,
     "j|custom_af=s{,}",
@@ -82,7 +83,7 @@ if (not $opts{i}){
 if (defined $opts{af} && ($opts{af} < 0 or $opts{af} > 1.0)){
     pod2usage
     (
-        -message =>  "-a/--af option requires a value between 0.00 and 1.00 to ".
+        -message =>  "-a/--allele_frequency option requires a value between 0.00 and 1.00 to ".
                      "filter on allele frequency.\n", 
         -exitval => 2
     );
@@ -129,6 +130,7 @@ if (defined $opts{f}){
 #    ) if not @samples;
 }
 
+
 #GQs are >= 0
 $opts{v} = defined $opts{v} ? $opts{v} : 0;
 pod2usage(
@@ -170,15 +172,26 @@ my %sample_to_col = VcfReader::getSamples
     header => \@header,
     get_columns => 1,
 );
-if ( ( not @samples and ($opts{f} or $opts{u} ) )
+
+#check --gene_counts arguments
+my %gene_count_opts = (); 
+if ($opts{gene_counts}){
+    checkGeneCountArgs();
+}
+
+if ( ( not @samples and ($opts{f} or $opts{u} or $opts{gene_counts}) )
        or ( grep { /^all$/i } @samples )
     ){
-    # if not samples specified but using --find_shared_genes 
+    # if not samples specified but using --find_shared_genes, --gene_counts 
     # or --max_sample_allele_frequency option
     # or if 'all' is listed in --samples option 
     # add all samples
-    if (not %sample_to_col){
-        die "No samples found in VCF header!\n";
+    if (not %sample_to_col ){
+        if ( not exists $gene_count_opts{model} or 
+             $gene_count_opts{model} ne 'allele_counts'
+        ){
+            die "No samples found in VCF header!\n";
+        }
     }
     @samples = ();#need to remove 'all' if nothing else
     push @samples, keys %sample_to_col;
@@ -247,13 +260,33 @@ if ( $opts{c} ){
 
 ######PRE-PROCESSING######
 
-#Get filehandle for output (STDOUT or file) and optionally gene list (STDERR or file)
-my ($OUT, $LIST) = openOutput();
+#Get filehandle for output (STDOUT or file) and optionally gene list 
+#(STDERR or file) or gene counts (file)
+my ($OUT, $LIST, $GENECOUNTS) = openOutput();
 
 #write header and program run parameters
 writeOptionsToHeader();
 
-#start progress bar 
+my %contigs = (); 
+ #keep track of contigs we've seen so we can check input is (roughly) sorted 
+ #... (only relevant if using --find_shared_genes option)
+my %transcript_sample_vars = ();
+ #stores variant IDs meeting our criteria per (key) transcript 
+my %vcf_lines = ();
+ #hash of variant IDs to matching VCF line
+my %transcript_to_symbol = ();
+ #transcript ID to gene symbol
+my %genes_to_transcripts = ();
+ #gene symbols => transcripts with variants
+my %gene_burden = (); 
+ #if using --gene_counts this has an entry for each gene with a functional 
+ #variant. Entries are hashes where keys are sample names
+my %allele_counts = ();
+ #if using --gene_counts in allele_counts mode
+my %allele_number = ();
+ #if using --gene_counts in allele_counts mode
+
+#progress bar vars
 my $next_update      = 0;
 my $total_vars       = 0; 
 my $var_count        = 0;
@@ -283,26 +316,40 @@ EOT
     }
 }
 
-my %contigs = (); 
- #keep track of contigs we've seen so we can check input is (roughly) sorted 
- #... (only relevant if using --find_shared_genes option)
-my %transcript_sample_vars = ();
- #stores variant IDs meeting our criteria per (key) transcript 
-my %vcf_lines = ();
- #hash of variant IDs to matching VCF line
-my %transcript_to_symbol = ();
- #transcript ID to gene symbol
-my %genes_to_transcripts = ();
- #gene symbols => transcripts with variants
-
 
 my $VCF = VcfReader::openVcf($opts{i}); 
 #read line
 LINE: while (my $line = <$VCF>){
-    next if $line =~ /^#/;#skip header
-    chomp $line;
-    updateProgressBar();  
+    processLine($line);
     $var_count++;#for progress bar
+    updateProgressBar();  
+}
+
+if (defined $opts{f}){
+    $functional_count += checkMatchingVariants();
+}elsif($opts{gene_counts}){
+    outputGeneCounts();
+}
+close $VCF;
+
+updateProgressBar();  
+outputGeneList();
+close $OUT;
+
+informUser
+(
+    "$functional_count variants matching criteria found from $var_count total".
+    " variants.\n"
+);
+
+
+
+
+#################################################
+sub processLine{
+    my $line = shift;
+    return if $line =~ /^#/;#skip header
+    chomp $line;
     my @split = split("\t", $line); 
     my ($chrom, $pos, $qual, $filter) = VcfReader::getMultipleVariantFields
     (
@@ -312,96 +359,199 @@ LINE: while (my $line = <$VCF>){
         'QUAL',
         'FILTER',
     );
-    if (defined $opts{f}){
-        #check if new chromosome - 
-        if (exists $contigs{$chrom}){
-            #require chroms to be ordered together
-            if ($contigs{$chrom} != scalar(keys %contigs) - 1){
-                die
-    "Encountered a variant for contig $chrom with at least one variant for a ".
-    "different contig inbetween. Your VCF input must be sorted such that all contigs".
-    " are kept together when using the -f/--find_shared_genes option. Please sort ".
-    "your input and try again.\n";
-            }
-        }else{
-            #if new chrom check biallelics and clear collected data
-            $contigs{$chrom} = scalar(keys%contigs);
-            $functional_count += checkMatchingVariants() if $contigs{$chrom} > 0;
-        }
-    }
-
-    #skip if FILTER != PASS and PASS required
+    #skip whole line if not passing filter or variant quality settings
     if ($opts{pass}){
-        next LINE if $filter ne 'PASS';
+        return if $filter ne 'PASS';
     }
     
     if ($opts{v}){
-        next LINE if $qual < $opts{v};
+        return if $qual < $opts{v};
     }
-    #skip if no variant allele in affecteds 
+    #get alleles to arrays of 'functional' consequences
+    my %allele_to_csq = getFunctionalCsq(\@split);
+    if (defined $opts{f}){
+    #if using matching variants go through each allele and each consequence and
+    #put transcript IDs into a hash to a hash of sample names to variant IDs
+        if (isNewChromosome($chrom)){
+            #if new chrom check genes and clear collected data
+            $functional_count += checkMatchingVariants();
+        }
+        recordMatchedSamples
+        (
+            \@split, 
+            \%allele_to_csq,
+        ); 
+    }elsif( $opts{gene_counts}){
+    #if using gene_counts 
+        if (isNewChromosome($chrom)){
+            outputGeneCounts();
+        }
+        recordGeneCounts
+        (
+            \@split, 
+            \%allele_to_csq,
+        ); 
+    }else{
+    #if not doing gene counts or matching variants simply print if we've got a
+    #functional allele
+        if (%allele_to_csq){
+            my $line_ref = VcfReader::addVariantInfoField
+            (
+                line  => \@split,
+                id    => "getFunctionalVariantsMatchedAlleles",
+                value => join(",",  (sort {$a <=> $b} keys %allele_to_csq)),
+            );
+            print $OUT join("\t", @$line_ref) ."\n";
+            $functional_count++;
+        }
+    }
+}
+
+#################################################
+sub recordGeneCounts{
+    my $split = shift;
+    my $alleles = shift;
+    my @matched_samples = (); 
+    return if not %{$alleles};
+    my $out_line_ref;
+    if ($gene_count_opts{model} eq 'allele_counts'){
+        my @allele_counts = (); 
+        foreach my $i (sort {$a <=> $b} keys %{$alleles}){
+            my $ac = getAlleleCounts
+            (
+                $split, 
+                $i,
+            );
+            my $an = getAlleleNumber
+            (
+                $split, 
+                $i,
+            );
+            push @allele_counts, $ac;
+            foreach my $annot (@{$alleles->{$i}}){
+                my $tr = $annot->{$feature_id};
+                my $gene = $annot->{$symbol_id};
+                $gene ||= $tr;
+                $gene_burden{$gene}->{AC} += $ac;
+                $gene_burden{$gene}->{AN} ||= 0 ;
+                $gene_burden{$gene}->{AN} = $gene_burden{$gene}->{AN} > $an ?
+                                            $gene_burden{$gene}->{AN} : $an;
+            }
+            $out_line_ref = VcfReader::addVariantInfoField
+            (
+                line  => $split,
+                id    => "getFunctionalVariantsAlleleCounts",
+                value => join(",", @allele_counts),
+            );
+        }
+    }else{
+        my @biallelics = ();#array ref per allele of samples w/ findBiallelic tags
+        if ($gene_count_opts{model} eq 'recessive'){
+        #if wanting to use --gene_counts to find recessives
+            my @hom = split
+            (
+                ",", 
+                VcfReader::getVariantInfoField($split, "findBiallelicSamplesHom") 
+            );
+            my @het = split
+            (
+                ",", 
+                VcfReader::getVariantInfoField($split, "findBiallelicSamplesHet") 
+            );
+            #entries are per allele, with multiple samples separated by '|' 
+            for (my $i = 0; $i < @hom; $i++){
+                my @s = grep { $_ ne '.' } split(/\|/, $hom[$i]); 
+                push @s, grep { $_ ne '.' } split(/\|/, $het[$i]);
+                push @biallelics, \@s;
+            }
+        }
+        foreach my $i (sort {$a <=> $b} keys %{$alleles}){
+            my @samp_with_allele = ();
+            if ($gene_count_opts{model} eq 'recessive'){
+                if (@{$biallelics[$i - 1]}){
+                    push @samp_with_allele, @{$biallelics[$i - 1]};
+                }
+            }else{#getting gene counts for specified inheritance model
+                my %samp_to_gt = VcfReader::getSampleCall
+                (
+                  line              => $split, 
+                  sample_to_columns => \%sample_to_col,
+                  minGQ             => $opts{g},
+                  multiple          => \@samples,
+                );        
+                @samp_with_allele = addSamplesForGeneCounts
+                (
+                        \%samp_to_gt, 
+                        $i,
+                        $split,
+                );
+            }
+            if (@samp_with_allele){ 
+                push @matched_samples, join("|", @samp_with_allele); 
+                #for INFO field of output line
+                foreach my $annot (@{$alleles->{$i}}){
+                    my $tr = $annot->{$feature_id};
+                    my $gene = $annot->{$symbol_id};
+                    $gene ||= $tr;
+                    foreach my $sample (@samp_with_allele){
+                        $gene_burden{$gene}->{$sample} = undef;
+                        # keys for each %{gene_burden{$gene}} will be udef for
+                        # counting burden (# samples with qualifying variant)
+                    }
+                }
+            }else{
+                push @matched_samples, '.';
+            }
+        }
+        $out_line_ref = VcfReader::addVariantInfoField
+        (
+            line  => $split,
+            id    => "getFunctionalVariantsMatchedSamples",
+            value => join(",", @matched_samples),
+        );
+    }
+    $out_line_ref = VcfReader::addVariantInfoField
+    (
+        line  => $split,
+        id    => "getFunctionalVariantsMatchedAlleles",
+        value => join(",",  (sort {$a <=> $b} keys %{$alleles})),
+    );
+    print $OUT join("\t", @$out_line_ref ) . "\n";
+    $functional_count++;
+}
+
+#################################################
+sub recordMatchedSamples{
+# this returns the samples with a matching allele/genotype for adding to INFO
+# and also adds information to %matched_transcript hash to record samples with
+# functional variants in a given transcript
+    my $split = shift;
+    my $alleles = shift;
+    return if not %{$alleles};
+    my @matched_samples = (); 
     my %samp_to_gt = VcfReader::getSampleCall
     (
-          line              => \@split, 
+          line              => $split, 
           sample_to_columns => \%sample_to_col,
           minGQ             => $opts{g},
           multiple          => \@samples,
     );
-    next LINE if not haveVariant(\%samp_to_gt);
-    
+    my ($chrom, $pos, $ref, $alt) = VcfReader::getMultipleVariantFields
+    (
+        $split, 
+        'CHROM', 
+        'POS', 
+        'REF',
+        'ALT',
+    );
+    my $var_id = "$chrom:$pos-$ref,$alt";
+    my $store_this_line = 0;
     #skip if not identical GTs in all affecteds and identical variants required
-    my @matched_gts = (); 
     if ($opts{e}){
-        push @matched_gts, identicalGenotypes(\%samp_to_gt, $opts{n});
-        next LINE if not @matched_gts;
-    }
-
-    #get Allele frequency annotations if they exist and we're filtering on AF
-    my %af_info_values = (); 
-    if (%af_info_fields){ 
-        %af_info_values = getAfInfoValues(\@split);
-    }
-    
-    # get allele frequencies in  @samples is using -u/--max_sample_allele_frequency
-    my %s_allele_counts = ();
-    my $allele_count;
-    if ($opts{u}){
-        %s_allele_counts = VcfReader::countAlleles
-        (
-            minGQ => $opts{g},
-            line  => \@split,
-        );
-        map { $allele_count += $s_allele_counts{$_} } keys %s_allele_counts;
-    }
-    #get alleles and consequences for each allele
-    my @alleles = VcfReader::readAlleles(line => \@split);
-    my @csq = getConsequences(\@split);
-    my @alts_to_vep_allele = ();#get VEP style alleles if needed
-    if ($opts{m} eq 'vep'){
-        @alts_to_vep_allele = VcfReader::altsToVepAllele
-        (
-            ref => $alleles[0],
-            alts => [ @alleles[1..$#alleles] ], 
-        );
-    }
-    #assess each ALT allele (REF is index 0)
-    my @cadd_scores = (); 
-    if ($opts{c}){
-        my $cadd = VcfReader::getVariantInfoField
-        (
-            \@split,
-            'CaddPhredScore',
-        );
-        if ($cadd){
-            @cadd_scores = split(",", $cadd);
-        }
-    }
-    my @matched_samples = (); 
-    my %matched_transcript = (); 
-ALT: for (my $i = 1; $i < @alleles; $i++){
-        push @matched_samples, '.'; #add placeholder for matched INFO field
-        next ALT if $alleles[$i] eq '*';
-        if (@matched_gts ){
-            my $i_match ;
+        my @matched_gts, identicalGenotypes(\%samp_to_gt, $opts{n});
+        return if not @matched_gts;
+        my $i_match ;
+        foreach my $i (sort {$a <=> $b} keys %{$alleles}){
             foreach my $matched_gt( @matched_gts ){
                 #if require equal genotypes skip if this is not a matched allele
                 my @m = split("/", $matched_gt); 
@@ -410,8 +560,168 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
                     last; 
                 }
             }
-            next ALT if not $i_match;
+            if ($i_match){
+                if (my @samp_with_allele = addSamplesWithGt
+                    (
+                        \%samp_to_gt, 
+                        \@matched_gts,
+                        $split,
+                    )
+                ){
+                    push @matched_samples, join("|", @samp_with_allele);
+                    recordTranscriptSamplesAndVariants
+                    (
+                        \@{$alleles->{$i}},
+                        \@samp_with_allele,
+                        $var_id,
+                    );
+                    $store_this_line++;
+                }else{
+                    push @matched_samples, '.';
+                }
+            }else{
+                push @matched_samples, '.';
+            }
         }
+    }else{
+        foreach my $i (sort {$a <=> $b} keys %{$alleles}){
+            if (my @samp_with_allele = addSamplesWithAllele
+                (
+                    \%samp_to_gt, 
+                    $i,
+                    $var_id,
+                ) 
+            ){
+                push @matched_samples, join("|", @samp_with_allele);
+                recordTranscriptSamplesAndVariants
+                (
+                    \@{$alleles->{$i}},
+                    \@samp_with_allele,
+                    $split,
+                );
+                $store_this_line++;
+            }else{
+                push @matched_samples, '.';
+            }
+        }
+    }
+    if ($store_this_line){
+        my $line_ref = VcfReader::addVariantInfoField
+        (
+            line  => $split,
+            id    => "getFunctionalVariantsMatchedSamples",
+            value => join(",", @matched_samples),
+        );
+        $line_ref = VcfReader::addVariantInfoField
+        (
+            line  => $split,
+            id    => "getFunctionalVariantsMatchedAlleles",
+            value => join(",",  (sort {$a <=> $b} keys %{$alleles})),
+        );
+        $vcf_lines{$var_id} = join("\t", @$line_ref);
+    }
+}
+
+#################################################
+sub recordTranscriptSamplesAndVariants{
+    my $annotations = shift;
+    my $samples = shift;
+    my $var_id = shift;
+    foreach my $annot (@$annotations){
+        my $tr = $annot->{$feature_id};
+        $transcript_to_symbol{$tr} = $annot->{$symbol_id};
+        foreach my $sample (@$samples){
+            push @{ $transcript_sample_vars{$tr}->{ $sample } }, $var_id;
+        }
+    }
+}
+
+#################################################
+sub isNewChromosome{
+    my $chrom = shift;
+    if (exists $contigs{$chrom}){
+        #require chroms to be ordered together
+        if ($contigs{$chrom} != scalar(keys %contigs) - 1){
+            die <<EOT
+Encountered a variant for contig $chrom with at least one variant for a
+different contig inbetween. Your VCF input must be sorted such that all contigs
+are kept together when using the -f/--find_shared_genes or --gene_counts
+options. Please sort your input and try again.
+EOT
+            ;
+        }
+        return 0;
+    }
+    #if new chrom record its contig index and return true
+    $contigs{$chrom} = scalar(keys%contigs);
+    return $contigs{$chrom} > 0;#return false if this is the first
+                                #chrom we've encountered
+}
+
+#################################################
+sub getFunctionalCsq{
+    my $split = shift;
+    my %allele_to_csq = (); #keys are allele numbers, values = array of
+                            #'functional' csq
+    #skip if no variant allele in affecteds 
+    my %samp_to_gt = VcfReader::getSampleCall
+    (
+          line              => $split, 
+          sample_to_columns => \%sample_to_col,
+          minGQ             => $opts{g},
+          multiple          => \@samples,
+    );
+    return if not haveVariant(\%samp_to_gt);
+    
+    #skip if not identical GTs in all affecteds and identical variants required
+    my @matched_gts = (); 
+    if ($opts{e}){
+        push @matched_gts, identicalGenotypes(\%samp_to_gt, $opts{n});
+        return if not @matched_gts;
+    }
+    
+    #get Allele frequency annotations if they exist and we're filtering on AF
+    my %af_info_values = (); 
+    if (%af_info_fields){ 
+        %af_info_values = getAfInfoValues($split);
+    }
+    
+    # get allele frequencies in  @samples if using -u/--max_sample_allele_frequency
+    my %s_allele_counts = ();
+    my $allele_count;
+    if ($opts{u}){
+        %s_allele_counts = VcfReader::countAlleles
+        (
+            minGQ => $opts{g},
+            line  => $split,
+        );
+        map { $allele_count += $s_allele_counts{$_} } keys %s_allele_counts;
+    }
+    #get alleles and consequences for each allele
+    my @alleles = VcfReader::readAlleles(line => $split);
+    my @csq = getConsequences($split);
+    my @alts_to_vep_allele = ();#get VEP style alleles if needed
+    if ($opts{m} eq 'vep'){
+        @alts_to_vep_allele = VcfReader::altsToVepAllele
+        (
+            ref => $alleles[0],
+            alts => [ @alleles[1..$#alleles] ], 
+        );
+    }
+    my @cadd_scores = (); 
+    if ($opts{c}){
+        my $cadd = VcfReader::getVariantInfoField
+        (
+            $split,
+            'CaddPhredScore',
+        );
+        if ($cadd){
+            @cadd_scores = split(",", $cadd);
+        }
+    }
+    #assess each ALT allele (REF is index 0)
+ALT: for (my $i = 1; $i < @alleles; $i++){
+        next ALT if $alleles[$i] eq '*';
         #if CADD filtering skip if less than user-specified cadd filter
         #if no CADD score for allele then we won't skip unless using --
         if (@cadd_scores){
@@ -447,114 +757,108 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
         #0 or 1 for each allele if pathogenic - i.e. we keep all annotations
         # if allele is flagged as pathogenic in ClinVar
         # ClinVar annotations come via annotateSnps.pl using a ClinVar file
-        my @clinvar_path = keepClinvar(\@split, scalar(@alleles)-1);
+        my @clinvar_path = keepClinvar($split, scalar(@alleles)-1);
         #skip if VEP/SNPEFF annotation is not the correct class 
         # (or not predicted damaging if using that option)
         # and allele is not flagged as pathogenic in ClinVar
-        my @samp_with_allele = ();
 CSQ:    foreach my $annot (@a_csq){
-            if ($clinvar_path[$i-1] or consequenceMatchesClass($annot, \@split)){
-                if (defined $opts{f}){# if looking for matching genes 
-                    if (not @samp_with_allele){
-                    #only need to add samples once per allele
-                        if (@matched_gts){
-                            addSamplesWithGt
-                            (
-                                \@samp_with_allele, 
-                                \%samp_to_gt, 
-                                \@matched_gts,
-                                \@split,
-                            );
-                        }else{
-                            addSamplesWithAllele
-                            (
-                                \@samp_with_allele, 
-                                \%samp_to_gt, 
-                                $i,
-                                \@split,
-                            );
-                        }
-                        if (@samp_with_allele){
-                            pop @matched_samples; #remove '.' placeholder
-                            push @matched_samples, join("|", @samp_with_allele);
-                        }
-                    }
-                    if (@samp_with_allele){
-                        push @{ $matched_transcript{ $annot->{$feature_id} } }, 
-                                                             @samp_with_allele;
-                        $transcript_to_symbol{$annot->{$feature_id}} = 
-                                                          $annot->{$symbol_id};
-                    }
-                }else{#if not checking matching genes can print and bail out now
-                    print $OUT "$line\n";
-                    $functional_count++;
-                    next LINE; 
+            if ($clinvar_path[$i-1] or consequenceMatchesClass($annot, $split)){
+                push @{$allele_to_csq{$i}}, $annot;
+            }
+        }
+    }#each ALT
+    return %allele_to_csq;
+}
+
+
+#################################################
+sub outputGeneCounts{
+    foreach my $g (keys %gene_burden){
+        my $count = 0;
+        my $without = 0;
+        if ($gene_count_opts{model} eq 'allele_counts'){
+            $count = $gene_burden{$g}->{AC};
+            $without = $gene_burden{$g}->{AN};
+        }else{
+            $count = keys %{$gene_burden{$g}};
+            $without = @samples - $count;
+        }
+        print $GENECOUNTS join("\t", $g, $count, $without ) . "\n";
+    }
+    %gene_burden = (); 
+}
+
+#################################################
+sub getAlleleCounts{
+    my $line = shift;
+    my $allele = shift;
+    return VcfReader::getVariantInfoField($line, "AC");
+}
+
+#################################################
+sub getAlleleNumber{
+    my $line = shift;
+    my $allele = shift;
+    return VcfReader::getVariantInfoField($line, "AN");
+}
+
+#################################################
+sub addSamplesForGeneCounts{
+#will already have added samples if using 
+#recessive gene count model
+    my ($gts, $allele, $line) = @_; 
+    my @samp = ();
+    foreach my $s ( keys %{$gts} ){
+        if ($gene_count_opts{model} eq 'dominant'){
+            if ($gts->{$s} =~ /^$allele[\/\|]$allele$/){
+            #found a homozygote - discard all(?)
+                if (checkGtPl(["$allele/$allele"], $s, $line )){
+                    return;
                 }
             }
-        }#end of CSQ
-    }#end of ALT
-    if (defined $opts{f} and @matched_samples){
-        my $line_ref = VcfReader::addVariantInfoField
-        (
-            line  => \@split,
-            id    => "getFunctionalVariantsMatch",
-            value => join(",", @matched_samples),
-        );
-        my $out_line = join("\t", @$line_ref);
-        my $var_id = "$chrom:$pos-" . join("/", @alleles ); 
-        $vcf_lines{$var_id} = $out_line;
-        foreach my $tr (keys %matched_transcript){
-            foreach my $sample ( @{ $matched_transcript{$tr} } ){
-                push @{ $transcript_sample_vars{$tr}->{ $sample } }, $var_id;
-                                       # transcript -> sample -> [var ids]
+        }
+        if ($gts->{$s} =~ /^($allele[\/\|]\d+|\d+[\/\|]$allele)$/){
+            if (checkAllelePl($allele, $s, $line)){
+                push @samp, $s;
             }
         }
     }
-}#end of LINE
-if (defined $opts{f}){
-    $functional_count += checkMatchingVariants();
+    return @samp;
 }
-close $VCF;
-
-updateProgressBar();  
-outputGeneList();
-close $OUT;
-
-informUser
-(
-    "$functional_count variants matching criteria found from $var_count total".
-    " variants.\n"
-);
 
 #################################################
 sub addSamplesWithGt{
-    my ($samp_ar, $gts, $matched, $line) = @_; 
+    my ($gts, $matched, $line) = @_; 
+    my @samp = ();
     foreach my $s ( keys %{$gts} ){
         next if ($gts->{$s} =~ /^\.[\/\|]\.$/ );
         (my $gt = $gts->{$s}) =~ s/[\|]/\//;
           #don't let allele divider affect whether a genotype matches
         if ($opts{pl}){
-            if (checkGtPl(\$matched, $s, $line )){
-                push @$samp_ar, $s;
+            if (checkGtPl($matched, $s, $line )){
+                push @samp, $s;
             }
         }else{
             if ( first { $_ eq $gt } @$matched ){
-                push @$samp_ar, $s ;
+                push @samp, $s ;
             }
         }
     }
+    return @samp;
 }
 
 #################################################
 sub addSamplesWithAllele{
-    my ($samp_ar, $gts, $allele, $line) = @_; 
+    my ($gts, $allele, $line) = @_; 
+    my @samp = ();
     foreach my $s ( keys %{$gts} ){
         if ($gts->{$s} =~ /^($allele[\/\|]\d+|\d+[\/\|]$allele)$/){
             if (checkAllelePl($allele, $s, $line)){
-                push @$samp_ar, $s;
+                push @samp, $s;
             }
         }
     }
+    return @samp;
 }
 
 #################################################
@@ -596,6 +900,7 @@ sub checkAllelePl{
 sub checkGtPl{
     #returns 0 if PL for any genotype other than those in @$gts
     # is lower than $opts{pl}. Otherwise returns 1.
+    return 1 if not $opts{pl} ;
     my ($gts, $sample, $line) = @_;
     my $pl = VcfReader::getSampleGenotypeField
     (
@@ -716,7 +1021,7 @@ sub keepClinvar{
         if (defined $path){ 
             @c_path = split(",", $path);
             if ($keep_clinvar eq 'no_conflicted'){
-                my @c_conf = split(",", VcfReader::getVariantInfoField
+                @c_conf = split(",", VcfReader::getVariantInfoField
                     (
                         $v,
                         'ClinVarConflicted',
@@ -736,9 +1041,9 @@ sub keepClinvar{
             my @csig = split(",", $path);
             foreach my $c (@csig){
                 my @path = split(/\|/, $c);
-                if (grep {$_ == 4 or $_ == 5} @path){
+                if (grep {$_ eq '4' or $_ eq '5'} @path){
                     push @d_path, 1;
-                    if (grep {$_ == 2 or $_ == 3} @path){
+                    if (grep {$_ eq '2' or $_ eq '3'} @path){
                         push @d_conf, 1;
                     }else{
                         push @d_conf, 0;
@@ -815,6 +1120,35 @@ sub checkMatchingVariants{
     %vcf_lines = ();
     %transcript_to_symbol = ();
     return $count;
+}
+
+#################################################
+sub checkGeneCountArgs{
+    informUser
+    (
+        "WARNING: No 'samples specified - all samples will be used for ".
+        "--gene_counts option\n"
+    ) if not @samples;
+    my @keys = qw / file model /;
+    my @split = split(',', $opts{gene_counts}); 
+    @gene_count_opts{@keys} = @split;
+    $gene_count_opts{model} ||= 'dominant';
+    if ( $gene_count_opts{model} ne 'dominant' and
+         $gene_count_opts{model} ne 'recessive' and 
+         $gene_count_opts{model} ne 'both' and
+         $gene_count_opts{model} ne 'allele_counts'
+    ){
+        die "ERROR: Unrecognised model '$gene_count_opts{model}' for --gene_counts argument\n";
+    }
+    if ($gene_count_opts{model} eq 'recessive'){
+        foreach my $f (qw /findBiallelicSamplesHom findBiallelicSamplesHet/){
+            if (not exists $info_fields{$f}){
+                die "ERROR: Could not find '$f' INFO field entry in VCF header".
+                    " In order to use recessive mode with the --gene_counts ".
+                    "please run findBiallelic.pl on your input first.\n";
+            }
+        }
+    }
 }
 
 #################################################
@@ -999,8 +1333,9 @@ FLT: foreach my $s (@score_filters){
 sub openOutput{
     my $OUT_FH;
     my $LIST_FH;
+    my $COUNT_FH;
     if ($opts{o}) {
-        open( $OUT_FH, ">$opts{o}" ) || die "Can't open $opts{o} for writing: $!\n";
+        open( $OUT_FH, ">", $opts{o} ) || die "Can't open $opts{o} for writing: $!\n";
     }
     else {
         $OUT_FH = \*STDOUT;
@@ -1010,11 +1345,15 @@ sub openOutput{
           #user specified --list option but provided no argument
             $LIST_FH = \*STDERR;
         }else{
-            open( $LIST_FH, ">$opts{f}" )
+            open( $LIST_FH, ">", $opts{f} )
               or die "Can't open $opts{f} for writing: $!\n";
         }
     }
-    return ($OUT_FH, $LIST_FH);        
+    if ($opts{gene_counts}){
+        open( $COUNT_FH, ">", $gene_count_opts{file} )
+          or die "Can't open $gene_count_opts{file} for writing: $!\n";
+    }
+    return ($OUT_FH, $LIST_FH, $COUNT_FH);        
 }
 
 #################################################
@@ -1434,6 +1773,10 @@ If s/--samples or -f/--find_shared_genes arguments are specified use this option
 
 If -s/--samples argument is specified use this flag if you only want to keep variants with identical genotypes in each sample (or a minimum number of samples as specified by the -n/--num_matching option).
 
+=item B<--gene_counts>
+
+Give a filename for outputting the counts of gene IDs vs number of samples with qualifying variants (e.g. for input to a burden test). Optionally the user may also add the 'mode' to use for the gene counts, separated by a comma after the filename (e.g. --gene_counts gene_counts.txt,recessive). Valid modes are 'dominant' (only samples with heterozygous variants counted), 'recessive' (requires annotations from findBiallelic.pl to identify samples with compound het or homozygous variants) or 'both' (count a sample regardless of whether it is heterozygous or homozygous). If using the 'recessive' mode you will need to annotate your variants with findBiallelic.pl first and use consistent settings for functional/in silico filters between both programs.
+
 =item B<--classes>
 
 One or more mutation classes to retrieve. By default only variants labelled with one of the following classes will count as 'functional' variants:
@@ -1479,7 +1822,7 @@ B<SnpEff:>
 
 Available classes that can be chosen instead of (or in addition to - see below) these classes can be found in the data/vep_classes.tsv and data/snpeff_classes.tsv files respectively. 
 
-=item B<-a    --add_classes>
+=item B<--add_classes>
 
 Specify one or more classes, separated by spaces, to add to the default mutation classes used for finding functional variants.
 
@@ -1580,7 +1923,7 @@ The 'data/biotypes.tsv' file contains a list of valid biotypes and the default b
 
 Use this flag to consider consequences affecting ALL biotypes.
 
-=item B<--af    --allele_frequency>
+=item B<-a    --allele_frequency>
 
 Use a value between 0.00 and 1.00 to specify allele frequencey filtering for annotations from annotateSnps.pl, filterOnEvsMaf.pl or filterVcfOnVcf.pl if you've previously run these programs to annotate your VCF. If an allele frequency is available for an allele it will be filtered if equal to or greater than the value specfied here. 
 
