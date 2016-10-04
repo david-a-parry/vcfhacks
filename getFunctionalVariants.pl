@@ -17,7 +17,6 @@ my @classes = ();
 my @add_classes = ();
 my @damaging = ();
 my @biotypes = ();
-my @gene_lists = ();
 my @custom_af = ();
 my @score_filters = (); 
 
@@ -26,7 +25,6 @@ my %opts =
     classes          => \@classes,
     add_classes      => \@add_classes,
     d                => \@damaging,
-    list             => \@gene_lists,
     s                => \@samples,
     biotype_filters  => \@biotypes,
     j                => \@custom_af,
