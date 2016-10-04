@@ -6,6 +6,7 @@ use Pod::Usage;
 use POSIX qw/strftime/;
 use Data::Dumper;
 use List::Util qw ( first max min ) ;
+use File::Temp qw/ tempfile /;
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
 use VcfReader;
@@ -62,9 +63,9 @@ GetOptions(
     "s|samples=s{,}",
     "score_filters=s{,}",
     "skip_unpredicted" ,
+    "t|target_genes=s",
     "v|var_quality=i",
     "u|max_sample_allele_frequency=f",
-    #"l|list=s{,}",
 ) or pod2usage(-message => "Syntax error", -exitval => 2);
 pod2usage(-verbose => 2) if ($opts{manual});
 pod2usage(-verbose => 1) if ($opts{h});
@@ -184,8 +185,7 @@ if ( ( not @samples and ($opts{f} or $opts{u} or $opts{gene_counts}) )
     # or if 'all' is listed in --samples option 
     # add all samples
     if (not %sample_to_col ){
-        if ( not exists $gene_count_opts{model} or 
-             $gene_count_opts{model} ne 'allele_counts'
+        if ( $gene_count_opts{count_mode} ne 'allele_counts'
         ){
             die "No samples found in VCF header!\n";
         }
@@ -256,7 +256,21 @@ if ( $opts{c} ){
     }
 }
 
-######PRE-PROCESSING######
+#if using -t/--target_genes argument, check file
+my %targets = (); 
+my %sargs   = ();
+my $current_target = ''; 
+my ($TMP, $tmpout);#have to write to temp file, sort and dedup if using targets
+#keys are Ensembl Gene IDs, values are hashes of chrom, start, end coordinates
+if ($opts{t}){
+    if (not $opts{gene_counts}){
+        die "-t/--target_genes option can only be used when also using "
+            ."--gene_counts option\n";
+    }
+    readTargetGenesFile();
+    %sargs = VcfReader::getSearchArguments($opts{i});
+    ($TMP, $tmpout)  = tempfile(UNLINK => 1);
+}
 
 #Get filehandle for output (STDOUT or file) and optionally gene list 
 #(STDERR or file) or gene counts (file)
@@ -290,58 +304,70 @@ my $total_vars       = 0;
 my $var_count        = 0;
 my $functional_count = 0;
 if ($opts{b}) {
-    if ( $opts{i} eq "-" ) {
-        informUser("Can't use -b/--progress option when input is from STDIN\n");
-    }else{
-        my $msg = <<EOT
-WARNING: -b/--progress option requires installation of the perl module 'Term::ProgressBar'.
-WARNING: 'Term::ProgressBar' module was not found. No progress will be shown.
-EOT
-;
-        eval "use Term::ProgressBar; 1 " or informUser($msg);
-        if (not $@){
-            informUser("Counting variants in input for progress monitoring.\n"); 
-            $total_vars = VcfReader::countVariants($opts{i});
-            informUser("$opts{i} has $total_vars variants.\n");
-            $progressbar = Term::ProgressBar->new(
-                {
-                    name  => "Filtering",
-                    count => $total_vars,
-                    ETA   => "linear",
-                }
-            );
-        }
+    $progressbar = getProgressBar();
+}
+
+if ($opts{t}){
+    processTargets();
+}else{
+    processByLine();
+}
+
+#################################################
+sub processTargets{
+    foreach my $t (keys %targets){
+        $current_target = $t;
+        my @lines = VcfReader::searchByRegion
+        (
+            %sargs,
+            chrom => $targets{$t}->{chrom},
+            start => $targets{$t}->{start},
+            end   => $targets{$t}->{end},
+        );
+        processLine($_) for @lines;
+        $var_count++;#for progress bar
+        updateProgressBar();
     }
-}
-
-
-my $VCF = VcfReader::openVcf($opts{i}); 
-#read line
-LINE: while (my $line = <$VCF>){
-    processLine($line);
-    $var_count++;#for progress bar
-    updateProgressBar();  
-}
-
-if (defined $opts{f}){
-    $functional_count += checkMatchingVariants();
-}elsif($opts{gene_counts}){
     outputGeneCounts();
+    close $TMP; 
+    my %contigs = VcfReader::getContigOrder($opts{i});#will already be indexed
+    informUser("Sorting and outputting variants...\n");
+    VcfReader::SortVcf
+    (
+        vcf => $tmpout,
+        output => $OUT,
+        contig_order => \%contigs,
+    );
+    informUser("Done\n");
 }
-close $VCF;
 
-updateProgressBar();  
-outputGeneList();
-close $OUT;
+#################################################
+sub processByLine{
+    my $VCF = VcfReader::openVcf($opts{i}); 
+    #read line
+    while (my $line = <$VCF>){
+        processLine($line);
+        $var_count++;#for progress bar
+        updateProgressBar();  
+    }
 
-informUser
-(
-    "$functional_count variants matching criteria found from $var_count total".
-    " variants.\n"
-);
+    if (defined $opts{f}){
+        $functional_count += checkMatchingVariants();
+    }elsif($opts{gene_counts}){
+        outputGeneCounts();
+    }
+    close $VCF;
 
+    updateProgressBar();  
+    outputGeneList();
+    close $OUT;
 
-
+    informUser
+    (
+        "$functional_count variants matching criteria found from $var_count total".
+        " variants.\n"
+    );
+}
 
 #################################################
 sub processLine{
@@ -349,11 +375,10 @@ sub processLine{
     return if $line =~ /^#/;#skip header
     chomp $line;
     my @split = split("\t", $line); 
-    my ($chrom, $pos, $qual, $filter) = VcfReader::getMultipleVariantFields
+    my ($chrom, $qual, $filter) = VcfReader::getMultipleVariantFields
     (
         \@split, 
         'CHROM', 
-        'POS', 
         'QUAL',
         'FILTER',
     );
@@ -412,36 +437,38 @@ sub recordGeneCounts{
     my @matched_samples = (); 
     return if not %{$alleles};
     my $out_line_ref;
-    if ($gene_count_opts{model} eq 'allele_counts'){
+    if ($gene_count_opts{count_mode} eq 'allele_counts'){
         my @allele_counts = (); 
         foreach my $i (sort {$a <=> $b} keys %{$alleles}){
-            my $ac = getAlleleCounts
+            my ($sc, $sn) = getSampleCounts
             (
                 $split, 
                 $i,
             );
-            my $an = getAlleleNumber
-            (
-                $split, 
-                $i,
-            );
-            push @allele_counts, $ac;
+            push @allele_counts, $sc;
             foreach my $annot (@{$alleles->{$i}}){
                 my $tr = $annot->{$feature_id};
-                my $gene = $annot->{$symbol_id};
-                $gene ||= $tr;
-                $gene_burden{$gene}->{AC} += $ac;
-                $gene_burden{$gene}->{AN} ||= 0 ;
-                $gene_burden{$gene}->{AN} = $gene_burden{$gene}->{AN} > $an ?
-                                            $gene_burden{$gene}->{AN} : $an;
+                my $symbol = $annot->{$symbol_id};
+                my $gene   = $annot->{$gene_id};
+                $gene   ||= $tr;
+                $symbol ||= $gene;
+                if ($current_target){
+                    next if $gene ne $current_target;
+                }
+                $transcript_to_symbol{$gene} = $symbol;
+                $gene_burden{$gene}->{SC} += $sc;
+                $gene_burden{$gene}->{SN} ||= 0 ;
+                $gene_burden{$gene}->{SN} = $gene_burden{$gene}->{SN} > $sn ?
+                                            $gene_burden{$gene}->{SN} : $sn;
             }
-            $out_line_ref = VcfReader::addVariantInfoField
-            (
-                line  => $split,
-                id    => "getFunctionalVariantsAlleleCounts",
-                value => join(",", @allele_counts),
-            );
+            
         }
+        $out_line_ref = VcfReader::addVariantInfoField
+        (
+            line  => $split,
+            id    => "getFunctionalVariantsAlleleCounts",
+            value => join(",", @allele_counts),
+        );
     }else{
         my @biallelics = ();#array ref per allele of samples w/ findBiallelic tags
         if ($gene_count_opts{model} eq 'recessive'){
@@ -492,7 +519,10 @@ sub recordGeneCounts{
                     my $symbol = $annot->{$symbol_id};
                     my $gene   = $annot->{$gene_id};
                     $gene   ||= $tr;
-                    $symbol ||= $tr;
+                    $symbol ||= $gene;
+                    if ($current_target){
+                        next if $gene ne $current_target;
+                    }
                     foreach my $sample (@samp_with_allele){
                         $gene_burden{$gene}->{$sample} = undef;
                         $transcript_to_symbol{$gene}   = $symbol;
@@ -513,11 +543,15 @@ sub recordGeneCounts{
     }
     $out_line_ref = VcfReader::addVariantInfoField
     (
-        line  => $split,
+        line  => $out_line_ref,
         id    => "getFunctionalVariantsMatchedAlleles",
         value => join(",",  (sort {$a <=> $b} keys %{$alleles})),
     );
-    print $OUT join("\t", @$out_line_ref ) . "\n";
+    my $FHOUT = $OUT;
+    if ($opts{t}){
+        $FHOUT = $TMP;
+    }
+    print $FHOUT join("\t", @$out_line_ref ) . "\n";
     $functional_count++;
 }
 
@@ -640,7 +674,7 @@ sub recordTranscriptSamplesAndVariants{
 #################################################
 sub isNewChromosome{
     my $chrom = shift;
-    if (exists $contigs{$chrom}){
+    if (exists $contigs{$chrom} and not $opts{t}){
         #require chroms to be ordered together
         if ($contigs{$chrom} != scalar(keys %contigs) - 1){
             die <<EOT
@@ -777,9 +811,9 @@ sub outputGeneCounts{
     foreach my $g (keys %gene_burden){
         my $count = 0;
         my $without = 0;
-        if ($gene_count_opts{model} eq 'allele_counts'){
-            $count = $gene_burden{$g}->{AC};
-            $without = $gene_burden{$g}->{AN};
+        if ($gene_count_opts{count_mode} eq 'allele_counts'){
+            $count = $gene_burden{$g}->{SC};
+            $without = $gene_burden{$g}->{SN};
         }else{
             $count = keys %{$gene_burden{$g}};
             $without = @samples - $count;
@@ -794,21 +828,61 @@ sub outputGeneCounts{
             $without,
         ) . "\n";
     }
-    %gene_burden = (); 
+    %gene_burden = ();
 }
 
 #################################################
-sub getAlleleCounts{
+sub getSampleCounts{
+    #return no. samples with allele and total number samples
     my $line = shift;
     my $allele = shift;
-    return VcfReader::getVariantInfoField($line, "AC");
-}
-
-#################################################
-sub getAlleleNumber{
-    my $line = shift;
-    my $allele = shift;
-    return VcfReader::getVariantInfoField($line, "AN");
+    my $field = 'AC';
+    my $count = 0;
+    my $number = 0;
+    my $chrom  =  VcfReader::getVariantField($line, 'CHROM');
+    if (exists $info_fields{AC_Het} and exists $info_fields{AC_Hom}){
+        my $hemi = 0;
+        if ($chrom =~ /^(chr)X|Y/ and exists $info_fields{AC_hemi}){
+            my $hemis = VcfReader::getVariantInfoField($line, "AC_Hemi");
+            $hemi = (split ",", $hemis)[$allele - 1];
+        }
+        my $hets = VcfReader::getVariantInfoField($line, "AC_Het");
+        my $homs = VcfReader::getVariantInfoField($line, "AC_Hom");
+        my $het  = (split ",", $hets)[$allele - 1];
+        my $hom  = (split ",", $homs)[$allele - 1];
+        if ($gene_count_opts{model} eq 'dominant' and $hom > 0){
+            $count = 0;#discard if there's a homozygote for a dominant variant(?)
+        }else{
+        #no reliable way to find comp. hets from ExAC allele counts
+            $count = $het + $hemi + $hom;
+        }
+    }elsif (exists $info_fields{AC}){
+        my $ac = VcfReader::getVariantInfoField($line, 'AC');
+        $count =  ((split ",", $ac)[$allele - 1])/2;#assume diploidy
+    }else{
+        die "AC INFO field is required for using --gene_counts in ".
+            "'allele_counts' mode\n";
+    }
+    if ($gene_count_opts{sample_count}){
+        if ($chrom =~ /^(chr)Y/ and exists $gene_count_opts{males}){
+            $number = $gene_count_opts{males};
+        }else{
+            $number = $gene_count_opts{sample_count};
+        }
+    }else{
+        my $an_field; 
+        if (exists $info_fields{AN_Adj}){
+            $an_field = 'AN_Adj';
+        }elsif (exists $info_fields{AN}){
+            $an_field = 'AN';
+        }else{
+            die "AN INFO field is required for using --gene_counts in ".
+                "'allele_counts' mode\n";
+        }
+        my $an = VcfReader::getVariantInfoField($line, $an_field);  
+        $number = int($an/2) + ($an % 2);#assume diploidy
+    }
+    return ($count, $number);
 }
 
 #################################################
@@ -1132,23 +1206,67 @@ sub checkMatchingVariants{
 }
 
 #################################################
+sub readTargetGenesFile{
+    return if not $opts{t}; 
+    open (my $TARGETS, "<", $opts{t}) or die "Could not open -t/--target_genes"
+                                             . " file '$opts{t}': $!\n";
+    my @cols = 
+    (
+        "Ensembl Gene ID",
+        "Chromosome Name",
+        "Gene Start (bp)",
+        "Gene End (bp)",
+    );
+    my $header = <$TARGETS>; 
+    my @split = split("\t", $header);
+    my %h = ();
+    {
+        no warnings 'uninitialized';
+        foreach my $c (@cols){
+            my $i = 0;
+            $i++ until uc($split[$i]) eq uc($c) or $i > $#split;
+            if ($i > $#split){
+                die <<EOT
+Required column '$c' not found in -t/--target_genes file '$opts{t}'. Appropriate
+files can be obtained by outputting your gene lists from Ensembl's biomart with
+the attributes "Ensembl Gene ID", "Chromosome Name", "Gene Start (bp)", "Gene
+End (bp).
+EOT
+                ;  
+            }else{
+                $h{$c} = $i;
+            }
+        }
+         
+    }   
+    while (my $l = <$TARGETS>){
+        my @s = split("\t", $l);
+        my $id = $s[$h{"Ensembl Gene ID"}];
+        $targets{$id}->{chrom} =  $s[$h{"Chromosome Name"}];
+        $targets{$id}->{start} =  $s[$h{"Gene Start (bp)"}];
+        $targets{$id}->{end}   =  $s[$h{"Gene End (bp)"}];
+    }
+}
+
+#################################################
 sub checkGeneCountArgs{
     informUser
     (
         "WARNING: No 'samples specified - all samples will be used for ".
         "--gene_counts option\n"
     ) if not @samples;
-    my @keys = qw / file model /;
+    my @keys = qw / file model count_mode sample_count /;
     my @split = split(',', $opts{gene_counts}); 
     @gene_count_opts{@keys} = @split;
     $gene_count_opts{model} ||= 'dominant';
+    $gene_count_opts{count_mode} ||= 'genotypes'; 
     if ( $gene_count_opts{model} ne 'dominant' and
          $gene_count_opts{model} ne 'recessive' and 
-         $gene_count_opts{model} ne 'both' and
-         $gene_count_opts{model} ne 'allele_counts'
+         $gene_count_opts{model} ne 'both' 
     ){
         die "ERROR: Unrecognised model '$gene_count_opts{model}' for --gene_counts argument\n";
     }
+
     if ($gene_count_opts{model} eq 'recessive'){
         foreach my $f (qw /findBiallelicSamplesHom findBiallelicSamplesHet/){
             if (not exists $info_fields{$f}){
@@ -1390,6 +1508,45 @@ sub updateProgressBar{
         if ($var_count >= $next_update){
             $next_update = $progressbar->update( $var_count )
         }
+    }
+}
+
+#################################################
+sub getProgressBar{
+    my $msg = <<EOT
+WARNING: -b/--progress option requires installation of the perl module 'Term::ProgressBar'.
+WARNING: 'Term::ProgressBar' module was not found. No progress will be shown.
+EOT
+;
+    eval "use Term::ProgressBar; 1 " or informUser($msg) and return;
+    
+    if ($opts{t}){
+        my $ts = keys %targets;
+        informUser("Processing $ts gene targets\n");
+        return Term::ProgressBar->new
+        (
+            {
+                name  => "Filtering",
+                count => $ts, 
+                ETA   => "linear",
+            }
+        );
+    }
+    if ( $opts{i} eq "-" ) {
+        informUser("Can't use -b/--progress option when input is from STDIN\n");
+        return;
+    }else{
+        informUser("Counting variants in input for progress monitoring.\n"); 
+        $total_vars = VcfReader::countVariants($opts{i});
+        informUser("$opts{i} has $total_vars variants.\n");
+        return Term::ProgressBar->new
+        (
+            {
+                name  => "Filtering",
+                count => $total_vars,
+                ETA   => "linear",
+            }
+        );
     }
 }
 
