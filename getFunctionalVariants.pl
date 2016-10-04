@@ -8,7 +8,6 @@ use Data::Dumper;
 use List::Util qw ( first max min ) ;
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
-use ParsePedfile;
 use VcfReader;
 use VcfhacksUtils;
 
