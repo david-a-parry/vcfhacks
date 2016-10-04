@@ -114,13 +114,14 @@ package VcfReader;
 use strict;
 use warnings;
 use Carp;
-use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
-use IO::Compress::Gzip qw(gzip $GzipError) ;
+use IO::Uncompress::Gunzip qw/ gunzip $GunzipError /;
+use IO::Compress::Gzip qw/ gzip $GzipError / ;
 use Fcntl 'SEEK_SET';
 use Data::Dumper;
-use List::Util qw(sum);
+use List::Util qw / sum /;
 use File::Temp qw/ tempfile /;
 use File::Copy;
+use Scalar::Util qw/ openhandle /;
 #require Exporter;
 #our @ISA = qw(Exporter);
 #our @EXPORT_OK = qw();
@@ -945,7 +946,7 @@ sub getFileLengthFromIndex{
 
 =item B<openVcf>
 
-Convenience method to return a filehandle for reading a VCF. Requires a filename as the only input. If the filename ends in '.bgz' or '.gz' it will be opened via IO::Uncompress::Gunzip.
+Convenience method to return a filehandle for reading a VCF. Requires a filename or filehandle as the only input. If the filename ends in '.bgz' or '.gz' it will be opened via IO::Uncompress::Gunzip.
 
  my $FH = VcfReader::openVcf('file.vcf');
 
@@ -959,8 +960,11 @@ sub openVcf{
 
 sub _openFileHandle{
     my $vcf = shift;
-    croak "_openFileHandle method requires a file as an argument" if not $vcf;
+    croak "_openFileHandle method requires a file or filehandle as an argument" if not $vcf;
     my $FH; 
+    if (openhandle($vcf) ){
+        return $vcf;#already an open filehandle
+    }
     if ($vcf =~ /\.(b){0,1}gz$/){
         $FH = new IO::Uncompress::Gunzip $vcf, MultiStream => 1 or croak "IO::Uncompress::Gunzip failed while opening $vcf for reading: \n$GunzipError";
     }else{
@@ -2601,11 +2605,11 @@ Arguments
 
 =item vcf
 
-filename of VCF file to sort. Required.
+filename or filehandle of input VCF file to sort. Required.
 
 =item output
 
-filename for output. If output is given data will be sent to STDOUT.
+filename or filehandle for output. If this argument is not provided data will be sent to STDOUT.
 
 =item contig_order 
 
@@ -2668,8 +2672,12 @@ sub sortVcf{
     my $column_header = VcfReader::getColumnHeader($args{vcf});
     my $SORTOUT;
     if (exists $args{output}){
-        open ($SORTOUT,  ">$args{output}") or croak "Can't open file $args{output} for output of sortVcf: $! ";
-        print STDERR "Sorting $args{vcf} to $args{output}.\n"; 
+        if (openhandle($args{output})){
+            $SORTOUT = $args{output};
+        }else{
+            open ($SORTOUT,  ">$args{output}") or croak "Can't open file $args{output} for output of sortVcf: $! ";
+            print STDERR "Sorting $args{vcf} to $args{output}.\n"; 
+        }
     }else{
         $SORTOUT = \*STDOUT;
     }
