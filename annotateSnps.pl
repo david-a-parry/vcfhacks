@@ -994,10 +994,14 @@ DBSNP:      foreach my $d (@dbsnp){
                 if ( $dbsnp_to_info{$d}->{$field} ){
                     print STDERR "[$time] INFO - $field field found in $d...\n";
                     (my $desc = $dbsnp_to_info{$d}->{$field}->{Description}) =~ s/\"//g;
+                    my $n = 'A';
+                    if ($dbsnp_to_info{$d}->{$field}->{Type} eq 'Flag'){
+                        $n = '.';
+                    }
                     my %d_info = 
                     (
                         ID          => "AS_$field",
-                        Number      => "A",
+                        Number      => $n,
                         Type        => $dbsnp_to_info{$d}->{$field}->{Type},
                         Description => "This annotation has been altered by ".
                                        "annotateSnps.pl to report consequences".
