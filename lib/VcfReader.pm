@@ -2597,7 +2597,7 @@ sub reconvertTextForInfo{
 
 =item sortVcf
 
-Creates a coordinate sorted VCF file from a given VCF file. Contig orders can be explicitly given using the 'contig_order' argument. Otherwise, the contig order will be derived from the header if possible and failing that contigs will be ordered numerically, followed by 'X', 'Y', 'MT' and then ascibetically. 
+Creates a coordinate sorted VCF file from a given VCF file. Contig orders can be explicitly given using the 'contig_order' argument. Otherwise, the contig order will be derived from the header if possible and failing that contigs will be ordered numerically, followed by 'X', 'Y', 'MT' and then ascibetically. This method will also remove duplicate lines.
 
 Arguments
 
@@ -2644,6 +2644,7 @@ sub sortVcf{
     croak "\"vcf\" argument is required for sortVcf function "  if not $args{vcf};
     my %contigs = ();
     my $do_not_replace_header;
+    my $previous = '';
     my %temp_dict = ();
     my @dict = ();
     my $add_ids = 0;
@@ -2729,11 +2730,14 @@ sub sortVcf{
         print $SORTOUT join("\n", @head) ."\n";
         print $SORTOUT "$column_header\n";
         foreach my $s (@sort){
+            my $var = '';
             if (%contigs){
-                print $SORTOUT  substr($s, 8);
+                $var = substr($s, 8);
             }else{
-                print $SORTOUT  substr($s, 29);
+                $var = substr($s, 29);
             }
+            print $SORTOUT $var if $var ne $previous;
+            $var = $previous;
         }
     }else{
         my $sortex;
@@ -2795,11 +2799,14 @@ sub sortVcf{
         print $SORTOUT join("\n", @head) ."\n";
         print $SORTOUT "$column_header\n";
         while ( defined( $_ = $sortex->fetch ) ) {
+            my $var = '';
             if (%contigs){
-                print $SORTOUT  substr($_, 8);
+                $var = substr($_, 8);
             }else{
-                print $SORTOUT  substr($_, 29);
+                $var = substr($_, 29);
             }
+            print $SORTOUT $var if $var ne $previous;
+            $var = $previous;
             $n++;
             if (not $n % 50000){
                 print STDERR "Printed $n variants to output...\n";
