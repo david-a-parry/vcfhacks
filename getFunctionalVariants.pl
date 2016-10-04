@@ -222,7 +222,8 @@ my %csq_header = getAndCheckCsqHeader();
   # hash of functional annotations from SnpEff/VEP to their annotation index
     
 my $feature_id = $opts{m} eq 'vep' ? "feature" : "feature_id";
-my $symbol_id = $opts{m} eq 'vep' ? "symbol" : "gene_name";
+my $symbol_id  = $opts{m} eq 'vep' ? "symbol"  : "gene_name";
+my $gene_id    = $opts{m} eq 'vep' ? "gene"    : "gene_id";
 
 #set default consequence fields to retrieve 
 my @csq_fields = getCsqFields();#consequence fields to retrieve from VCF
@@ -490,12 +491,15 @@ sub recordGeneCounts{
                 push @matched_samples, join("|", @samp_with_allele); 
                 #for INFO field of output line
                 foreach my $annot (@{$alleles->{$i}}){
-                    my $tr = $annot->{$feature_id};
-                    my $gene = $annot->{$symbol_id};
-                    $gene ||= $tr;
+                    my $tr     = $annot->{$feature_id};
+                    my $symbol = $annot->{$symbol_id};
+                    my $gene   = $annot->{$gene_id};
+                    $gene   ||= $tr;
+                    $symbol ||= $tr;
                     foreach my $sample (@samp_with_allele){
                         $gene_burden{$gene}->{$sample} = undef;
-                        # keys for each %{gene_burden{$gene}} will be udef for
+                        $transcript_to_symbol{$gene}   = $symbol;
+                        # keys for each %{gene_burden{$gene}} will be undef for
                         # counting burden (# samples with qualifying variant)
                     }
                 }
@@ -783,7 +787,15 @@ sub outputGeneCounts{
             $count = keys %{$gene_burden{$g}};
             $without = @samples - $count;
         }
-        print $GENECOUNTS join("\t", $g, $count, $without ) . "\n";
+        
+        print $GENECOUNTS join
+        (
+            "\t",
+            $g,
+            $transcript_to_symbol{$g},
+            $count,
+            $without,
+        ) . "\n";
     }
     %gene_burden = (); 
 }
