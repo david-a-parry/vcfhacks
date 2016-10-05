@@ -1002,7 +1002,7 @@ DBSNP:      foreach my $d (@dbsnp){
                     (
                         ID          => "AS_$field",
                         Number      => 'A',
-                        Type        => $dbsnp_to_info{$d}->{$field}->{Type},
+                        Type        => $type,
                         Description => "This annotation has been altered by ".
                                        "annotateSnps.pl to report consequences".
                                        " per ALT allele. Original description ".
