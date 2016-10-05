@@ -59,7 +59,7 @@ GetOptions(
     "no_biotype_filtering",
     "n|num_matching=i",
     "o|output=s" ,
-    "pass" ,
+    "pass_filters" ,
     "pl=f", 
     "s|samples=s{,}",
     "score_filters=s{,}",
@@ -331,7 +331,7 @@ LINE: while (my $line = <$VCF>){
     }
 
     #skip if FILTER != PASS and PASS required
-    if ($opts{pass}){
+    if ($opts{pass_filters}){
         next LINE if $filter ne 'PASS';
     }
     
