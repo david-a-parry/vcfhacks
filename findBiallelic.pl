@@ -341,7 +341,7 @@ LINE: while (my $line = <$VCF>){
     }
     
     #skip if FILTER != PASS and PASS required
-    if ($opts{pass}){
+    if ($opts{pass_filters}){
         next LINE if $filter ne 'PASS';
     }
     
