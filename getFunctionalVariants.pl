@@ -1486,10 +1486,14 @@ sub openOutput{
 #################################################
 sub writeOptionsToHeader{
     #print meta header lines
-    print $OUT join("\n", grep { /^##/ } @header) . "\n" ;
+    my $FH = $OUT;
+    if ($TMP){
+        $FH = $TMP;
+    }
+    print $FH join("\n", grep { /^##/ } @header) . "\n" ;
     #add header line detailing program options
-    print $OUT VcfhacksUtils::getOptsVcfHeader(%opts) . "\n"; 
-    print $OUT "$header[-1]\n";
+    print $FH VcfhacksUtils::getOptsVcfHeader(%opts) . "\n"; 
+    print $FH "$header[-1]\n";
 }
 
 #################################################
