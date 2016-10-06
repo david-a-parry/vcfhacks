@@ -332,7 +332,7 @@ sub processTargets{
     close $TMP; 
     my %contigs = VcfReader::getContigOrder($opts{i});#will already be indexed
     informUser("Sorting and outputting variants...\n");
-    VcfReader::SortVcf
+    VcfReader::sortVcf
     (
         vcf => $tmpout,
         output => $OUT,
