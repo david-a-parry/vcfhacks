@@ -327,6 +327,7 @@ sub processTargets{
         processLine($_) for @lines;
         $var_count++;#for progress bar
         updateProgressBar();
+        outputGeneCounts();
     }
     outputGeneCounts();
     close $TMP; 
@@ -674,7 +675,8 @@ sub recordTranscriptSamplesAndVariants{
 #################################################
 sub isNewChromosome{
     my $chrom = shift;
-    if (exists $contigs{$chrom} and not $opts{t}){
+    return 0 if $opts{t};
+    if (exists $contigs{$chrom} ){
         #require chroms to be ordered together
         if ($contigs{$chrom} != scalar(keys %contigs) - 1){
             die <<EOT
@@ -690,7 +692,7 @@ EOT
     #if new chrom record its contig index and return true
     $contigs{$chrom} = scalar(keys%contigs);
     return $contigs{$chrom} > 0;#return false if this is the first
-                                #chrom we've encountered
+                                #chrom we've encountered    
 }
 
 #################################################
