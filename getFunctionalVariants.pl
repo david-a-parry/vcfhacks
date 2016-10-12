@@ -810,25 +810,40 @@ CSQ:    foreach my $annot (@a_csq){
 
 #################################################
 sub outputGeneCounts{
-    foreach my $g (keys %gene_burden){
-        my $count = 0;
-        my $without = 0;
-        if ($gene_count_opts{count_mode} eq 'allele_counts'){
-            $count = $gene_burden{$g}->{SC};
-            $without = $gene_burden{$g}->{SN};
-        }else{
-            $count = keys %{$gene_burden{$g}};
-            $without = @samples - $count;
+    if (not keys %gene_burden and $current_target){
+    #processing a target gene but no variants found
+    #output 0 if sample count was provided
+        if ($gene_count_opts{sample_count}){
+           print $GENECOUNTS join
+           (
+                "\t",
+                $current_target,
+                $targets{$current_target}->{symbol},
+                0,
+                $gene_count_opts{sample_count},
+           ) . "\n";
         }
-        
-        print $GENECOUNTS join
-        (
-            "\t",
-            $g,
-            $transcript_to_symbol{$g},
-            $count,
-            $without,
-        ) . "\n";
+    }else{
+        foreach my $g (keys %gene_burden){
+            my $count = 0;
+            my $without = 0;
+            if ($gene_count_opts{count_mode} eq 'allele_counts'){
+                $count = $gene_burden{$g}->{SC};
+                $without = $gene_burden{$g}->{SN};
+            }else{
+                $count = keys %{$gene_burden{$g}};
+                $without = @samples - $count;
+            }
+            
+            print $GENECOUNTS join
+            (
+                "\t",
+                $g,
+                $transcript_to_symbol{$g},
+                $count,
+                $without,
+            ) . "\n";
+        }
     }
     %gene_burden = ();
 }
@@ -1218,6 +1233,7 @@ sub readTargetGenesFile{
         "Chromosome Name",
         "Gene Start (bp)",
         "Gene End (bp)",
+        "Associated Gene Name",
     );
     my $header = <$TARGETS>; 
     chomp $header;
@@ -1233,7 +1249,7 @@ sub readTargetGenesFile{
 Required column '$c' not found in -t/--target_genes file '$opts{t}'. Appropriate
 files can be obtained by outputting your gene lists from Ensembl's biomart with
 the attributes "Ensembl Gene ID", "Chromosome Name", "Gene Start (bp)", "Gene
-End (bp).
+End (bp)" and "Associated Gene Name".
 EOT
                 ;  
             }else{
@@ -1245,9 +1261,10 @@ EOT
     while (my $l = <$TARGETS>){
         my @s = split("\t", $l);
         my $id = $s[$h{"Ensembl Gene ID"}];
-        $targets{$id}->{chrom} =  $s[$h{"Chromosome Name"}];
-        $targets{$id}->{start} =  $s[$h{"Gene Start (bp)"}];
-        $targets{$id}->{end}   =  $s[$h{"Gene End (bp)"}];
+        $targets{$id}->{chrom}  =  $s[$h{"Chromosome Name"}];
+        $targets{$id}->{start}  =  $s[$h{"Gene Start (bp)"}];
+        $targets{$id}->{end}    =  $s[$h{"Gene End (bp)"}];
+        $targets{$id}->{symbol} =  $s[$h{"Associated Gene Name"}];
     }
 }
 
