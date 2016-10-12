@@ -1220,6 +1220,7 @@ sub readTargetGenesFile{
         "Gene End (bp)",
     );
     my $header = <$TARGETS>; 
+    chomp $header;
     my @split = split("\t", $header);
     my %h = ();
     {
