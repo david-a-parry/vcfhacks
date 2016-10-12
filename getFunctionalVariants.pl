@@ -1166,7 +1166,7 @@ sub keepClinvar{
                 #conflicted if ClinVarConflicted annotation is 1 or $d_path[$_] == 0
                 #in this case, if we have annotations from VCF in @d_path,
                 #about what is in @c_path
-                return map { $d_path[$_] eq '1'  and $c_conf[$_] eq '0'} 0..$#d_path;
+                return map { $d_path[$_] eq '1'  and $c_conf[$_] ne '1'} 0..$#d_path;
             }else{  
                 #don't care about conflicted annotations
                 #keep if either source is flagged as pathogenic
