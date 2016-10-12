@@ -1258,6 +1258,7 @@ EOT
          
     }   
     while (my $l = <$TARGETS>){
+        chomp $l;
         my @s = split("\t", $l);
         my $id = $s[$h{"Ensembl Gene ID"}];
         $targets{$id}->{chrom}  =  $s[$h{"Chromosome Name"}];
