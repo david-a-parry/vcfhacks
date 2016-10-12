@@ -11,6 +11,7 @@ GetOptions(\%opts,
         "output=s",
         "input=s",
         "dict=s",
+        "tmp_dir=s",
         "help",
         "manual",
         ) or pod2usage(-exitval => 2, -message => "Syntax error") ;
@@ -27,7 +28,9 @@ if($opts{dict}){
     $sort_args{contig_order} = $contigs;
     $sort_args{dict} = $id_head;
 }
-
+if ($opts{tmp_dir}){
+    $sort_args{tmp_dir} = $opts{tmp_dir};
+}
 VcfReader::sortVcf(%sort_args);
 
 ##################################################
@@ -92,6 +95,10 @@ Output file. Optional - default is STDOUT.
 =item B<-d    --dict>
 
 An optional sequence dictionary (.dict) file to specify the sort order of contigs. Sequences should be specified in this file by whitespace delimited lines beginning @SQ and containing at a minimum 'SN:[sequence name]'.
+
+=item B<-t    --tmp_dir>
+
+Temporary directory to use. Only used if Sort::External module is installed.
 
 =item B<-h    --help>
 

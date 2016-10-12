@@ -2615,6 +2615,10 @@ reference to a hash with contig names as keys and their relative order as values
 
 reference to an array of replacement contig ID header lines in the format "##contig=<ID=1,[other fields]>" Use this to replace the contig headers in your VCF in the given order. 
 
+=item tmp_dir
+
+temporary directory to use (only used if Sort::External is installed).
+
 =back
 
  VcfReader::sortVcf(vcf => 'unsorted_file.vcf', output => 'sorted_file.vcf');
@@ -2728,10 +2732,11 @@ sub sortVcf{
             }
         }
     }else{
-        my $sortex;
-        if (%contigs){
-            $sortex = Sort::External->new(mem_threshold => 1024**2 * 16);
-        }else{
+        my %sortex_args = (mem_threshold => 1024**2 * 16);
+        if ($args{tmp_dir}){
+            $sortex_args{working_dir} = $args{tmp_dir};
+        }
+        if (not %contigs){
             my $vcfsort = 
                 sub {
                     (my $a_chrom = substr($Sort::External::a, 0, 25)) =~ s/\s+$//;
@@ -2742,9 +2747,9 @@ sub sortVcf{
                     $a_pos cmp $b_pos;
                 };
 
-            $sortex = Sort::External->new(mem_threshold => 1024**2 * 16, 
-                                          sortsub => $vcfsort);
+            $sortex_args{sortsub} = $vcfsort;
         }
+        my $sortex = Sort::External->new(%sortex_args);
         my @feeds = ();
         my $n = 0;
         my $FH = _openFileHandle($args{vcf});
@@ -3956,7 +3961,7 @@ sub readSnpEffHeader{
     carp "Warning - multiple ANN fields found, ignoring all but the most recent field " if @info > 1;
    my $csq_line = $info[-1] ;#assume last applied SnpEff consequences are what we are looking for 
    my @csq_fields = ();    
-   if ($csq_line =~ /Description="Functional annotations: '(.+)'\s*">/){
+   if ($csq_line =~ /Description="Functional annotations: '(.+)' ">/){
        @csq_fields = split(/\s+\|\s+/, $1);
    }else{
        croak "Method 'readSnpEffHeader' couldn't properly read the ANN format from the corresponding INFO line: $csq_line ";
