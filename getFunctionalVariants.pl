@@ -329,7 +329,6 @@ sub processTargets{
         updateProgressBar();
         outputGeneCounts();
     }
-    outputGeneCounts();
     close $TMP; 
     my %contigs = VcfReader::getContigOrder($opts{i});#will already be indexed
     informUser("Sorting and outputting variants...\n");
@@ -829,7 +828,7 @@ sub outputGeneCounts{
             my $without = 0;
             if ($gene_count_opts{count_mode} eq 'allele_counts'){
                 $count = $gene_burden{$g}->{SC};
-                $without = $gene_burden{$g}->{SN};
+                $without = $gene_burden{$g}->{SN} - $count;
             }else{
                 $count = keys %{$gene_burden{$g}};
                 $without = @samples - $count;
