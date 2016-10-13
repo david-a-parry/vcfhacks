@@ -829,6 +829,7 @@ sub outputGeneCounts{
             if ($gene_count_opts{count_mode} eq 'allele_counts'){
                 $count = $gene_burden{$g}->{SC};
                 $without = $gene_burden{$g}->{SN} - $count;
+                $without = $without > 0 ? $without : 0; #don't allow negative values
             }else{
                 $count = keys %{$gene_burden{$g}};
                 $without = @samples - $count;
