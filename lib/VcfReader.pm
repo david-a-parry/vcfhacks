@@ -910,7 +910,7 @@ sub readIndex{
         croak "Indexing failed? $index does not exist " if (not -e $index);
         print STDERR " Done.\n";
     }else{
-        carp "\nWARNING: Tabix index $index is older than $vcf " if (-M $vcf) < (-M $index); 
+        carp "\nWARNING: VcfReader index $index is older than $vcf " if (-M $vcf) < (-M $index); 
     }
     my $z = new IO::Uncompress::Gunzip $index
         or die "gunzip failed to read index $index: $GunzipError\n";
