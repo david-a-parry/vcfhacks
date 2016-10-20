@@ -2177,7 +2177,9 @@ sub countAlleles{
     my $inf_ac = getVariantInfoField($args{line}, 'AC');
     my $inf_an = getVariantInfoField($args{line}, 'AN');
     if (not defined $args{samples}){
-        if (not $args{minGQ} and defined $inf_ac and defined $inf_an){
+        if ( (not $args{minGQ} and defined $inf_ac and defined $inf_an )
+             or $#{$args{line}} < 9 #no samples in VCF
+        ){
             my @ac = split(",", getVariantInfoField($args{line}, 'AC'));
             unshift @ac,  getVariantInfoField($args{line}, 'AN') - sum(@ac);
             for (my $i = 0; $i < @ac; $i++){
