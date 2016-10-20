@@ -177,12 +177,12 @@ my %database     = (
         file      => "morbidmap.txt"
     },
     biogrid    => {
-        localfile => "$opts{d}/BIOGRID-ALL-3.4.134.tab2.txt",
+        localfile => "$opts{d}/BIOGRID-ALL.tab2.txt",
         col       => 1,
         delimiter => "\t",
         url       => "http://thebiogrid.org",
-        dir       => "downloads/archives/Release%20Archive/BIOGRID-3.4.134",
-        file      => "BIOGRID-ALL-3.4.134.tab2.zip"
+        dir       => "downloads/archives/Latest%20Release",
+        file      => "BIOGRID-ALL-LATEST.tab2.zip"
     },
     pli        => {
         localfile => "$opts{d}/fordist_cleaned_exac_r03_march16_z_pli_rec_null_data.txt",
