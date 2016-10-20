@@ -15,6 +15,7 @@ use VcfhacksUtils;
 my $progressbar;
 my @samples = ();
 my @classes = (); 
+my %default_classes = (); 
 my @add_classes = ();
 my @damaging = ();
 my @biotypes = ();
@@ -245,7 +246,7 @@ if ( defined $opts{a} ) {
 }
 
 #by default keep variant if there's an associated pathogenic ClinVar field
-my $keep_clinvar = checkClinVarInfo();
+my ($keep_clinvar, $clinvar_functional) = checkClinVarInfo();
 
 #if filtering on CADD score check we have a CaddPhredScore header
 if ( $opts{c} ){
@@ -798,7 +799,14 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
         # (or not predicted damaging if using that option)
         # and allele is not flagged as pathogenic in ClinVar
 CSQ:    foreach my $annot (@a_csq){
-            if ($clinvar_path[$i-1] or consequenceMatchesClass($annot, $split)){
+            my $is_cvar_path = $clinvar_path[$i-1];
+            if ($clinvar_functional){
+                #check it at least matches a default 'functional class for this gene
+                unless (consequenceMatchesClass($annot, $split, 1)){
+                    $is_cvar_path = 0;
+                }
+            }
+            if ($is_cvar_path or consequenceMatchesClass($annot, $split)){
                 push @{$allele_to_csq{$i}}, $annot;
             }
         }
@@ -1041,19 +1049,32 @@ sub checkGtPl{
 
 #################################################
 sub checkClinVarInfo{
-    if ($opts{clinvar} and lc($opts{clinvar}) eq 'disable'){
+    my @cvar_args = $opts{clinvar} ?  split(",", $opts{clinvar}) : () ; 
+    if (grep { lc($_) eq 'disable'} @cvar_args){
         return 0;
     }
     my $iclvar = 0;
+    my $func = 0;
     foreach my $f ( qw / ClinVarPathogenic AS_CLNSIG / ) { 
         if (exists $info_fields{$f} and $info_fields{$f}->{Number} eq 'A'){
-            informUser
-            (
-                "Identified '$f' INFO field - alleles marked as pathogenic ".
-                "will be considered as having a 'functional' consequence ".
-                "regardless of functional consequence. To change this ".
-                "behaviour run with the option '--clinvar disable'\n"
-            );
+            if (grep { lc($_) eq 'functional'} @cvar_args){
+                informUser
+                (
+                    "Identified '$f' INFO field and '--clinvar functional' ".
+                    "option is in use -  alleles marked as pathogenic".
+                    " will be considered as having a 'functional' consequence ".
+                    "if they match any of the default 'functional' classes.\n"
+                );
+                $func++;
+            }else{
+                informUser
+                (
+                    "Identified '$f' INFO field - alleles marked as pathogenic".
+                    " will be considered as having a 'functional' consequence ".
+                    "regardless of functional consequence. To change this ".
+                    "behaviour run with the option '--clinvar disable'\n"
+                );
+            }
             $iclvar++;
         }elsif(exists $info_fields{$f}){
             informUser
@@ -1065,11 +1086,14 @@ sub checkClinVarInfo{
         }
     }
     if ($iclvar){
-        if (not $opts{clinvar}){
-            return 'all';
-        }elsif (lc($opts{clinvar}) eq 'all'){
-            return 'all';
-        }elsif (lc($opts{clinvar}) eq 'no_conflicted'){
+        if (grep { lc($_) ne 'no_conflicted' 
+                   and lc($_) ne 'all' 
+                   and lc($_)  ne 'functional' } @cvar_args
+        ){
+            die "Unrecognised value '$opts{clinvar}' passed to --clinvar option.\n";
+        }elsif (grep { lc($_) eq 'all' } @cvar_args){
+            return ('all', $func);
+        }elsif (grep { lc($_) eq 'no_conflicted' } @cvar_args){
             if (not exists $info_fields{ClinVarConflicted} and 
                 not exists $info_fields{AS_CLNSIG}
                 #can glean from CLNSIG field if more than one type of assertion made
@@ -1080,11 +1104,11 @@ sub checkClinVarInfo{
                     " All variants with ClinVarPathogenic annotations will be".
                     " kept.\n"
                 );
-                return 'all';
+                return ('all', $func);
             }
-            return 'no_conflicted';
+            return ('no_conflicted', $func);
         }else{
-            die "Unrecognised value '$opts{clinvar}' passed to --clinvar option.\n";
+            return ('all', $func);
         }
     }else{
         if ($opts{clinvar}){
@@ -1095,7 +1119,7 @@ sub checkClinVarInfo{
                 " identified.\n"
             );
         }
-        return 0;
+        return (0, 0);
     }
 }
 
@@ -1397,8 +1421,14 @@ sub getAndCheckClasses{
     }else{
         %all_classes =  VcfhacksUtils::readSnpEffClassesFile();
     }
+    grep { $all_classes{$_} eq 'default' } keys %all_classes;
+    %default_classes = 
+      map  { $_ => undef } 
+      grep { $all_classes{$_} eq 'default' } 
+      keys %all_classes;
+
     if (not @classes){
-        @classes = grep { $all_classes{$_} eq 'default' } keys %all_classes;
+        @classes = keys %default_classes;
     }
     push @classes, @add_classes if (@add_classes);
     if ($opts{m} eq 'vep' and $opts{consensus_splice_site}){
@@ -1726,16 +1756,18 @@ sub getConsequences{
 sub consequenceMatchesClass{
     my $annot = shift;
     my $l = shift;
+    my $use_default_classes = shift;
     if ($opts{m} eq 'vep'){
-        return consequenceMatchesVepClass($annot);
+        return consequenceMatchesVepClass($annot, $use_default_classes);
     }else{
-        return consequenceMatchesSnpEffClass($annot, $l);
+        return consequenceMatchesSnpEffClass($annot, $l, $use_default_classes);
     }   
 }
 
 #################################################
 sub consequenceMatchesVepClass{
     my $annot = shift;
+    my $use_default = shift;
     #intergenic variants have no feature associated with them - skip
     return 0 if $annot->{consequence} eq "intergenic_variant";
     #skip unwanted biotypes
@@ -1753,9 +1785,12 @@ sub consequenceMatchesVepClass{
     foreach my $scf (@score_exp){
         return 1 if VcfhacksUtils::scoreFilter($scf, $annot);
     }
-
+        
 ANNO: foreach my $ac (@anno_csq){
         $ac = lc($ac);#we've already converted %class_filters to all lowercase
+        if ($use_default){
+            return exists $default_classes{$ac} ;
+        }
         if ( exists $class_filters{$ac} ){
             if ($ac eq 'missense_variant' and %in_silico_filters){
                 return 1 if damagingMissenseVep($annot); 
@@ -1782,6 +1817,7 @@ ANNO: foreach my $ac (@anno_csq){
 sub consequenceMatchesSnpEffClass{
     my $annot = shift;
     my $l = shift;
+    my $use_default = shift;
     #skip variants with undef features (intergenic variants)
     return if not defined $annot->{feature_id};
     #skip unwanted biotypes
@@ -1795,6 +1831,9 @@ sub consequenceMatchesSnpEffClass{
     my @anno_csq = split( /\&/, $annot->{annotation} );
 ANNO: foreach my $ac (@anno_csq){
         $ac = lc($ac);#we've already converted %class_filters to all lowercase
+        if ($use_default){
+            return exists $default_classes{$ac} ;
+        }
         if ( exists $class_filters{$ac} ){
             if ($ac eq 'missense_variant' and %in_silico_filters){
                 return 1 if damagingMissenseSnpEff($l); 
@@ -2028,6 +2067,30 @@ Only consider canonical transcripts (VEP annotations only).
 =item B<-c    --cadd_filter>
 
 If you have annotated CADD phred scores for alleles using rankOnCaddScore.pl you may use this option to specify a CADD phred score threshold for variants. Any alleles that have a CADD phred score below the value specified here will be filtered. Variants without a CADD phred score will not be filtered unless using the --skip_unpredicted option. You should have run rankOnCaddScore.pl with the --do_not_sort option to maintain chromosome order of your variants if you use this option with the -f/--find_shared_genes option or else you will need to sort your VCF before running getFunctionalVariants.pl.
+
+=item B<--clinvar>
+
+Specify the mode for dealing with ClinVar annotations. By default, if ClinVar annotations added by annotateSnps.pl are found, variants with 'pathogenic' or 'likely pathogenic' annotations are kept regardless of their functional consequence. Here you may specify the following values:
+
+=over 12
+
+=item B<all>
+
+default behaviour, any variant with a ClinVar 'pathogenic' or 'likely pathogenic' will be kept
+
+=item B<no_conflicted>
+
+as above except that variants with conflicting annotations (e.g. 'benign' and 'likely pathogenic') will not be automatically kept
+
+=item B<functional>           
+
+only keep ClinVar 'pathogenic' or 'likely pathogenic variants if they match one of the default 'functional' classes (see --classes argument). This option can be combined with 'all' or 'no_conflicted' options, separate the values with a comma.
+
+=item B<disable>
+
+turns off automatic retention of variants with ClinVar annotations.
+
+=back
 
 =item B<-d    --damaging>
 
