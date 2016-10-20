@@ -1382,6 +1382,9 @@ sub getCsqFields{
             symbol
             biotype
         );
+        if ($opts{canonical_only}){
+            push @fields, "canonical";
+        }
         if ($opts{consensus_splice_site}){
             push @fields, "splice_consensus";
         }
