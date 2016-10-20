@@ -968,7 +968,7 @@ sub annotateClnVarVcf{
     my $al_index = first_index {$_ == $snp_alt} split(",", $inf{CLNALLE});
     return if $al_index < 0;
     foreach my $f ( @c_fields ){ 
-        next if not exists $inf{$f}; 
+        next if not defined $inf{$f}; 
         if ($f eq 'GENEINFO'){
             $min_allele->{snp_info}->{$f} = $inf{$f}; 
         }else{
