@@ -799,8 +799,11 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
         # (or not predicted damaging if using that option)
         # and allele is not flagged as pathogenic in ClinVar
 CSQ:    foreach my $annot (@a_csq){
+            if ($current_target){
+                next CSQ if $annot->{$gene_id} ne $current_target
+            };
             my $is_cvar_path = $clinvar_path[$i-1];
-            if ($clinvar_functional){
+            if ($clinvar_functional and $is_cvar_path){
                 #check it at least matches a default 'functional class for this gene
                 unless (consequenceMatchesClass($annot, $split, 1)){
                     $is_cvar_path = 0;
