@@ -113,6 +113,7 @@ sub processLine{
     my $line = shift;
     next if $line =~ /^#/;
     $n++;
+    chomp $line;
     my @split = split("\t", $line, 9); #only need first 8 fields, possible 
                                        #optimization for VERY long lines
     my %min_vars = VcfReader::minimizeAlleles(\@split);
