@@ -356,7 +356,7 @@ sub parseAsList{
         chomp $line;
         next if not $line;
         my @entrez_ids = (); 
-        my $id = (split "\t", $line)[0];
+        my $id = (split "\t", $line, 2)[0];
         my $entrez_id;
         if ($id =~ /^\d+$/){
             push @entrez_ids, $id;
@@ -471,7 +471,8 @@ LINE: while ( my $line = <$VCF> ) {
         next if $line =~ /^#/;#skip header
         chomp $line;
         $vcf_line++;
-        my @split = split("\t", $line); 
+        my @split = split("\t", $line, 9); #only need first 8 fields, possible 
+                                           #optimization for VERY long lines
         my @entrez_ids = ();
         my @csq = getConsequences(\@split, \@csq_fields, \%csq_header);
     
