@@ -125,8 +125,9 @@ use Scalar::Util qw/ openhandle /;
 #require Exporter;
 #our @ISA = qw(Exporter);
 #our @EXPORT_OK = qw();
-our $VERSION = 0.2;
-my %vcf_fields = (
+our $VERSION = 0.3;
+use constant VCF_FIELDS => 
+{
     CHROM   => 0, 
     POS     => 1,
     ID      => 2,
@@ -136,7 +137,7 @@ my %vcf_fields = (
     FILTER  => 6, 
     INFO    => 7, 
     FORMAT  => 8,
-    );
+};
 
 #index every 0-99999 bp of a chrom
 my $REGION_SPANS = 100000;
@@ -776,8 +777,8 @@ sub indexVcf{
             $contigs{first_offset} = $prev_offset;
         }
         my @s = split ("\t", $line);
-        my $chrom = $s[$vcf_fields{CHROM}];
-        my $pos = $s[$vcf_fields{POS}];
+        my $chrom = $s[VCF_FIELDS->{CHROM}];
+        my $pos = $s[VCF_FIELDS->{POS}];
         my $span = getSpan(\@s);
         my $pos_rounddown = int($pos/$REGION_SPANS) * $REGION_SPANS;
         if (exists $contigs{$chrom}){
@@ -1002,8 +1003,8 @@ sub getVariantField{
     $field =~ s/^#+//;
     croak "line passed to getVariantField must be an array reference " if ref $split ne 'ARRAY';
     croak "Invalid field ($field) passed to getVariantField method " 
-        if not exists $vcf_fields{$field};
-    if ($vcf_fields{$field} > $#{$split}){
+        if not exists VCF_FIELDS->{$field};
+    if (VCF_FIELDS->{$field} > $#{$split}){
         if ($field eq 'FORMAT'){
             #carp "No FORMAT field for line " . join("\t", @split) . " " ;
             return;
@@ -1011,7 +1012,7 @@ sub getVariantField{
             croak "Line has too few fields: " . join("\t", @$split) . " " ;
         }
     }
-    return $split->[$vcf_fields{$field}];
+    return $split->[VCF_FIELDS->{$field}];
 }
 
 =item B<getMultipleVariantFields>
@@ -2320,8 +2321,8 @@ Returns a split line with a variant field replaced with a given value. Requires 
 sub replaceVariantField{
     my ($line, $field, $replacement) = @_;
     $field =~ s/^#+//;
-    croak "Invalid field ($field) passed to replaceVariantField method " if not exists $vcf_fields{$field};
-    splice(@$line, $vcf_fields{$field}, 1, $replacement);
+    croak "Invalid field ($field) passed to replaceVariantField method " if not exists VCF_FIELDS->{$field};
+    splice(@$line, VCF_FIELDS->{$field}, 1, $replacement);
     return $line if defined wantarray;
     #return join("\t", @$line) if defined wantarray;
     carp "replaceVariantField called in void context ";
@@ -2415,13 +2416,13 @@ For a given line this function returns the 5' most position altered. Requires an
 sub getSpan{
     my ($line) = @_;
     my $end;
-    if ($line->[$vcf_fields{ALT}] =~ /^</){#try to deal with CNVs
+    if ($line->[VCF_FIELDS->{ALT}] =~ /^</){#try to deal with CNVs
         if ($end = getVariantInfoField($line, 'END')){
         }else{
-            $end = $line->[$vcf_fields{POS}];
+            $end = $line->[VCF_FIELDS->{POS}];
         }
     }else{
-        $end = $line->[$vcf_fields{POS}] + length($line->[$vcf_fields{REF}]) -1;
+        $end = $line->[VCF_FIELDS->{POS}] + length($line->[VCF_FIELDS->{REF}]) -1;
     }
     return $end;
 }
@@ -2692,8 +2693,8 @@ sub sortVcf{
         while (my $line = <$FH>){
             next if $line =~ /^#/;
             my @split = split("\t", $line);
-            my $chrom = $split[$vcf_fields{CHROM}];
-            my $pos = $split[$vcf_fields{POS}];
+            my $chrom = $split[VCF_FIELDS->{CHROM}];
+            my $pos = $split[VCF_FIELDS->{POS}];
             my $s_chrom; 
             if (%contigs){
                 croak "Contig '$chrom' is not present in user provided ".
@@ -2766,8 +2767,8 @@ sub sortVcf{
             next if ($line =~ /^#/);
             $n++;
             my @split = split("\t", $line);
-            my $chrom = $split[$vcf_fields{CHROM}];
-            my $pos = $split[$vcf_fields{POS}];
+            my $chrom = $split[VCF_FIELDS->{CHROM}];
+            my $pos = $split[VCF_FIELDS->{POS}];
             my $s_chrom; 
             if (%contigs){
                 croak "Contig '$chrom' is not present in user provided ".
@@ -3382,7 +3383,7 @@ sub _getByRegion{
             my @lines = _readLinesByOffset($reg->{offset_start}, $reg->{offset_end}, $args{fh});
             foreach my $l (@lines){
                 my @sp = split("\t", $l);
-                my $l_pos =  $sp[$vcf_fields{POS}]; 
+                my $l_pos =  $sp[VCF_FIELDS->{POS}]; 
                 last if $l_pos > $args{end};
                 if ($l_pos >= $args{start} and $l_pos <= $args{end}){
                     push @matches, $l;
@@ -3642,7 +3643,7 @@ sub _searchVcf{
         my @lines = _readLinesByOffset($reg->{offset_start}, $reg->{offset_end}, $args{fh});
         foreach my $l (@lines){
             my @sp = split("\t", $l);
-            my $l_pos =  $sp[$vcf_fields{POS}]; 
+            my $l_pos =  $sp[VCF_FIELDS->{POS}]; 
             last if $l_pos > $args{pos};
             if ($l_pos == $args{pos}){
                 push @matches, $l;
