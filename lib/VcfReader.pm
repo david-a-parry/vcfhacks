@@ -4,7 +4,7 @@ VcfReader.pm - parse VCF headers, lines and search VCFs
 
 =head1 VERSION
 
-version 0.2
+version 0.3
 
 =head1 SYNOPSIS
 
