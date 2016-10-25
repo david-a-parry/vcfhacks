@@ -1041,7 +1041,7 @@ Retrieves the value for a given INFO field from a given line. Returns the value 
 =cut
 sub getVariantInfoField{
     my ($line, $info_field) = @_;
-    my @info = split(';', getVariantField($line, "INFO"));
+    my @info = split(';', $line->[VCF_FIELDS->{INFO}]);
     foreach my $inf (@info){
         if ($inf =~ /^$info_field=(.+)/){
             return $1;
@@ -1259,7 +1259,7 @@ Returns a hash of the different fields found in the FORMAT column for a variant 
 =cut
 sub getVariantFormatFields{
     my ($line) = @_;
-    my $format = getVariantField($line, "FORMAT");
+    my $format = $line->[VCF_FIELDS->{FORMAT}];
     if (not defined $format){
         return;
     }
@@ -2357,14 +2357,14 @@ sub minimizeAlleles{
     my %min_alleles = ();#key is allele number, each entry is anon hash of CHROM, REF, POS, ALT
     my @al =  readAlleles(line => $line);
     for (my $i = 1; $i < @al; $i++){
-        my ($pos, $ref, $alt) = reduceRefAlt(getVariantField($line, "POS"), $al[0], $al[$i]);
+        my ($pos, $ref, $alt) = reduceRefAlt($line->[VCF_FIELDS->{POS}], $al[0], $al[$i]);
         $min_alleles{$i} = {
-            CHROM           => getVariantField($line, "CHROM"),
+            CHROM           => $line->[VCF_FIELDS->{CHROM}],
             POS             => $pos,
             REF             => $ref,
             ALT             => $alt,
-            ORIGINAL_POS    => getVariantField($line, "POS"),
-            ORIGINAL_REF    => getVariantField($line, "REF"),
+            ORIGINAL_POS    => $line->[VCF_FIELDS->{POS}],
+            ORIGINAL_REF    => $line->[VCF_FIELDS->{REF}],
             ORIGINAL_ALT    => $al[$i],
             ALT_INDEX        => $i,
         };
@@ -2441,7 +2441,7 @@ Requires two array references, one for each split line to compare.
 
 sub variantsHaveMatchingAlleles{
     my ($line1, $line2) = @_;
-    if (getVariantField($line1, "CHROM") ne getVariantField($line2, "CHROM")){
+    if ($line1->[VCF_FIELDS->{CHROM}] ne $line2->[VCF_FIELDS->{CHROM}]){
         return 0;
     }
     my %min1 = minimizeAlleles($line1);
@@ -2692,7 +2692,7 @@ sub sortVcf{
         my @sort = ();
         while (my $line = <$FH>){
             next if $line =~ /^#/;
-            my @split = split("\t", $line);
+            my @split = split("\t", $line, 3);
             my $chrom = $split[VCF_FIELDS->{CHROM}];
             my $pos = $split[VCF_FIELDS->{POS}];
             my $s_chrom; 
@@ -2766,7 +2766,7 @@ sub sortVcf{
         while (my $line = <$FH>){
             next if ($line =~ /^#/);
             $n++;
-            my @split = split("\t", $line);
+            my @split = split("\t", $line, 3);
             my $chrom = $split[VCF_FIELDS->{CHROM}];
             my $pos = $split[VCF_FIELDS->{POS}];
             my $s_chrom; 
@@ -2881,14 +2881,14 @@ sub sortVariants{
     }else{
         my %temp = ();
         foreach my $l (@$list){
-            $temp{getVariantField($l, 'CHROM')}++;
+            $temp{$l->[VCF_FIELDS->{CHROM}]}++;
         }
         my $n = 0;
         %contigs = map {$_ => $n++} sort byContigs(keys %temp);
     }
     my @sort = sort {
-        $contigs{getVariantField($a, 'CHROM')} <=> $contigs{getVariantField($b, 'CHROM')} ||
-        getVariantField($a, "POS") <=> getVariantField($b, "POS")
+        $contigs{$a->[VCF_FIELDS->{CHROM}]} <=> $contigs{$b->[VCF_FIELDS->{CHROM}]} ||
+        $a->[VCF_FIELDS->{POS}] <=> $b->[VCF_FIELDS->{POS}]
     } @$list;
     return @sort if defined wantarray;
     carp "sortVariants method called in void context ";
@@ -2905,7 +2905,7 @@ Sort method to sort variants by position only (useful if you have an array of va
 
 sub sortByPos{
     my $vars = shift;
-    return sort { getVariantField($a, "POS") <=> getVariantField($b, "POS") } @$vars;
+    return sort { $a->[VCF_FIELDS->{POS}] <=> $b->[VCF_FIELDS->{POS}] } @$vars;
 }
     
 
