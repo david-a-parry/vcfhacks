@@ -326,7 +326,7 @@ sub printHeader{
     push @headstring, VcfhacksUtils::getOptsVcfHeader(%opts);  
     push @headstring, "$header->[-1]";
 
-    print $OUT join("\n", @headstring); 
+    print $OUT join("\n", @headstring) . "\n"; 
 }
 
 ##########################
