@@ -314,6 +314,10 @@ if ($opts{t}){
     processByLine();
 }
 
+if($opts{gene_counts}){
+    outputGeneCountTotals();
+}
+
 #################################################
 sub processTargets{
     foreach my $t (keys %targets){
@@ -375,7 +379,7 @@ sub processLine{
     my $line = shift;
     return if $line =~ /^#/;#skip header
     chomp $line;
-    my @split = split("\t", $line); 
+    my @split = split("\t", $line, 9);#do not need GT fields in the first 
     my ($chrom, $qual, $filter) = VcfReader::getMultipleVariantFields
     (
         \@split, 
@@ -563,6 +567,7 @@ sub recordMatchedSamples{
 # functional variants in a given transcript
     my $split = shift;
     my $alleles = shift;
+    splitRemainingFields($split);
     return if not %{$alleles};
     my @matched_samples = (); 
     my %samp_to_gt = VcfReader::getSampleCall
@@ -700,40 +705,12 @@ sub getFunctionalCsq{
     my $split = shift;
     my %allele_to_csq = (); #keys are allele numbers, values = array of
                             #'functional' csq
-    #skip if no variant allele in affecteds 
-    my %samp_to_gt = VcfReader::getSampleCall
-    (
-          line              => $split, 
-          sample_to_columns => \%sample_to_col,
-          minGQ             => $opts{g},
-          multiple          => \@samples,
-    );
-    return if not haveVariant(\%samp_to_gt);
-    
-    #skip if not identical GTs in all affecteds and identical variants required
-    my @matched_gts = (); 
-    if ($opts{e}){
-        push @matched_gts, identicalGenotypes(\%samp_to_gt, $opts{n});
-        return if not @matched_gts;
-    }
-    
     #get Allele frequency annotations if they exist and we're filtering on AF
     my %af_info_values = (); 
     if (%af_info_fields){ 
         %af_info_values = getAfInfoValues($split);
     }
     
-    # get allele frequencies in  @samples if using -u/--max_sample_allele_frequency
-    my %s_allele_counts = ();
-    my $allele_count;
-    if ($opts{u}){
-        %s_allele_counts = VcfReader::countAlleles
-        (
-            minGQ => $opts{g},
-            line  => $split,
-        );
-        map { $allele_count += $s_allele_counts{$_} } keys %s_allele_counts;
-    }
     #get alleles and consequences for each allele
     my @alleles = VcfReader::readAlleles(line => $split);
     my @csq = getConsequences($split);
@@ -775,14 +752,6 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
            next ALT if ( alleleAboveMaf($i - 1, \%af_info_values) );
         }
 
-        # filter if frequency in @samples is greater or equal to 
-        # -u/--max_sample_allele_frequency
-        if ($opts{u} and $allele_count > 0){
-            #my $freq = $s_allele_counts{$i}/(@samples*2);
-            my $freq = $s_allele_counts{$i}/$allele_count;
-            next ALT if $freq >= $opts{u}; 
-        }
-
         #get all consequences for current allele
         my @a_csq = ();
         if ($opts{m} eq 'vep'){
@@ -814,10 +783,81 @@ CSQ:    foreach my $annot (@a_csq){
             }
         }
     }#each ALT
+    return if not keys %allele_to_csq;#no functional variant 
+
+    # WE LEAVE THESE SAMPLE FILTERS TIL LAST IN CASE VCF HAS A HUGE NUMBER OF 
+    # SAMPLES, IN WHICH CASE THESE WILL BE THE LEAST EFFICIENT TESTS
+    #skip if no variant allele in affecteds 
+    splitRemainingFields($split);
+    my %samp_to_gt = VcfReader::getSampleCall
+    (
+          line              => $split, 
+          sample_to_columns => \%sample_to_col,
+          minGQ             => $opts{g},
+          multiple          => \@samples,
+    );
+    return if not haveVariant(\%samp_to_gt);
+    
+    #skip if not identical GTs in all affecteds and identical variants required
+    my @matched_gts = (); 
+    if ($opts{e}){
+        push @matched_gts, identicalGenotypes(\%samp_to_gt, $opts{n});
+        return if not @matched_gts;
+    }
+    # get allele frequencies in  @samples if using -u/--max_sample_allele_frequency
+    my %s_allele_counts = ();
+    my $allele_count;
+    if ($opts{u}){
+        %s_allele_counts = VcfReader::countAlleles
+        (
+            minGQ => $opts{g},
+            line  => $split,
+        );
+        map { $allele_count += $s_allele_counts{$_} } keys %s_allele_counts;
+        # filter if frequency in @samples is greater or equal to 
+        # -u/--max_sample_allele_frequency
+        foreach my $i (keys %allele_to_csq){
+            if ($opts{u} and $allele_count > 0){
+                #my $freq = $s_allele_counts{$i}/(@samples*2);
+                my $freq = $s_allele_counts{$i}/$allele_count;
+                delete $allele_to_csq{$i} if $freq >= $opts{u}; 
+            }
+        }
+    }
     return %allele_to_csq;
 }
 
 
+#################################################
+sub outputGeneCountTotals{
+    my $count = 0;
+    my $total = 0;
+    if ($gene_count_opts{sample_count}){
+        $total = $gene_count_opts{sample_count};
+    }else{
+        $total = @samples if @samples;
+    }
+    if ( $gene_burden{cumulative} ) { 
+        if ($gene_count_opts{count_mode} eq 'allele_counts'){
+            $count = $gene_burden{cumulative}->{SC};
+            $total = $gene_burden{cumulative}->{SN};
+        }else{
+            $count = keys %{ $gene_burden{cumulative} };
+        }
+    }
+    my $without = $total - $count;
+    $without = 0 if ($without < 0);
+    print $GENECOUNTS join
+    (
+        "\t",
+        "TOTAL",
+        "TOTAL",
+        $count,
+        $without,
+    ) . "\n";
+    close $GENECOUNTS;
+}
+        
 #################################################
 sub outputGeneCounts{
     if (not keys %gene_burden and $current_target){
@@ -835,17 +875,24 @@ sub outputGeneCounts{
         }
     }else{
         foreach my $g (keys %gene_burden){
+            next if $g eq 'cumulative';
             my $count = 0;
             my $without = 0;
             if ($gene_count_opts{count_mode} eq 'allele_counts'){
                 $count = $gene_burden{$g}->{SC};
                 $without = $gene_burden{$g}->{SN} - $count;
                 $without = $without > 0 ? $without : 0; #don't allow negative values
+                $gene_burden{cumulative}->{SC} += $count;
+                if ($without > $gene_burden{cumulative}->{SN}){
+                    $gene_burden{cumulative}->{SN} = $without;
+                }
             }else{
                 $count = keys %{$gene_burden{$g}};
+                map { 
+                    $gene_burden{cumulative}->{$_} = undef 
+                } keys %{$gene_burden{$g}};
                 $without = @samples - $count;
             }
-            
             print $GENECOUNTS join
             (
                 "\t",
@@ -854,9 +901,9 @@ sub outputGeneCounts{
                 $count,
                 $without,
             ) . "\n";
+            delete $gene_burden{$g};
         }
     }
-    %gene_burden = ();
 }
 
 #################################################
@@ -1511,6 +1558,13 @@ FLT: foreach my $s (@score_filters){
     }
     push @csq_fields, keys %csq_add;
     return @filters;
+}
+
+#################################################
+sub splitRemainingFields{
+    my $s = shift;#array ref to modify in place
+    my $l = pop(@$s);
+    push @$s, split("\t", $l);
 }
 
 #################################################
