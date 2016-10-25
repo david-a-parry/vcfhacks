@@ -2065,7 +2065,17 @@ If -s/--samples argument is specified use this flag if you only want to keep var
 
 =item B<--gene_counts>
 
-Give a filename for outputting the counts of gene IDs vs number of samples with qualifying variants (e.g. for input to a burden test). Optionally the user may also add the 'mode' to use for the gene counts, separated by a comma after the filename (e.g. --gene_counts gene_counts.txt,recessive). Valid modes are 'dominant' (only samples with heterozygous variants counted), 'recessive' (requires annotations from findBiallelic.pl to identify samples with compound het or homozygous variants) or 'both' (count a sample regardless of whether it is heterozygous or homozygous). If using the 'recessive' mode you will need to annotate your variants with findBiallelic.pl first and use consistent settings for functional/in silico filters between both programs.
+Give a filename for outputting the counts of gene IDs vs number of samples with qualifying variants (e.g. for input to a burden test). Optionally the user may also add the positional arguments 'model', 'count mode' and 'sample count' separated by a commas after the filename (e.g. --gene_counts gene_counts.txt,recessive). 
+
+Valid values for B<model> are 'dominant' (only samples with heterozygous variants counted), 'recessive' (requires annotations from findBiallelic.pl to identify samples with compound het or homozygous variants) or 'both' (count a sample regardless of whether it is heterozygous or homozygous). If using the 'recessive' model you will need to annotate your variants with findBiallelic.pl first and use consistent settings for functional/in silico filters between both programs.
+
+Valid values for B<count mode> are 'genotypes' or 'allele_counts'. The 'genotypes' setting is the default, where sample numbers are analyzed from genotype calls. The 'allele_counts' setting involves inferring sample numbers from INFO field annotations such as 'AC' or standard ExAC style het/hom counts.
+
+The B<sample count> argument is a way of specifying the total number of samples. The main reason for using this would be when using 'allele_counts' to infer the number of samples where the total number of samples in the cohort would otherwise be unknown or could only be guessed from 'AN' style annotations. 
+
+An example use for this argument with a VEP annotated ExAC VCF might is given below:
+    
+    --gene_counts ExAC.r0.3.gene_counts.txt,both,allele_counts,60706
 
 =item B<--classes>
 
