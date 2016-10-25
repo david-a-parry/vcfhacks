@@ -178,7 +178,7 @@ if ($opts{gene_counts}){
     checkGeneCountArgs();
 }
 
-if ( ( not @samples and ($opts{f} or $opts{u} or $opts{gene_counts}) )
+if ( ( not @samples and (defined $opts{f} or $opts{u} or $opts{gene_counts}) )
        or ( grep { /^all$/i } @samples )
     ){
     # if not samples specified but using --find_shared_genes, --gene_counts 
@@ -638,7 +638,7 @@ sub recordMatchedSamples{
                 (
                     \@{$alleles->{$i}},
                     \@samp_with_allele,
-                    $split,
+                    $var_id,
                 );
                 $store_this_line++;
             }else{
