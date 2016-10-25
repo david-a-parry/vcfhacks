@@ -1910,7 +1910,7 @@ sub getSampleActualGenotypes{
 
 =item B<getSampleAlleleDepths>
 
-Can be used to return the value for a genotype field (e.g. "GT", "GQ", "AD", "PL") field for one sample, a list of samples or all samples in a VCF.
+Calculates depth for each allele for a sample call using AD or AO/RO genotype fields.
 
 Arguments:
 
