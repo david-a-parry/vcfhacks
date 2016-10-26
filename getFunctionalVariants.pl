@@ -292,6 +292,7 @@ my %transcript_to_symbol = ();
 my %genes_to_transcripts = ();
  #gene symbols => transcripts with variants
 my %gene_burden = (); 
+my %cumulative_burden = (); 
  #if using --gene_counts this has an entry for each gene with a functional 
  #variant. Entries are hashes where keys are sample names
 my %allele_counts = ();
@@ -837,12 +838,12 @@ sub outputGeneCountTotals{
     }else{
         $total = @samples if @samples;
     }
-    if ( $gene_burden{cumulative} ) { 
+    if ( %cumulative_burden ) { 
         if ($gene_count_opts{count_mode} eq 'allele_counts'){
-            $count = $gene_burden{cumulative}->{SC};
-            $total = $gene_burden{cumulative}->{SN};
+            $count = $cumulative_burden{SC};
+            $total = $cumulative_burden{SN};
         }else{
-            $count = keys %{ $gene_burden{cumulative} };
+            $count = keys %cumulative_burden;
         }
     }
     my $without = $total - $count;
@@ -875,22 +876,19 @@ sub outputGeneCounts{
         }
     }else{
         foreach my $g (keys %gene_burden){
-            next if $g eq 'cumulative';
             my $count = 0;
             my $without = 0;
             if ($gene_count_opts{count_mode} eq 'allele_counts'){
                 $count = $gene_burden{$g}->{SC};
                 $without = $gene_burden{$g}->{SN} - $count;
                 $without = $without > 0 ? $without : 0; #don't allow negative values
-                $gene_burden{cumulative}->{SC} += $count;
-                if ($without > $gene_burden{cumulative}->{SN}){
-                    $gene_burden{cumulative}->{SN} = $without;
+                $cumulative_burden{SC} += $count;
+                if ($without > $cumulative_burden{SN}){
+                    $cumulative_burden{SN} = $without;
                 }
             }else{
                 $count = keys %{$gene_burden{$g}};
-                map { 
-                    $gene_burden{cumulative}->{$_} = undef 
-                } keys %{$gene_burden{$g}};
+                map {$cumulative_burden{$_} = undef } keys %{$gene_burden{$g}};
                 $without = @samples - $count;
             }
             print $GENECOUNTS join
@@ -901,9 +899,9 @@ sub outputGeneCounts{
                 $count,
                 $without,
             ) . "\n";
-            delete $gene_burden{$g};
         }
     }
+    %gene_burden = ();    
 }
 
 #################################################
