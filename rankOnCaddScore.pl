@@ -130,6 +130,7 @@ sub processLine{
                 "\t", 
                 $min_vars{$al}->{CHROM},
                 $min_vars{$al}->{POS},
+                '.',
                 $min_vars{$al}->{REF},
                 $min_vars{$al}->{ALT},
             ) . "\n";
@@ -265,11 +266,6 @@ ALLELE: foreach my $al (sort {$a<=>$b} keys %{$vars}){
 ##########################
 sub checkCaddFile{
     my ($file) = @_;
-    my $index = "$file.tbi";
-    if (not -e $index ){
-        die "Can't find tabix index for $file - please ensure $file is bgzip ".
-            "compressed and indexed with tabix.\n";
-    }
     if ($file !~ /\.gz$/){
         die "CADD file $file does not have a '.gz' extension and is ".
             "presumably not bgzip compressed. Please ensure to use a ".
@@ -278,6 +274,7 @@ sub checkCaddFile{
     my $FH = new IO::Uncompress::Gunzip $file or 
       die "IO::Uncompress::Gunzip failed while opening $file ".
       "for reading: \n$GunzipError";
+    my $valid_header = 0;
     while (my $line = <$FH>){
         if ($line =~ /^##/){
             next;
@@ -287,14 +284,21 @@ sub checkCaddFile{
                 "Expected to find a header as follows:\n\n".
                 "#Chrom\tPos\tRef\tAlt\tRawScore\tPHRED\n";
             }else{
-                return;
+                $valid_header++;
             }
         }else{
             last;
         }
     }
     close $FH;
-    die "No header found for CADD file $file!\n";
+    die "No valid header found for CADD file $file!\n" if not $valid_header;
+
+    my $index = "$file.tbi";
+    if (not -e $index ){
+        warn "No index found for $file - attempting to index with tabix...\n";
+        VcfReader::indexVcf($file);
+        warn "Done.\n";
+    }
 }
 
 ##########################
