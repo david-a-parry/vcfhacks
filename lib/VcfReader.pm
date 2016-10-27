@@ -3811,7 +3811,10 @@ sub getVepFields{
                 carp "$f feature does not exist in CSQ field ";
                 next;
             }
-            $t_csq{lc$f} = $v[ $args{vep_header} -> {lc($f)} ];
+            $t_csq{lc$f} = defined $v[ $args{vep_header} -> {lc($f)} ] ? 
+                                   $v[ $args{vep_header} -> {lc($f)} ] : 
+                                   '';
+            
         }
         push @return, \%t_csq;
     }
