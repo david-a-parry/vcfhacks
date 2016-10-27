@@ -371,7 +371,7 @@ sub getScoreFilter{
                 
                 if ($val !~ /^\d+(\.\d+)\)?$/){
                     $val =~ s/\)$//;
-                    croak "Expected numeric value in --score_filter ".
+                    croak "Expected numeric value in --eval_filter ".
                         "expression '$s' but found '$val'\n";
                 }
                 push @{$exp{field}}, lc($fld);
@@ -401,13 +401,13 @@ sub scoreFilter{
         (my $field = $exps->{field}->[$i]) =~ s/^\(//;#remove preceding bracket
         my $v = $vals->{$field};
         push @eval, "(" if $exps->{field}->[$i] =~ s/^\(//;
-        if (defined $v){#if not defined we'll test remainder of expression
+        if (defined $v and $v ne ''){#if not defined we'll test remainder of expression
             push @eval, $v; 
             push @eval, $exps->{expression}->[$i];
         }else{
             push @eval, 0 ;
         }
-        push @eval, ")" if $exps->{expression}->[$i] =~ s/^\)//;
+        push @eval, ")" if $exps->{expression}->[$i] =~ /^\)/;
         if ($i < @{$exps->{operator}}){
             push @eval, $exps->{operator}->[$i];
         }
@@ -416,7 +416,82 @@ sub scoreFilter{
     carp "$@\n" if $@;
     return $ev;
 }
-  
+  ###TESTING####
+  #must take the format of 'field name' 'comparator' 'value to compare'
+sub getEvalFilter{
+    my $s = shift;
+    my $open_brackets = () = $s =~ /\(/g;   
+    my $close_brackets = () = $s =~ /\)/g;
+    if ($open_brackets > $close_brackets){
+        croak "ERROR: Unclosed brackets in expression '$s' passed to --eval_filter\n";
+    }elsif ($open_brackets < $close_brackets){
+        croak "ERROR: Trailing brackets in expression '$s' passed to --eval_filter\n";
+    }
+    my %exp = 
+    (
+        field => [], 
+        value => [], 
+        comparator => [], 
+        operator => [], 
+    );
+    $s =~ s/^\s+//;#remove preceding whitespace
+    $s =~ s/\s+$//;#remove trailing whitespace
+    my @split = split(/\s+/, $s);#split on whitespace
+    for(my $i = 0; $i<@split; $i++){
+    #every fourth array element must be an operator (and/or/xor)
+        if ($i and $i % 4 == 3){
+            if ($split[$i] !~ /(and|or|xor)/){#check operator
+                my $pos = $i + 1;
+                croak "ERROR: Expected operator (or/and/xor) at position $pos in --eval_filter argument '$s' but got '$split[$i]'\n";
+            }
+            push @{$exp{operator}}, $split[$i];
+        }elsif($i % 4 == 2){ #third arg must be value
+            push @{$exp{value}}, $split[$i];
+        }elsif($i % 4 == 1){ #second arg must be comparator
+            if ($split[$i] !~ /^(eq|ne|[!=]~|[<>][=]{0,1}|[=!]=)$/){#check comparator
+                my $pos = $i + 1;
+                croak "ERROR: Expected comparator at position $pos in --eval_filter argument '$s' but got '$split[$i]'\n";
+            }
+            push @{$exp{comparator}}, $split[$i];
+        }else{#0th arg is consequence field
+            push @{$exp{field}}, $split[$i];
+        }
+    }
+    return %exp;
+}
+
+sub evalFilter{
+    my ($exps, $vals) = @_;
+    my @eval = (); 
+    for (my $i = 0; $i < @{$exps->{field}}; $i++){
+        (my $field = $exps->{field}->[$i]) =~ s/^\(//;#remove preceding bracket
+        my $v = $vals->{$field};
+        push @eval, "(" if $exps->{field}->[$i] =~ /^\(/;
+        if ($exps->{comparator}->[$i] =~ /^([<>][=]{0,1}|[=!]=)$/){
+            if ($v ne ''){
+                push @eval, $v; 
+                push @eval, "$exps->{comparator}->[$i]";
+                push @eval, "$exps->{value}->[$i]";
+            }else{
+            #if undef convert to false and eval rest of expression
+                push @eval, 0 ;
+                push @eval, ")" if $exps->{value}->[$i] =~ /\)$/;
+            }
+        }else{
+            push @eval, "'$v'"; 
+            push @eval, "$exps->{comparator}->[$i]";
+            push @eval, "$exps->{value}->[$i]";
+        }
+        if ($i < @{$exps->{operator}}){
+            push @eval, $exps->{operator}->[$i];
+        }
+    }
+    my $ev =eval join(" ", @eval);
+    carp "$@\n" if $@;
+    return $ev;
+}
+
+
 =back
 
 =head2 Misc Utilities

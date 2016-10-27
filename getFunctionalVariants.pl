@@ -21,6 +21,7 @@ my @damaging = ();
 my @biotypes = ();
 my @custom_af = ();
 my @score_filters = (); 
+my @eval_filters = (); 
 
 my %opts = 
 (
@@ -31,6 +32,7 @@ my %opts =
     biotype_filters  => \@biotypes,
     j                => \@custom_af,
     score_filters    => \@score_filters,
+    eval_filters     => \@eval_filters,
 );
 
 GetOptions(
@@ -46,6 +48,7 @@ GetOptions(
     "c|cadd_filter=f",
     "d|damaging=s{,}" ,
     "e|equal_genotypes",
+    "eval_filters=s{,}",
     "f|find_shared_genes:s", 
     "g|gq=i",
     "gene_counts=s",
@@ -233,6 +236,7 @@ my %class_filters = map { $_ => undef } getAndCheckClasses();
 my %in_silico_filters = getAndCheckInSilicoPred();
   #hash of prediction program names and values to filter
 my @score_exp = getAndCheckScoreFilters();
+my @eval_exp  = getAndCheckEvalFilters();
 
 #and check biotype classes are acceptable
 my %biotype_filters = map { $_ => undef } getAndCheckBiotypes();
@@ -1559,6 +1563,32 @@ FLT: foreach my $s (@score_filters){
 }
 
 #################################################
+sub getAndCheckEvalFilters{
+    return if not @eval_filters;
+    my @filters = (); 
+    my %csq_add = ();
+FLT: foreach my $s (@eval_filters){
+        my %f =  VcfhacksUtils::getEvalFilter($s);
+        foreach my $fld (@{$f{field}}){
+            (my $fb = $fld) =~ s/^\(//;#we may have used ( to specify precedence
+            if (not exists $csq_header{lc($fb)}){
+                informUser
+                (
+                    "WARNING: No '$fb' field found in CSQ header of ".
+                    "VCF. Cannot use --eval_filter expression '$s' ".
+                    "for filtering.\n"
+                ); 
+                next FLT;
+            }
+            $csq_add{lc($fb)}++;
+        }
+        push @filters, \%f;
+    }
+    push @csq_fields, keys %csq_add;
+    return @filters;
+}
+
+#################################################
 sub splitRemainingFields{
     my $s = shift;#array ref to modify in place
     my $l = pop(@$s);
@@ -1599,7 +1629,43 @@ sub writeOptionsToHeader{
     if ($TMP){
         $FH = $TMP;
     }
+    
+    my %al_info = 
+    (
+        ID          => "getFunctionalVariantsMatchedAlleles",
+        Number       => ".",
+        Type        => "String",
+        Description => "Alleles meeting criteria from getFunctionalVariants.pl"
+    ); 
+    my %ms_info = 
+    (
+        ID          => "getFunctionalVariantsMatchedSamples",
+        Number       => "A",
+        Type        => "String",
+        Description => "Alleles meeting criteria from getFunctionalVariants.pl"
+    ); 
+    my %ct_info = 
+    (
+        ID          => "getFunctionalVariantsAlleleCounts",
+        Number       => "A",
+        Type        => "String",
+        Description => "Alleles meeting criteria from getFunctionalVariants.pl"
+    ); 
+    
+    #add existing meta header lines
     print $FH join("\n", grep { /^##/ } @header) . "\n" ;
+    #add new INFO fields
+    print $FH VcfhacksUtils::getInfoHeader(%al_info) . "\n";
+    if (defined $opts{f}){
+        print $FH VcfhacksUtils::getInfoHeader(%ms_info) . "\n";
+    }
+    if ($opts{gene_counts}){
+        if ($gene_count_opts{count_mode} eq 'allele_counts'){
+            print $FH VcfhacksUtils::getInfoHeader(%ct_info) . "\n";
+        }else{
+            print $FH VcfhacksUtils::getInfoHeader(%ms_info) . "\n";
+        }
+    }
     #add header line detailing program options
     print $FH VcfhacksUtils::getOptsVcfHeader(%opts) . "\n"; 
     print $FH "$header[-1]\n";
@@ -1839,6 +1905,10 @@ sub consequenceMatchesVepClass{
     #skip NMD transcripts
     return 0 if ( grep { /NMD_transcript_variant/i } @anno_csq );
 
+    #eval filters trump annotation class
+    foreach my $evf (@eval_exp){
+        return 1 if VcfhacksUtils::evalFilter($evf, $annot);
+    }
     #score filters trump annotation class
     foreach my $scf (@score_exp){
         return 1 if VcfhacksUtils::scoreFilter($scf, $annot);
