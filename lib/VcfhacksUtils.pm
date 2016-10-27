@@ -354,7 +354,7 @@ sub getScoreFilter{
     );
     $s =~ s/^\s+//;#remove preceding whitespace
     $s =~ s/\s+$//;#remove trailing whitespace
-    my @split = split(/\s/, $s);#split on whitespace
+    my @split = split(/\s+/, $s);#split on whitespace
     for(my $i = 0; $i<@split; $i++){
     #every second array element must be an operator (and/or/xor)
         if ($i % 2){
