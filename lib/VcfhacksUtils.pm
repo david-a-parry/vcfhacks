@@ -336,7 +336,7 @@ The 'field name' component is used to extract the value from the corresponding k
  
  my %exp = VcfhacksUtils::getEvalFilter
  (
-     "(ada_score>0.6 and rf_score>0.6) or maxentscan_diff > 5"
+     "(ada_score > 0.6 and rf_score > 0.6) or maxentscan_diff > 5"
  );
 
 =cut

@@ -2225,6 +2225,21 @@ When using a PED file to specify family members, use this flag to prevent checki
 
 Only consider variants with a PASS filter field. If the FILTER field for variant is not PASS the variant will be skipped.
 
+=item B<--eval_filters>
+
+Use this option to create custom filters for KEEPING variants on the basis of values in the VEP or SnpEff consequence fields. 
+
+Expressions must take the format of 'field name' 'comparator' 'value to compare' separated by white space. Multiple expressions can be used together along with the logical operators 'and', 'or' or 'xor'. The value for 'field name' will be used to extract the value for the given field from the VEP/SnpEff consequence INFO field. The resulting expression is evaluated using perl's built-in 'eval' function.
+
+For example:
+
+    --eval_filters "LoF eq 'HC'" 
+    #keeps any variant with a LoF annotation of 'HC'
+
+    --eval_filters "(ada_score >= 0.6 and rf_score >= 0.6) or maxentscan_diff > 5"
+    #keeps variants with ada_score and rf_scores of 0.6 or higher or with 
+    #maxenstscan diff of 5 or higher
+
 =item B<-b    --progress>
 
 Show a progress bar while working.
