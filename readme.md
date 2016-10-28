@@ -61,8 +61,6 @@ __CREDIT__
 
 These programs were written __David A. Parry__, currently at the University of Edinburgh. 
 
-For help or suggestions please email: gantzgraf (at) users.noreply.github.com
-
 __If you find these programs useful and use them for a paper__ ***please cite the URL <https://github.com/gantzgraf/vcfhacks> *** 
 
 __COPYRIGHT AND LICENSE__

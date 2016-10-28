@@ -4,7 +4,4 @@
 [submodule "lib/BioASN1EntrezGene"]
 	path = lib/BioASN1EntrezGene
 	url = https://github.com/gantzgraf/Bio-ASN1-EntrezGene.git
-[submodule "lib/Tabix"]
-	path = lib/Tabix
-	url = https://github.com/gantzgraf/tabix.git
 
