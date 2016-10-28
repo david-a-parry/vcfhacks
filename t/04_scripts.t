@@ -63,8 +63,8 @@ is(
 );
 $n_tests++; 
 
-$expected = 647;
-chomp($output = `$script_prefix/getFunctionalVariants.pl -i $vcf 2> /dev/null |  wc -l `);
+$expected = 578;
+chomp($output = `$script_prefix/getFunctionalVariants.pl -i $vcf 2> /dev/null | grep -v '#' |  wc -l `);
 $output =~ s/^\s+//;
 is(
     $output,
