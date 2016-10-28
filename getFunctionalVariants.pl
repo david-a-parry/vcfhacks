@@ -20,7 +20,6 @@ my @add_classes = ();
 my @damaging = ();
 my @biotypes = ();
 my @custom_af = ();
-my @score_filters = (); 
 my @eval_filters = (); 
 
 my %opts = 
@@ -31,7 +30,6 @@ my %opts =
     s                => \@samples,
     biotype_filters  => \@biotypes,
     j                => \@custom_af,
-    score_filters    => \@score_filters,
     eval_filters     => \@eval_filters,
 );
 
@@ -65,7 +63,6 @@ GetOptions(
     "pass" ,
     "pl=f", 
     "s|samples=s{,}",
-    "score_filters=s{,}",
     "skip_unpredicted" ,
     "t|target_genes=s",
     "v|var_quality=i",
@@ -235,7 +232,6 @@ my %class_filters = map { $_ => undef } getAndCheckClasses();
 #check in silico prediction classes/scores are acceptable
 my %in_silico_filters = getAndCheckInSilicoPred();
   #hash of prediction program names and values to filter
-my @score_exp = getAndCheckScoreFilters();
 my @eval_exp  = getAndCheckEvalFilters();
 
 #and check biotype classes are acceptable
@@ -1537,32 +1533,6 @@ sub getAndCheckInSilicoPred{
 }
 
 #################################################
-sub getAndCheckScoreFilters{
-    return if not @score_filters;
-    my @filters = (); 
-    my %csq_add = ();
-FLT: foreach my $s (@score_filters){
-        my %f =  VcfhacksUtils::getScoreFilter($s);
-        foreach my $fld (@{$f{field}}){
-            (my $fb = $fld) =~ s/^\(//;#we may have used ( to specify precedence
-            if (not exists $csq_header{lc($fb)}){
-                informUser
-                (
-                    "WARNING: No '$fb' field found in CSQ header of ".
-                    "VCF. Cannot use --score_filter expression '$s' ".
-                    "for filtering.\n"
-                ); 
-                next FLT;
-            }
-            $csq_add{lc($fb)}++;
-        }
-        push @filters, \%f;
-    }
-    push @csq_fields, keys %csq_add;
-    return @filters;
-}
-
-#################################################
 sub getAndCheckEvalFilters{
     return if not @eval_filters;
     my @filters = (); 
@@ -1640,7 +1610,7 @@ sub writeOptionsToHeader{
     my %ms_info = 
     (
         ID          => "getFunctionalVariantsMatchedSamples",
-        Number       => "A",
+        Number      => "A",
         Type        => "String",
         Description => "Alleles meeting criteria from getFunctionalVariants.pl"
     ); 
@@ -1910,9 +1880,6 @@ sub consequenceMatchesVepClass{
         return 1 if VcfhacksUtils::evalFilter($evf, $annot);
     }
     #score filters trump annotation class
-    foreach my $scf (@score_exp){
-        return 1 if VcfhacksUtils::scoreFilter($scf, $annot);
-    }
         
 ANNO: foreach my $ac (@anno_csq){
         $ac = lc($ac);#we've already converted %class_filters to all lowercase
@@ -1951,11 +1918,11 @@ sub consequenceMatchesSnpEffClass{
     #skip unwanted biotypes
     return 0 if exists $biotype_filters{lc $annot->{transcript_biotype} };
 
-    #score filters trump annotation class
-    foreach my $scf (@score_exp){
-        return 1 if VcfhacksUtils::scoreFilter($scf, $annot);
+    #eval filters trump annotation class
+    foreach my $evf (@eval_exp){
+        return 1 if VcfhacksUtils::evalFilter($evf, $annot);
     }
-    
+
     my @anno_csq = split( /\&/, $annot->{annotation} );
 ANNO: foreach my $ac (@anno_csq){
         $ac = lc($ac);#we've already converted %class_filters to all lowercase

@@ -21,7 +21,7 @@ my @add_classes = ();
 my @damaging = ();
 my @biotypes = ();
 my @custom_af = ();
-my @score_filters = (); 
+my @eval_filters = (); 
 
 my %opts   = (
     s                => \@samples,
@@ -33,7 +33,7 @@ my %opts   = (
     biotype_filters  => \@biotypes,
     j                => \@custom_af,
     min_af_counts    => 0,
-    score_filters    => \@score_filters,
+    eval_filters    => \@eval_filters,
 );
 
 
@@ -70,7 +70,7 @@ GetOptions(
     "pl=f", 
     'q|quality=i',
     'r|reject=s{,}',    
-    "score_filters=s{,}",
+    "eval_filters=s{,}",
     'skip_unpredicted',
     's|samples=s{,}',
     'splice_prediction=s{,}',
@@ -194,7 +194,7 @@ my %class_filters = map { $_ => undef } getAndCheckClasses();
 #check in silico prediction classes/scores are acceptable
 my %in_silico_filters = getAndCheckInSilicoPred();
   #hash of prediction program names and values to filter
-my @score_exp = getAndCheckScoreFilters();
+my @eval_exp = getAndCheckEvalFilters();
 
 #and check biotype classes are acceptable
 my %biotype_filters = map { $_ => undef } getAndCheckBiotypes();
@@ -941,19 +941,19 @@ sub getAndCheckInSilicoPred{
 }
     
 #################################################
-sub getAndCheckScoreFilters{
-    return if not @score_filters;
+sub getAndCheckEvalFilters{
+    return if not @eval_filters;
     my @filters = (); 
     my %csq_add = ();
-FLT: foreach my $s (@score_filters){
-        my %f =  VcfhacksUtils::getScoreFilter($s);
+FLT: foreach my $s (@eval_filters){
+        my %f =  VcfhacksUtils::getEvalFilter($s);
         foreach my $fld (@{$f{field}}){
             (my $fb = $fld) =~ s/^\(//;#we may have used ( to specify precedence
             if (not exists $csq_header{lc($fb)}){
                 informUser
                 (
                     "WARNING: No '$fb' field found in CSQ header of ".
-                    "VCF. Cannot use --score_filter expression '$s' ".
+                    "VCF. Cannot use --eval_filter expression '$s' ".
                     "for filtering.\n"
                 ); 
                 next FLT;
@@ -1582,8 +1582,8 @@ sub consequenceMatchesVepClass{
     return 0 if ( grep { /NMD_transcript_variant/i } @anno_csq );
     
     #score filters trump annotation class
-    foreach my $scf (@score_exp){
-        return 1 if VcfhacksUtils::scoreFilter($scf, $annot);
+    foreach my $evf (@eval_exp){
+        return 1 if VcfhacksUtils::evalFilter($evf, $annot);
     }
 
 ANNO: foreach my $ac (@anno_csq){
@@ -1619,9 +1619,9 @@ sub consequenceMatchesSnpEffClass{
     #skip unwanted biotypes
     return 0 if exists $biotype_filters{lc $annot->{transcript_biotype} };
 
-    #score filters trump annotation class
-    foreach my $scf (@score_exp){
-        return 1 if VcfhacksUtils::scoreFilter($scf, $annot);
+    #eval filters trump annotation class
+    foreach my $evf (@eval_exp){
+        return 1 if VcfhacksUtils::evalFilter($evf, $annot);
     }
     
     my @anno_csq = split( /\&/, $annot->{annotation} );
