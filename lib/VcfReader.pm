@@ -4,7 +4,7 @@ VcfReader.pm - parse VCF headers, lines and search VCFs
 
 =head1 VERSION
 
-version 0.2
+version 0.3
 
 =head1 SYNOPSIS
 
@@ -114,18 +114,20 @@ package VcfReader;
 use strict;
 use warnings;
 use Carp;
-use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
-use IO::Compress::Gzip qw(gzip $GzipError) ;
+use IO::Uncompress::Gunzip qw/ gunzip $GunzipError /;
+use IO::Compress::Gzip qw/ gzip $GzipError / ;
 use Fcntl 'SEEK_SET';
 use Data::Dumper;
-use List::Util qw(sum);
+use List::Util qw / sum /;
 use File::Temp qw/ tempfile /;
 use File::Copy;
+use Scalar::Util qw/ openhandle /;
 #require Exporter;
 #our @ISA = qw(Exporter);
 #our @EXPORT_OK = qw();
-our $VERSION = 0.2;
-my %vcf_fields = (
+our $VERSION = 0.3;
+use constant VCF_FIELDS => 
+{
     CHROM   => 0, 
     POS     => 1,
     ID      => 2,
@@ -135,7 +137,7 @@ my %vcf_fields = (
     FILTER  => 6, 
     INFO    => 7, 
     FORMAT  => 8,
-    );
+};
 
 #index every 0-99999 bp of a chrom
 my $REGION_SPANS = 100000;
@@ -775,8 +777,8 @@ sub indexVcf{
             $contigs{first_offset} = $prev_offset;
         }
         my @s = split ("\t", $line);
-        my $chrom = $s[$vcf_fields{CHROM}];
-        my $pos = $s[$vcf_fields{POS}];
+        my $chrom = $s[VCF_FIELDS->{CHROM}];
+        my $pos = $s[VCF_FIELDS->{POS}];
         my $span = getSpan(\@s);
         my $pos_rounddown = int($pos/$REGION_SPANS) * $REGION_SPANS;
         if (exists $contigs{$chrom}){
@@ -909,7 +911,7 @@ sub readIndex{
         croak "Indexing failed? $index does not exist " if (not -e $index);
         print STDERR " Done.\n";
     }else{
-        carp "\nWARNING: Tabix index $index is older than $vcf " if (-M $vcf) < (-M $index); 
+        carp "\nWARNING: VcfReader index $index is older than $vcf " if (-M $vcf) < (-M $index); 
     }
     my $z = new IO::Uncompress::Gunzip $index
         or die "gunzip failed to read index $index: $GunzipError\n";
@@ -945,7 +947,7 @@ sub getFileLengthFromIndex{
 
 =item B<openVcf>
 
-Convenience method to return a filehandle for reading a VCF. Requires a filename as the only input. If the filename ends in '.bgz' or '.gz' it will be opened via IO::Uncompress::Gunzip.
+Convenience method to return a filehandle for reading a VCF. Requires a filename or filehandle as the only input. If the filename ends in '.bgz' or '.gz' it will be opened via IO::Uncompress::Gunzip.
 
  my $FH = VcfReader::openVcf('file.vcf');
 
@@ -959,8 +961,11 @@ sub openVcf{
 
 sub _openFileHandle{
     my $vcf = shift;
-    croak "_openFileHandle method requires a file as an argument" if not $vcf;
+    croak "_openFileHandle method requires a file or filehandle as an argument" if not $vcf;
     my $FH; 
+    if (openhandle($vcf) ){
+        return $vcf;#already an open filehandle
+    }
     if ($vcf =~ /\.(b){0,1}gz$/){
         $FH = new IO::Uncompress::Gunzip $vcf, MultiStream => 1 or croak "IO::Uncompress::Gunzip failed while opening $vcf for reading: \n$GunzipError";
     }else{
@@ -998,8 +1003,8 @@ sub getVariantField{
     $field =~ s/^#+//;
     croak "line passed to getVariantField must be an array reference " if ref $split ne 'ARRAY';
     croak "Invalid field ($field) passed to getVariantField method " 
-        if not exists $vcf_fields{$field};
-    if ($vcf_fields{$field} > $#{$split}){
+        if not exists VCF_FIELDS->{$field};
+    if (VCF_FIELDS->{$field} > $#{$split}){
         if ($field eq 'FORMAT'){
             #carp "No FORMAT field for line " . join("\t", @split) . " " ;
             return;
@@ -1007,7 +1012,7 @@ sub getVariantField{
             croak "Line has too few fields: " . join("\t", @$split) . " " ;
         }
     }
-    return $split->[$vcf_fields{$field}];
+    return $split->[VCF_FIELDS->{$field}];
 }
 
 =item B<getMultipleVariantFields>
@@ -1036,7 +1041,7 @@ Retrieves the value for a given INFO field from a given line. Returns the value 
 =cut
 sub getVariantInfoField{
     my ($line, $info_field) = @_;
-    my @info = split(';', getVariantField($line, "INFO"));
+    my @info = split(';', $line->[VCF_FIELDS->{INFO}]);
     foreach my $inf (@info){
         if ($inf =~ /^$info_field=(.+)/){
             return $1;
@@ -1254,7 +1259,7 @@ Returns a hash of the different fields found in the FORMAT column for a variant 
 =cut
 sub getVariantFormatFields{
     my ($line) = @_;
-    my $format = getVariantField($line, "FORMAT");
+    my $format = $line->[VCF_FIELDS->{FORMAT}];
     if (not defined $format){
         return;
     }
@@ -1905,7 +1910,7 @@ sub getSampleActualGenotypes{
 
 =item B<getSampleAlleleDepths>
 
-Can be used to return the value for a genotype field (e.g. "GT", "GQ", "AD", "PL") field for one sample, a list of samples or all samples in a VCF.
+Calculates depth for each allele for a sample call using AD or AO/RO genotype fields.
 
 Arguments:
 
@@ -2173,7 +2178,9 @@ sub countAlleles{
     my $inf_ac = getVariantInfoField($args{line}, 'AC');
     my $inf_an = getVariantInfoField($args{line}, 'AN');
     if (not defined $args{samples}){
-        if (not $args{minGQ} and defined $inf_ac and defined $inf_an){
+        if ( (not $args{minGQ} and defined $inf_ac and defined $inf_an )
+             or $#{$args{line}} < 9 #no samples in VCF
+        ){
             my @ac = split(",", getVariantInfoField($args{line}, 'AC'));
             unshift @ac,  getVariantInfoField($args{line}, 'AN') - sum(@ac);
             for (my $i = 0; $i < @ac; $i++){
@@ -2314,8 +2321,8 @@ Returns a split line with a variant field replaced with a given value. Requires 
 sub replaceVariantField{
     my ($line, $field, $replacement) = @_;
     $field =~ s/^#+//;
-    croak "Invalid field ($field) passed to replaceVariantField method " if not exists $vcf_fields{$field};
-    splice(@$line, $vcf_fields{$field}, 1, $replacement);
+    croak "Invalid field ($field) passed to replaceVariantField method " if not exists VCF_FIELDS->{$field};
+    splice(@$line, VCF_FIELDS->{$field}, 1, $replacement);
     return $line if defined wantarray;
     #return join("\t", @$line) if defined wantarray;
     carp "replaceVariantField called in void context ";
@@ -2350,14 +2357,14 @@ sub minimizeAlleles{
     my %min_alleles = ();#key is allele number, each entry is anon hash of CHROM, REF, POS, ALT
     my @al =  readAlleles(line => $line);
     for (my $i = 1; $i < @al; $i++){
-        my ($pos, $ref, $alt) = reduceRefAlt(getVariantField($line, "POS"), $al[0], $al[$i]);
+        my ($pos, $ref, $alt) = reduceRefAlt($line->[VCF_FIELDS->{POS}], $al[0], $al[$i]);
         $min_alleles{$i} = {
-            CHROM           => getVariantField($line, "CHROM"),
+            CHROM           => $line->[VCF_FIELDS->{CHROM}],
             POS             => $pos,
             REF             => $ref,
             ALT             => $alt,
-            ORIGINAL_POS    => getVariantField($line, "POS"),
-            ORIGINAL_REF    => getVariantField($line, "REF"),
+            ORIGINAL_POS    => $line->[VCF_FIELDS->{POS}],
+            ORIGINAL_REF    => $line->[VCF_FIELDS->{REF}],
             ORIGINAL_ALT    => $al[$i],
             ALT_INDEX        => $i,
         };
@@ -2409,13 +2416,13 @@ For a given line this function returns the 5' most position altered. Requires an
 sub getSpan{
     my ($line) = @_;
     my $end;
-    if ($line->[$vcf_fields{ALT}] =~ /^</){#try to deal with CNVs
+    if ($line->[VCF_FIELDS->{ALT}] =~ /^</){#try to deal with CNVs
         if ($end = getVariantInfoField($line, 'END')){
         }else{
-            $end = $line->[$vcf_fields{POS}];
+            $end = $line->[VCF_FIELDS->{POS}];
         }
     }else{
-        $end = $line->[$vcf_fields{POS}] + length($line->[$vcf_fields{REF}]) -1;
+        $end = $line->[VCF_FIELDS->{POS}] + length($line->[VCF_FIELDS->{REF}]) -1;
     }
     return $end;
 }
@@ -2434,7 +2441,7 @@ Requires two array references, one for each split line to compare.
 
 sub variantsHaveMatchingAlleles{
     my ($line1, $line2) = @_;
-    if (getVariantField($line1, "CHROM") ne getVariantField($line2, "CHROM")){
+    if ($line1->[VCF_FIELDS->{CHROM}] ne $line2->[VCF_FIELDS->{CHROM}]){
         return 0;
     }
     my %min1 = minimizeAlleles($line1);
@@ -2593,7 +2600,7 @@ sub reconvertTextForInfo{
 
 =item sortVcf
 
-Creates a coordinate sorted VCF file from a given VCF file. Contig orders can be explicitly given using the 'contig_order' argument. Otherwise, the contig order will be derived from the header if possible and failing that contigs will be ordered numerically, followed by 'X', 'Y', 'MT' and then ascibetically. 
+Creates a coordinate sorted VCF file from a given VCF file. Contig orders can be explicitly given using the 'contig_order' argument. Otherwise, the contig order will be derived from the header if possible and failing that contigs will be ordered numerically, followed by 'X', 'Y', 'MT' and then ascibetically. This method will also remove duplicate lines.
 
 Arguments
 
@@ -2601,11 +2608,11 @@ Arguments
 
 =item vcf
 
-filename of VCF file to sort. Required.
+filename or filehandle of input VCF file to sort. Required.
 
 =item output
 
-filename for output. If output is given data will be sent to STDOUT.
+filename or filehandle for output. If this argument is not provided data will be sent to STDOUT.
 
 =item contig_order 
 
@@ -2644,6 +2651,7 @@ sub sortVcf{
     croak "\"vcf\" argument is required for sortVcf function "  if not $args{vcf};
     my %contigs = ();
     my $do_not_replace_header;
+    my $previous = '';
     my %temp_dict = ();
     my @dict = ();
     my $add_ids = 0;
@@ -2672,8 +2680,12 @@ sub sortVcf{
     my $column_header = VcfReader::getColumnHeader($args{vcf});
     my $SORTOUT;
     if (exists $args{output}){
-        open ($SORTOUT,  ">$args{output}") or croak "Can't open file $args{output} for output of sortVcf: $! ";
-        print STDERR "Sorting $args{vcf} to $args{output}.\n"; 
+        if (openhandle($args{output})){
+            $SORTOUT = $args{output};
+        }else{
+            open ($SORTOUT,  ">$args{output}") or croak "Can't open file $args{output} for output of sortVcf: $! ";
+            print STDERR "Sorting $args{vcf} to $args{output}.\n"; 
+        }
     }else{
         $SORTOUT = \*STDOUT;
     }
@@ -2684,9 +2696,9 @@ sub sortVcf{
         my @sort = ();
         while (my $line = <$FH>){
             next if $line =~ /^#/;
-            my @split = split("\t", $line);
-            my $chrom = $split[$vcf_fields{CHROM}];
-            my $pos = $split[$vcf_fields{POS}];
+            my @split = split("\t", $line, 3);
+            my $chrom = $split[VCF_FIELDS->{CHROM}];
+            my $pos = $split[VCF_FIELDS->{POS}];
             my $s_chrom; 
             if (%contigs){
                 croak "Contig '$chrom' is not present in user provided ".
@@ -2725,11 +2737,14 @@ sub sortVcf{
         print $SORTOUT join("\n", @head) ."\n";
         print $SORTOUT "$column_header\n";
         foreach my $s (@sort){
+            my $var = '';
             if (%contigs){
-                print $SORTOUT  substr($s, 8);
+                $var = substr($s, 8);
             }else{
-                print $SORTOUT  substr($s, 29);
+                $var = substr($s, 29);
             }
+            print $SORTOUT $var if $var ne $previous;
+            $var = $previous;
         }
     }else{
         my %sortex_args = (mem_threshold => 1024**2 * 16);
@@ -2756,9 +2771,9 @@ sub sortVcf{
         while (my $line = <$FH>){
             next if ($line =~ /^#/);
             $n++;
-            my @split = split("\t", $line);
-            my $chrom = $split[$vcf_fields{CHROM}];
-            my $pos = $split[$vcf_fields{POS}];
+            my @split = split("\t", $line, 3);
+            my $chrom = $split[VCF_FIELDS->{CHROM}];
+            my $pos = $split[VCF_FIELDS->{POS}];
             my $s_chrom; 
             if (%contigs){
                 croak "Contig '$chrom' is not present in user provided ".
@@ -2792,11 +2807,14 @@ sub sortVcf{
         print $SORTOUT join("\n", @head) ."\n";
         print $SORTOUT "$column_header\n";
         while ( defined( $_ = $sortex->fetch ) ) {
+            my $var = '';
             if (%contigs){
-                print $SORTOUT  substr($_, 8);
+                $var = substr($_, 8);
             }else{
-                print $SORTOUT  substr($_, 29);
+                $var = substr($_, 29);
             }
+            print $SORTOUT $var if $var ne $previous;
+            $var = $previous;
             $n++;
             if (not $n % 50000){
                 print STDERR "Printed $n variants to output...\n";
@@ -2868,14 +2886,14 @@ sub sortVariants{
     }else{
         my %temp = ();
         foreach my $l (@$list){
-            $temp{getVariantField($l, 'CHROM')}++;
+            $temp{$l->[VCF_FIELDS->{CHROM}]}++;
         }
         my $n = 0;
         %contigs = map {$_ => $n++} sort byContigs(keys %temp);
     }
     my @sort = sort {
-        $contigs{getVariantField($a, 'CHROM')} <=> $contigs{getVariantField($b, 'CHROM')} ||
-        getVariantField($a, "POS") <=> getVariantField($b, "POS")
+        $contigs{$a->[VCF_FIELDS->{CHROM}]} <=> $contigs{$b->[VCF_FIELDS->{CHROM}]} ||
+        $a->[VCF_FIELDS->{POS}] <=> $b->[VCF_FIELDS->{POS}]
     } @$list;
     return @sort if defined wantarray;
     carp "sortVariants method called in void context ";
@@ -2892,7 +2910,7 @@ Sort method to sort variants by position only (useful if you have an array of va
 
 sub sortByPos{
     my $vars = shift;
-    return sort { getVariantField($a, "POS") <=> getVariantField($b, "POS") } @$vars;
+    return sort { $a->[VCF_FIELDS->{POS}] <=> $b->[VCF_FIELDS->{POS}] } @$vars;
 }
     
 
@@ -3370,7 +3388,7 @@ sub _getByRegion{
             my @lines = _readLinesByOffset($reg->{offset_start}, $reg->{offset_end}, $args{fh});
             foreach my $l (@lines){
                 my @sp = split("\t", $l);
-                my $l_pos =  $sp[$vcf_fields{POS}]; 
+                my $l_pos =  $sp[VCF_FIELDS->{POS}]; 
                 last if $l_pos > $args{end};
                 if ($l_pos >= $args{start} and $l_pos <= $args{end}){
                     push @matches, $l;
@@ -3630,7 +3648,7 @@ sub _searchVcf{
         my @lines = _readLinesByOffset($reg->{offset_start}, $reg->{offset_end}, $args{fh});
         foreach my $l (@lines){
             my @sp = split("\t", $l);
-            my $l_pos =  $sp[$vcf_fields{POS}]; 
+            my $l_pos =  $sp[VCF_FIELDS->{POS}]; 
             last if $l_pos > $args{pos};
             if ($l_pos == $args{pos}){
                 push @matches, $l;
@@ -3798,7 +3816,10 @@ sub getVepFields{
                 carp "$f feature does not exist in CSQ field ";
                 next;
             }
-            $t_csq{lc$f} = $v[ $args{vep_header} -> {lc($f)} ];
+            $t_csq{lc$f} = defined $v[ $args{vep_header} -> {lc($f)} ] ? 
+                                   $v[ $args{vep_header} -> {lc($f)} ] : 
+                                   '';
+            
         }
         push @return, \%t_csq;
     }

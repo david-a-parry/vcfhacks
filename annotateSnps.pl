@@ -197,7 +197,7 @@ $dbpm->wait_all_children;
 #get dbSNP category headers
 my %head_info_fields = (
     "clinical significance" => [ qw / CLNSIG SCS / ] ,
-    "clinvar annotations"   => [ qw / CLNALLE CLNDBN CLNDSDBID CLNHGVS / ] ,
+    "clinvar annotations"   => [ qw / CLNALLE CLNDBN CLNDSDBID CLNHGVS GENEINFO / ] ,
     "dbSNPBuildID"          => [ qw / dbSNPBuildID / ],
     "allele frequency"      => [ qw / AF CAF G5A G5 COMMON / ] ,
 );
@@ -772,13 +772,16 @@ sub evaluate_clinvar {
     my @sig = ();
     my @path = ();
     my @conf = ();
+    my @symbols = ();
     foreach my $m (@matches){
         push @traits, ClinVarReader::getColumnValue($m, 'all_traits', $cvar_args->{col_hash});
         push @sig, ClinVarReader::getColumnValue($m, 'clinical_significance', $cvar_args->{col_hash});
         my $c =  ClinVarReader::getColumnValue($m, 'conflicted', $cvar_args->{col_hash});
         my $p = ClinVarReader::getColumnValue($m, 'pathogenic', $cvar_args->{col_hash});
+        my $s =  ClinVarReader::getColumnValue($m, 'symbol', $cvar_args->{col_hash});
         push @path, $p;
         push @conf, $c;
+        push @symbols, $s;
         $isPathogenic += $p;
         $isConflicted += $c;
     }
@@ -791,6 +794,10 @@ sub evaluate_clinvar {
     if (@sig){
         @sig = map { VcfReader::convertTextForInfo($_) } @sig;
         $min_allele->{cvar_info}->{ClinVarClinicalSignificance} = join("/", @sig);
+    }
+    if (@symbols){
+        @symbols = map { VcfReader::convertTextForInfo($_) } @symbols;
+        $min_allele->{cvar_info}->{ClinVarSymbol} = join("/", @symbols);
     }
     return $isPathogenic;
 }
@@ -948,7 +955,8 @@ sub checkVarMatches {
 sub annotateClnVarVcf{
     my ( $min_allele, $snp_line, $snp_alt, $file ) = @_;
     my %inf = ();
-    foreach my $f ( qw/ CLNSIG CLNALLE CLNHGVS CLNDSDBID CLNDBN / ){ 
+    my @c_fields = qw/ CLNSIG CLNALLE CLNHGVS CLNDSDBID CLNDBN GENEINFO /;
+    foreach my $f ( @c_fields ){ 
         #only take annotations from first file with matching variant
         return if exists $min_allele->{snp_info}->{$f};
         next if not exists $dbsnp_to_info{$file}->{$f};
@@ -959,9 +967,13 @@ sub annotateClnVarVcf{
 
     my $al_index = first_index {$_ == $snp_alt} split(",", $inf{CLNALLE});
     return if $al_index < 0;
-    foreach my $f ( qw/ CLNSIG CLNALLE CLNHGVS CLNDSDBID CLNDBN / ){ 
-        next if not exists $inf{$f}; 
-        $min_allele->{snp_info}->{$f}    = (split ",", $inf{$f})[$al_index];
+    foreach my $f ( @c_fields ){ 
+        next if not defined $inf{$f}; 
+        if ($f eq 'GENEINFO'){
+            $min_allele->{snp_info}->{$f} = $inf{$f}; 
+        }else{
+            $min_allele->{snp_info}->{$f} = (split ",", $inf{$f})[$al_index];
+        }
     }
 }
 
@@ -1051,7 +1063,15 @@ DBSNP:      foreach my $d (@dbsnp){
             Type        =>  "String",
             Description => "Clinical significance terms for this allele given in ClinVar",
         );
-        foreach my $infhash (\%cvp_info, \%cvc_info, \%cvt_info, \%cvcs_info){
+
+        my %cvsym_info = 
+        (
+            ID          =>  "ClinVarSymbol",
+            Number      =>  "A",
+            Type        =>  "String",
+            Description =>  "Associated gene symbol given in ClinVar",
+        );
+        foreach my $infhash (\%cvp_info, \%cvc_info, \%cvt_info, \%cvcs_info, \%cvsym_info){
             push @{$inf_heads{cv}}, VcfhacksUtils::getInfoHeader(%{$infhash});
         }
     }

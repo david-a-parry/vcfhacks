@@ -21,7 +21,7 @@ my @add_classes = ();
 my @damaging = ();
 my @biotypes = ();
 my @custom_af = ();
-my @score_filters = (); 
+my @eval_filters = (); 
 
 my %opts   = (
     s                => \@samples,
@@ -33,7 +33,7 @@ my %opts   = (
     biotype_filters  => \@biotypes,
     j                => \@custom_af,
     min_af_counts    => 0,
-    score_filters    => \@score_filters,
+    eval_filters    => \@eval_filters,
 );
 
 
@@ -70,7 +70,7 @@ GetOptions(
     "pl=f", 
     'q|quality=i',
     'r|reject=s{,}',    
-    "score_filters=s{,}",
+    "eval_filters=s{,}",
     'skip_unpredicted',
     's|samples=s{,}',
     'splice_prediction=s{,}',
@@ -194,7 +194,7 @@ my %class_filters = map { $_ => undef } getAndCheckClasses();
 #check in silico prediction classes/scores are acceptable
 my %in_silico_filters = getAndCheckInSilicoPred();
   #hash of prediction program names and values to filter
-my @score_exp = getAndCheckScoreFilters();
+my @eval_exp = getAndCheckEvalFilters();
 
 #and check biotype classes are acceptable
 my %biotype_filters = map { $_ => undef } getAndCheckBiotypes();
@@ -941,19 +941,19 @@ sub getAndCheckInSilicoPred{
 }
     
 #################################################
-sub getAndCheckScoreFilters{
-    return if not @score_filters;
+sub getAndCheckEvalFilters{
+    return if not @eval_filters;
     my @filters = (); 
     my %csq_add = ();
-FLT: foreach my $s (@score_filters){
-        my %f =  VcfhacksUtils::getScoreFilter($s);
+FLT: foreach my $s (@eval_filters){
+        my %f =  VcfhacksUtils::getEvalFilter($s);
         foreach my $fld (@{$f{field}}){
             (my $fb = $fld) =~ s/^\(//;#we may have used ( to specify precedence
             if (not exists $csq_header{lc($fb)}){
                 informUser
                 (
                     "WARNING: No '$fb' field found in CSQ header of ".
-                    "VCF. Cannot use --score_filter expression '$s' ".
+                    "VCF. Cannot use --eval_filter expression '$s' ".
                     "for filtering.\n"
                 ); 
                 next FLT;
@@ -1043,6 +1043,9 @@ sub getCsqFields{
             symbol
             biotype
         );
+        if ($opts{canonical_only}){
+            push @fields, "canonical";
+        }
         if ($opts{consensus_splice_site}){
             push @fields, "splice_consensus";
         }
@@ -1579,8 +1582,8 @@ sub consequenceMatchesVepClass{
     return 0 if ( grep { /NMD_transcript_variant/i } @anno_csq );
     
     #score filters trump annotation class
-    foreach my $scf (@score_exp){
-        return 1 if VcfhacksUtils::scoreFilter($scf, $annot);
+    foreach my $evf (@eval_exp){
+        return 1 if VcfhacksUtils::evalFilter($evf, $annot);
     }
 
 ANNO: foreach my $ac (@anno_csq){
@@ -1616,9 +1619,9 @@ sub consequenceMatchesSnpEffClass{
     #skip unwanted biotypes
     return 0 if exists $biotype_filters{lc $annot->{transcript_biotype} };
 
-    #score filters trump annotation class
-    foreach my $scf (@score_exp){
-        return 1 if VcfhacksUtils::scoreFilter($scf, $annot);
+    #eval filters trump annotation class
+    foreach my $evf (@eval_exp){
+        return 1 if VcfhacksUtils::evalFilter($evf, $annot);
     }
     
     my @anno_csq = split( /\&/, $annot->{annotation} );
@@ -1832,7 +1835,7 @@ sub keepClinvar{
                         'ClinVarConflicted',
                     )
                 );
-                @c_path = map {$c_path[$_] == 1 and $c_conf[$_] == 0} 0..$#c_path;
+                @c_path = map {$c_path[$_] eq '1' and $c_conf[$_] eq '0'} 0..$#c_path;
             }
         }
     }
@@ -1859,7 +1862,7 @@ sub keepClinvar{
                 }
             }
             if ($keep_clinvar eq 'no_conflicted'){
-                @d_path = map {$d_path[$_] == 1 and  $d_conf[$_] == 0} 0..$#d_path;
+                @d_path = map {$d_path[$_] eq '1' and  $d_conf[$_] eq '0'} 0..$#d_path;
             }
         }
     }
@@ -1871,11 +1874,11 @@ sub keepClinvar{
                 #conflicted if ClinVarConflicted annotation is 1 or $d_path[$_] == 0
                 #in this case, if we have annotations from VCF in @d_path,
                 #about what is in @c_path
-                return map { $d_path[$_] == 1  and $c_conf[$_] == 0} 0..$#d_path;
+                return map { $d_path[$_] eq '1'  and $c_conf[$_] ne '1'} 0..$#d_path;
             }else{  
                 #don't care about conflicted annotations
                 #keep if either source is flagged as pathogenic
-                return map {$d_path[$_] == 1 or $c_path[$_] == 1} 0..$#d_path;
+                return map {$d_path[$_] eq '1' or $c_path[$_] eq '1'} 0..$#d_path;
             }
         }else{
             return @c_path;
@@ -2221,6 +2224,21 @@ When using a PED file to specify family members, use this flag to prevent checki
 =item B<--pass_filters>
 
 Only consider variants with a PASS filter field. If the FILTER field for variant is not PASS the variant will be skipped.
+
+=item B<--eval_filters>
+
+Use this option to create custom filters for KEEPING variants on the basis of values in the VEP or SnpEff consequence fields. 
+
+Expressions must take the format of 'field name' 'comparator' 'value to compare' separated by white space. Multiple expressions can be used together along with the logical operators 'and', 'or' or 'xor'. The value for 'field name' will be used to extract the value for the given field from the VEP/SnpEff consequence INFO field. The resulting expression is evaluated using perl's built-in 'eval' function.
+
+For example:
+
+    --eval_filters "LoF eq 'HC'" 
+    #keeps any variant with a LoF annotation of 'HC'
+
+    --eval_filters "(ada_score >= 0.6 and rf_score >= 0.6) or maxentscan_diff > 5"
+    #keeps variants with ada_score and rf_scores of 0.6 or higher or with 
+    #maxenstscan diff of 5 or higher
 
 =item B<-b    --progress>
 

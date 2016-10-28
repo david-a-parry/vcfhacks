@@ -324,90 +324,107 @@ EOT
     return %filters;
 }
 
-=item B<getScoreFilter>
+=item B<getEvalFilter>
 
-Takes an expression to filter on numeric values annotations and creates a hash that can be used by the 'scoreFilter' function of this module. No whitespace is permitted in the expressions but multiple expressions can be used together along with the logical operators 'and', 'or' or 'xor'.
+Takes an expression to eval and creates a hash that can be used by the 'evalFilter' function of this module. Expressions must take the format of 'field name' 'comparator' 'value to compare' separated by white space. Multiple expressions can be used together along with the logical operators 'and', 'or' or 'xor'.
 
- my %exp = VcfhacksUtils::getScoreFilter("ada_score>0.6");
+The 'field name' component is used to extract the value from the corresponding key in the values hash passed to the 'evalFilter' function. The main purpose for this is to be able to use an eval expression to evaluate values from VEP/SnpEff consequences retrieved using the 'getVepFields' method from VcfReader. 
+
+ my %exp = VcfhacksUtils::getEvalFilter("ada_score > 0.6");
  
- my %exp = VcfhacksUtils::getScoreFilter
+ my %exp = VcfhacksUtils::getEvalFilter("LoF eq 'HC'");
+ 
+ my %exp = VcfhacksUtils::getEvalFilter
  (
-     "(ada_score>0.6 and rf_score>0.6) or maxentscan_diff>5"
+     "(ada_score > 0.6 and rf_score > 0.6) or maxentscan_diff > 5"
  );
 
 =cut
 
-sub getScoreFilter{
+sub getEvalFilter{
     my $s = shift;
     my $open_brackets = () = $s =~ /\(/g;   
     my $close_brackets = () = $s =~ /\)/g;
     if ($open_brackets > $close_brackets){
-        croak "ERROR: Unclosed brackets in expression '$s' passed to --score_filter\n";
+        croak "ERROR: Unclosed brackets in expression '$s' passed to --eval_filter\n";
     }elsif ($open_brackets < $close_brackets){
-        croak "ERROR: Trailing brackets in expression '$s' passed to --score_filter\n";
+        croak "ERROR: Trailing brackets in expression '$s' passed to --eval_filter\n";
     }
     my %exp = 
     (
         field => [], 
+        value => [], 
+        comparator => [], 
         operator => [], 
-        expression => []
     );
     $s =~ s/^\s+//;#remove preceding whitespace
     $s =~ s/\s+$//;#remove trailing whitespace
-    my @split = split(/\s/, $s);#split on whitespace
+    my @split = split(/\s+/, $s);#split on whitespace
     for(my $i = 0; $i<@split; $i++){
-    #every second array element must be an operator (and/or/xor)
-        if ($i % 2){
-            if ($split[$i] !~ /(and|or|xor)/){#check operator
+    #every fourth array element must be an operator (and/or/xor)
+        if ($i and $i % 4 == 3){
+            if ($split[$i] !~ /^(and|or|xor|\|\||\&\&)$/){#check operator
                 my $pos = $i + 1;
-                croak "ERROR: Expected operator (or/and/xor) at position $pos in --score_filter argument '$s' but got '$split[$i]'\n";
+                croak "ERROR: Expected operator (or/and/xor) at position $pos in --eval_filter argument '$s' but got '$split[$i]'\n";
             }
             push @{$exp{operator}}, $split[$i];
-        }else{#if index % 2 == 0 check expression
-            if ($split[$i] =~ /(\S+)([><]=?)(\S+)/){
-                my $fld = $1;
-                my $cmp = $2;
-                my $val = $3;
-                
-                if ($val !~ /^\d+(\.\d+)\)?$/){
-                    $val =~ s/\)$//;
-                    croak "Expected numeric value in --score_filter ".
-                        "expression '$s' but found '$val'\n";
-                }
-                push @{$exp{field}}, lc($fld);
-                push @{$exp{expression}}, "$cmp$val";
+        }elsif($i % 4 == 2){ #third arg must be value
+            push @{$exp{value}}, $split[$i];
+        }elsif($i % 4 == 1){ #second arg must be comparator
+            if ($split[$i] !~ /^(eq|ne|[!=]~|[<>][=]{0,1}|[=!]=)$/){#check comparator
+                my $pos = $i + 1;
+                croak "ERROR: Expected comparator at position $pos in --eval_filter argument '$s' but got '$split[$i]'\n";
             }
+            push @{$exp{comparator}}, $split[$i];
+        }else{#0th arg is consequence field
+            push @{$exp{field}}, $split[$i];
         }
     }
     return %exp;
 }
 
+=item B<evalFilter>
 
-=item B<scoreFilter>
+Using a hash created using the getEvalFilter function (above), and a hash of field names to values, this function returns the result of evalutaing the resulting expressions using perl's eval function. The main purpose for this is to query VEP/SnpEff consequences retrieved using VcfReader (e.g. return true if a score is above a certain threshold or a string is matched).
 
-Using a hash created using the getScoreFilter function (above), and a hash of field names to values, this function returns 1 if the expression is matched and 0 if not.
-
- my %exp = VcfhacksUtils::getScoreFilter("ada_score>0.6");
- if (VcfhacksUtils::scoreFilter(\%exp, \%values)){
-     ...
+ my %exp = VcfhacksUtils::getScoreFilter("ada_score > 0.6 or LoF eq 'HC'");
+ my @vep_csq = VcfReader::getVepFields
+ (
+    line       => \@split_line,
+    vep_header => \%vep_header,
+    field      => 'all',
+ );
+ foreach my $csq (@vep_csq){
+     if (VcfhacksUtils::scoreFilter(\%exp, $csq)){
+         ...
+     }
  }
 
-=cut
+=cut 
 
-sub scoreFilter{
+
+sub evalFilter{
     my ($exps, $vals) = @_;
     my @eval = (); 
     for (my $i = 0; $i < @{$exps->{field}}; $i++){
         (my $field = $exps->{field}->[$i]) =~ s/^\(//;#remove preceding bracket
         my $v = $vals->{$field};
-        push @eval, "(" if $exps->{field}->[$i] =~ s/^\(//;
-        if (defined $v){#if not defined we'll test remainder of expression
-            push @eval, $v; 
-            push @eval, $exps->{expression}->[$i];
+        push @eval, "(" if $exps->{field}->[$i] =~ /^\(/;
+        if ($exps->{comparator}->[$i] =~ /^([<>][=]{0,1}|[=!]=)$/){
+            if ($v ne ''){
+                push @eval, $v; 
+                push @eval, "$exps->{comparator}->[$i]";
+                push @eval, "$exps->{value}->[$i]";
+            }else{
+            #if empty convert to false and eval rest of expression
+                push @eval, 0 ;
+                push @eval, ")" if $exps->{value}->[$i] =~ /\)$/;
+            }
         }else{
-            push @eval, 0 ;
+            push @eval, "'$v'"; 
+            push @eval, "$exps->{comparator}->[$i]";
+            push @eval, "$exps->{value}->[$i]";
         }
-        push @eval, ")" if $exps->{expression}->[$i] =~ s/^\)//;
         if ($i < @{$exps->{operator}}){
             push @eval, $exps->{operator}->[$i];
         }
@@ -416,7 +433,8 @@ sub scoreFilter{
     carp "$@\n" if $@;
     return $ev;
 }
-  
+
+
 =back
 
 =head2 Misc Utilities
