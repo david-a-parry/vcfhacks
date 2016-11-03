@@ -18,7 +18,10 @@ You may either download and unpack a script bundle from a specific release (http
 
     git clone --recursive https://github.com/gantzgraf/vcfhacks.git
 
-...and regularly run 'git pull' to receive updates. 
+...and regularly run the following commands to receive updates. 
+    
+    git pull --recurse-submodules 
+    git submodule update --recursive --remote 
 
 The .pl scripts must remain in the same directory as the 'lib' and 'data' folders but you may create symlinks to the scripts (e.g. in your ~/bin folder) if you wish.  The vep_plugins folder also contains two Variant Effect Predictor (VEP) plugin modules (SpliceConsensus.pm and SpliceConsensusFilter.pm) which should be installed in your VEP cache 'Plugins' folder if you want to use them. The SpliceConsensus.pm annotations can be used for variant filtering purposes in getFunctionalVariants.pl and findBiallelic.pl.
 
