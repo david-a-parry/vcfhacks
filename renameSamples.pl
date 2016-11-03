@@ -7,7 +7,7 @@ use Pod::Usage;
 use Data::Dumper;
 use FindBin qw($RealBin);
 use lib "$RealBin/lib/dapPerlGenomicLib";
-use VcfReader;
+use VcfReader 0.3;
 
 my %opts = ();
 GetOptions(

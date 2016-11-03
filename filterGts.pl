@@ -10,7 +10,7 @@ use Getopt::Long;
 use Pod::Usage;
 use lib "$RealBin/lib";
 use lib "$RealBin/lib/dapPerlGenomicLib";
-use VcfReader;
+use VcfReader 0.3;
 use VcfhacksUtils;
 my @ab = (); 
 my %opts = (a => \@ab);

@@ -12,7 +12,7 @@ use Bio::DB::HTS::Tabix;
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
 use lib "$RealBin/lib/dapPerlGenomicLib";
-use VcfReader;
+use VcfReader 0.3;
 use VcfhacksUtils;
 
 my @cadd_files = ();

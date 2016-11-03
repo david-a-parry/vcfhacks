@@ -27,7 +27,7 @@ use lib "$RealBin/lib/dapPerlGenomicLib";
 use lib "$RealBin/lib/Bioperl";
 use lib "$RealBin/lib/BioASN1EntrezGene/lib";
 use VcfhacksUtils;
-use VcfReader; 
+use VcfReader 0.3; 
 
 my @add_classes;
 my @annotations;

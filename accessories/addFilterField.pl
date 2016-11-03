@@ -10,7 +10,7 @@ use FindBin;
 use Term::ProgressBar;
 use lib "$FindBin::Bin/../lib";
 use lib "$FindBin::Bin/../lib/dapPerlGenomicLib";
-use VcfReader;
+use VcfReader 0.3;
 use VcfhacksUtils;
 
 my %opts = (r => 0); 

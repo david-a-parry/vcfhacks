@@ -56,7 +56,7 @@ foreach my $f (@files){
     if ($f =~ /\.pl$/){
         (my $exe = $f) =~ s/\.pl$//;
         chdir($bin_dir);
-        my $pp = "pp --lib lib/ --lib lib/Bioperl --lib lib/BioASN1EntrezGene/lib";
+        my $pp = "pp --lib lib/ --lib lib/dapPerlGenomicLib --lib lib/Bioperl --lib lib/BioASN1EntrezGene/lib";
         my $pp_cmd = "$pp -c $f -o $exe";
         if (grep {$_ eq $f} @needs_tabix){
             $pp_cmd .= " -M Tabix";

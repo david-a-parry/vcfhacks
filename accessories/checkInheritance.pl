@@ -11,7 +11,7 @@ use FindBin qw($RealBin);
 use lib "$RealBin/../lib";
 use lib "$RealBin/../lib/dapPerlGenomicLib";
 use ParsePedfile;
-use VcfReader;
+use VcfReader 0.3;
 
 my %opts = ();
 GetOptions(

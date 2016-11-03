@@ -11,7 +11,7 @@ use Sys::CPU;
 use List::Util qw(sum);
 use FindBin qw($RealBin);
 use lib "$RealBin/lib/dapPerlGenomicLib";
-use VcfReader;
+use VcfReader 0.3;
 
 my $minGQ = 0;
 my $cpus  = Sys::CPU::cpu_count();
