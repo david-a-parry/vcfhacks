@@ -26,10 +26,12 @@ print STDERR "Attempting to install the following modules with CPAN:\n" .
 
 my @fails = ();
 foreach my $m (@modules){
-    print STDERR "Attempting to install $m with CPAN::Shell->install...\n";
-    CPAN::Shell->install($m); 
-    if ($@){
-        warn "Error install $m: $@\n";
+    print STDERR "Attempting to install $m with CPAN::Shell...\n";
+    my $mod = CPAN::Shell->expand("Module", $m);
+    $mod->install;
+    if (not $mod->uptodate){
+        warn "Error installing $m\n";
+        push @fails, $m;
     }
 }
 
