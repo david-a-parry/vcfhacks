@@ -998,8 +998,8 @@ sub checkAndAddHeaders{
 
     my %inf_heads = ();
 
-    foreach my $type (keys %head_info_fields){
-        foreach my $field (@{$head_info_fields{$type}}){
+    foreach my $annot_type (keys %head_info_fields){
+        foreach my $field (@{$head_info_fields{$annot_type}}){
             my $inf_head;
 DBSNP:      foreach my $d (@dbsnp){
                 $time = strftime( "%H:%M:%S", localtime );
@@ -1020,7 +1020,7 @@ DBSNP:      foreach my $d (@dbsnp){
                                        " per ALT allele. Original description ".
                                        "was as follows: $desc",
                     );
-                    push @{$inf_heads{$type}}, VcfhacksUtils::getInfoHeader(%d_info);
+                    push @{$inf_heads{$annot_type}}, VcfhacksUtils::getInfoHeader(%d_info);
                     last DBSNP;#keep first
                 }
             }
