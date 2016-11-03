@@ -9,6 +9,7 @@ use POSIX qw/strftime/;
 use FindBin;
 use Term::ProgressBar;
 use lib "$FindBin::Bin/../lib";
+use lib "$FindBin::Bin/../lib/dapPerlGenomicLib";
 use VcfReader;
 use VcfhacksUtils;
 

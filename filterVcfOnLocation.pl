@@ -115,6 +115,7 @@ use POSIX qw/strftime/;
 use Term::ProgressBar;
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
+use lib "$RealBin/lib/dapPerlGenomicLib";
 use SortGenomicCoordinates;
 use ParseVCF;
 

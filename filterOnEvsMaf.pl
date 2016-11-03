@@ -12,6 +12,7 @@ use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use POSIX qw/strftime/;
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
+use lib "$RealBin/lib/dapPerlGenomicLib";
 use VcfReader;
 use VcfhacksUtils;
 

@@ -8,6 +8,7 @@ use List::Util qw ( first max min ) ;
 use POSIX qw/strftime/;
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
+use lib "$RealBin/lib/dapPerlGenomicLib";
 use ParsePedfile;
 use VcfReader;
 use VcfhacksUtils;

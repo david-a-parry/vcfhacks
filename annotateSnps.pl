@@ -11,6 +11,7 @@ use List::MoreUtils qw(first_index);
 use POSIX qw/strftime/;
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
+use lib "$RealBin/lib/dapPerlGenomicLib";
 use VcfReader;
 use ClinVarReader;
 use VcfhacksUtils;

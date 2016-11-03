@@ -4,7 +4,7 @@ use warnings;
 use Getopt::Long;
 use Pod::Usage;
 use FindBin qw($RealBin);
-use lib "$RealBin/lib";
+use lib "$RealBin/lib/dapPerlGenomicLib";
 use VcfReader;
 my %opts = ();
 GetOptions(\%opts,

@@ -9,7 +9,7 @@ use File::Temp qw/ tempfile / ;
 use File::Basename;
 use Data::Dumper;
 use FindBin qw ( $RealBin ) ;
-use lib "$FindBin::Bin/../lib";
+use lib "$FindBin::Bin/../lib/dapPerlGenomicLib";
 use ParsePedfile;
 
 my $script_prefix = "perl $RealBin/..";

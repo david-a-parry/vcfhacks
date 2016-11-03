@@ -7,7 +7,7 @@ use Data::Dumper;
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use File::Temp qw/ tempfile /;
 use FindBin qw($RealBin);
-use lib "$RealBin/lib";
+use lib "$RealBin/lib/dapPerlGenomicLib";
 use VcfReader;
 
 my %opts = ();

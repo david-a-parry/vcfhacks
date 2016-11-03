@@ -5,7 +5,7 @@ use warnings;
 use Getopt::Long;
 use Pod::Usage;
 use FindBin qw ( $RealBin ) ;
-use lib "$FindBin::Bin/../lib";
+use lib "$FindBin::Bin/../lib/dapPerlGenomicLib";
 use ParsePedfile;
 
 my %opts = ();

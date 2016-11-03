@@ -9,6 +9,7 @@ use List::Util qw ( first max min ) ;
 use File::Temp qw/ tempfile /;
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
+use lib "$RealBin/lib/dapPerlGenomicLib";
 use VcfReader;
 use VcfhacksUtils;
 

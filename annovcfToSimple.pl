@@ -271,6 +271,7 @@ use Pod::Usage;
 use File::Basename;
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
+use lib "$RealBin/lib/dapPerlGenomicLib";
 use VcfReader;
 use VcfhacksUtils;
 use ParsePedfile;

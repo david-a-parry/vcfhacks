@@ -140,7 +140,7 @@ use Data::Dumper;
 use Pod::Usage;
 use POSIX qw/strftime/;
 use FindBin qw($RealBin);
-use lib "$RealBin/lib";
+use lib "$RealBin/lib/dapPerlGenomicLib";
 use SortGenomicCoordinates;
 use VcfReader;
 use IdParser;

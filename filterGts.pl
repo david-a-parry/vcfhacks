@@ -9,6 +9,7 @@ use Term::ProgressBar;
 use Getopt::Long;
 use Pod::Usage;
 use lib "$RealBin/lib";
+use lib "$RealBin/lib/dapPerlGenomicLib";
 use VcfReader;
 use VcfhacksUtils;
 my @ab = (); 

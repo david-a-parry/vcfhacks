@@ -10,7 +10,7 @@ use POSIX qw/strftime/;
 use Sys::CPU;
 use List::Util qw(sum);
 use FindBin qw($RealBin);
-use lib "$RealBin/lib";
+use lib "$RealBin/lib/dapPerlGenomicLib";
 use VcfReader;
 
 my $minGQ = 0;

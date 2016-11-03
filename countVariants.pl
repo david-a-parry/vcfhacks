@@ -2,7 +2,7 @@
 use strict;
 use warnings;
 use FindBin qw($RealBin);
-use lib "$RealBin/lib";
+use lib "$RealBin/lib/dapPerlGenomicLib";
 use VcfReader;
 
 die "Usage: countVariants.pl input1.vcf input2.vcf ...\n" if @ARGV <  1;

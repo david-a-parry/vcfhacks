@@ -4,6 +4,7 @@ use warnings;
 use Test::More tests => 14;
 use FindBin qw($RealBin);
 use lib "$RealBin/../lib";
+use lib "$RealBin/../lib/dapPerlGenomicLib";
 use lib "$RealBin/../lib/Bioperl";
 use lib "$RealBin/../lib/BioASN1EntrezGene/lib";
 BEGIN 
