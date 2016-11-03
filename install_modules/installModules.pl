@@ -1,6 +1,8 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+use CPAN;
+
 use CPAN::Shell;
 my @modules = qw /
     Parallel::ForkManager
@@ -12,6 +14,12 @@ my @modules = qw /
     JSON 
     Excel::Writer::XLSX 
 / ;
+
+print STDERR "Attempting to start and configure CPAN...\n";
+
+CPAN::HandleConfig->load;
+CPAN::Shell::setup_output;
+CPAN::Index->reload;
 
 print STDERR "Attempting to install the following modules with CPAN:\n" . 
  join("\n", @modules) . "\n";
