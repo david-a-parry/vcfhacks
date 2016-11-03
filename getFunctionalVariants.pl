@@ -353,7 +353,6 @@ sub processByLine{
     #read line
     while (my $line = <$VCF>){
         processLine($line);
-        $var_count++;#for progress bar
         updateProgressBar();  
     }
 
@@ -379,6 +378,7 @@ sub processByLine{
 sub processLine{
     my $line = shift;
     return if $line =~ /^#/;#skip header
+    $var_count++;#for progress bar
     chomp $line;
     my @split = split("\t", $line, 9);#do not need GT fields in the first 
     my ($chrom, $qual, $filter) = VcfReader::getMultipleVariantFields
