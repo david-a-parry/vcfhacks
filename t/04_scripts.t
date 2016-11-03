@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 #use Test::More;
-use Test::More tests => 14;
+use Test::More tests => 15;
 use FindBin qw($RealBin);
 use lib "$RealBin/../lib";
 use lib "$RealBin/../lib/dapPerlGenomicLib";
@@ -27,6 +27,7 @@ my $biallelic = "$RealBin/test_data/biallelic_test1.vcf";
 my $annoremote = "$RealBin/test_data/annoTestRemote.vcf";
 
 my $script_prefix = "perl $RealBin/..";
+my $gdb = "$RealBin/../data/geneAnnotatorDb" ;
 my $output = `$script_prefix/findBiallelic.pl -s Sample_133 Sample_76 -r Sample_139  -i $vcf 2> /dev/null |  grep -v '#'`;
 my $expected = getBiallelicData();
 is
@@ -121,6 +122,19 @@ is
     $output,
     10,
     "annotateSnps.pl filters on frequency and build"
+);
+$n_tests++; 
+
+ok
+( 
+    -d $gdb,
+    <<EOT
+geneAnnotator data folder ('$gdb') exists  
+this directory and required files can be created by running 
+'geneAnnotator.pl -D' or by downloading from the 'Releases' page at 
+'https://github.com/gantzgraf/vcfhacks'
+EOT
+     ,
 );
 $n_tests++; 
 
