@@ -27,15 +27,16 @@ The .pl scripts must remain in the same directory as the 'lib' and 'data' folder
 
 To run the scripts either add the enclosing directory to your PATH and make sure the scripts are executable (e.g. 'chmod +x vcfhacks/*.pl'), run the scripts directly from the folder (e.g. ./annotateSnps.pl) or run each script using 'perl [location of script]' followed by the required arguments. Help information is available for most scripts by running the script with either '--help' or '--manual' options. 
 
-If you want to use scripts to search bgzip compressed VCFs or use rankOnCaddScore.pl, as of version 0.2.2 you will also need to build and install the Bio::DB::HTS::Tabix. Note, that this replaces the Tabix.pm perl module used in previous versions of these scripts. For pre-v0.2.2 versions installation of the Tabix.pm module could be acheived using the following command:
+If you want to use scripts to search bgzip compressed VCFs or use rankOnCaddScore.pl, as of version 0.2.2 you will also need to build and install the Bio::DB::HTS::Tabix. The easiest way to acheive this is to download the tarball from:
 
-    cd lib/Tabix/
-    make
-    cd perl
-    perl Makefile.PL
-    make
-    make test
-    (sudo) make install
+    http://search.cpan.org/dist/Bio-DB-HTS/lib/Bio/DB/HTS/Tabix.pm
+    
+Unpack the tarball cd into the newly created directory and run the 'INSTALL.pl' script. For example:
+
+    wget http://search.cpan.org/CPAN/authors/id/R/RI/RISHIDEV/Bio-DB-HTS-2.5.tar.gz
+    tar xvf Bio-DB-HTS-2.5.tar.gz
+    cd Bio-DB-HTS-2.5
+    perl INSTALL.pl
 
 For convenience, the bioperl modules required for the geneAnnotator.pl database creation are provided within the 'lib' folder and should be automatically found by the program. 
 
