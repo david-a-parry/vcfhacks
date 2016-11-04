@@ -22,44 +22,50 @@ qw (
 );
 
 my $dir = "$Bin/../";
-opendir (my $DIR, $dir) or die "Cannot read current directory $dir: $!\n";
-my @files = readdir($DIR); 
-close $DIR;
-@files = grep {$_ !~ /for_binaries|make_binaries/ } @files;
-chdir $dir or die "Cannot move to directory $dir: $!\n";
 my $bin_dir = "for_binaries_$^O";
 mkdir($bin_dir) or die "$!\n";
-foreach my $f (@files){
-    next if $f =~ /^\./;
-    if ($f =~ /\.pl$/){
-        print STDERR "Making refactored copy of $f...\n";
-        (my $exe = $f) =~ s/\.pl$//;
-        my $out = "$bin_dir/$f";
-        open (my $IN, $f) or die "Can't read file $f: $!\n";
-        open (my $OUT, ">$out") or die "Can't open $out for writing: $!\n";
-        while (my $line = <$IN>){
-            $line =~ s/$f/$exe/g; 
-            $line =~ s/pod2usage\s*\(/pod2usage(noperldoc => 1, /;
-            print $OUT $line;
+my @scripts = ();
+copyAndConvert($dir);
+
+sub copyAndConvert{
+    my $dir = shift;
+    opendir (my $DIR, $dir) or die "Cannot read current directory $dir: $!\n";
+    my @files = readdir($DIR); 
+    close $DIR;
+    @files = grep {$_ !~ /for_binaries|make_binaries/ } @files;
+    foreach my $f (@files){
+        next if $f =~ /^\./;
+        if ($f =~ /\.pl$/){
+            print STDERR "Making refactored copy of $f...\n";
+            (my $exe = $f) =~ s/\.pl$//;
+            my $out = "$bin_dir/$f";
+            open (my $IN, "$dir/$f") or die "Can't read file $f: $!\n";
+            open (my $OUT, ">$out") or die "Can't open $out for writing: $!\n";
+            while (my $line = <$IN>){
+                $line =~ s/$f/$exe/g; 
+                $line =~ s/pod2usage\s*\(/pod2usage(noperldoc => 1, /;
+                print $OUT $line;
+            }
+            close $IN;
+            close $OUT;
+            push @scripts, "$bin_dir/$f";
+        }else{
+            print STDERR "Copying $dir/$f...\n";
+            rcopy("$dir/$f", "$bin_dir/$f") or die "error copying $dir/$f: $!\n"; 
         }
-        close $IN;
-        close $OUT;
-    }else{
-        print STDERR "Copying $f...\n";
-        rcopy($f, "$bin_dir/$f") or die "error copying $f: $!\n"; 
     }
 }
+
 #we only make binaries now because we need to be sure that 
 #the libs folder has already been copied
-foreach my $f (@files){
+foreach my $f (@scripts){
     next if $f =~ /^\./;
     if ($f =~ /\.pl$/){
         (my $exe = $f) =~ s/\.pl$//;
-        chdir($bin_dir);
         my $pp = "pp --lib lib/ --lib lib/dapPerlGenomicLib --lib lib/Bioperl --lib lib/BioASN1EntrezGene/lib";
         my $pp_cmd = "$pp -c $f -o $exe";
         if (grep {$_ eq $f} @needs_tabix){
-            $pp_cmd .= " -M Tabix";
+            $pp_cmd .= " -M Bio::DB::HTS::Tabix";
         }
         if (grep {$_ eq $f} @needs_sort_external){
             $pp_cmd .= " -M Sort::External";
@@ -80,14 +86,17 @@ foreach my $f (@files){
     }
 }
 print STDERR "Cleaning up $bin_dir...\n";
-chdir($bin_dir);
-foreach my $f (@files){
+opendir (my $BDIR, $bin_dir) or die "Cannot read directory $bin_dir: $!\n";
+my @bfiles = readdir($BDIR); 
+close $BDIR;
+chdir($bin_dir) or die "Could not move to $bin_dir: $!\n";
+foreach my $f (@bfiles){
     next if $f =~ /^\./;
     if ($f !~ /\.pl$/){
-        if ( -d $f and $f ne 'data' ){
+        if ( -d $f and $f ne 'data' and $f ne 'accessories'){
             print STDERR "Recursively removing directory $f.\n";
             remove_tree($f, {verbose => 1} );
-        }else{
+        }elsif(not -d $f){
             if (-e $f){
                 next if ($f eq 'examples_bin.md' or $f eq 'readme_binaries.md');
                 print STDERR "Removing file $f.\n";
