@@ -3,7 +3,13 @@ use strict;
 use warnings;
 use File::Copy::Recursive qw(rcopy);
 use File::Path qw (remove_tree);
+use File::Basename;
 use FindBin qw($Bin);
+
+my $pp = shift;
+$pp ||= `which pp`;
+chomp $pp;
+die "Could not find pp binary\n" if not $pp;
 
 my @needs_tabix =  
 qw (
@@ -22,13 +28,18 @@ qw (
 );
 
 my $dir = "$Bin/../";
+chdir($dir) or die "Could not move to $dir: $!\n";
 my $bin_dir = "for_binaries_$^O";
 mkdir($bin_dir) or die "$!\n";
 my @scripts = ();
-copyAndConvert($dir);
+my @bins = ();
+copyAndConvert('./');
 
 sub copyAndConvert{
     my $dir = shift;
+    if (not -d "$bin_dir/$dir"){
+        mkdir("$bin_dir/$dir") or die "could not create dir $bin_dir/$dir: $!\n";
+    } 
     opendir (my $DIR, $dir) or die "Cannot read current directory $dir: $!\n";
     my @files = readdir($DIR); 
     close $DIR;
@@ -38,7 +49,7 @@ sub copyAndConvert{
         if ($f =~ /\.pl$/){
             print STDERR "Making refactored copy of $f...\n";
             (my $exe = $f) =~ s/\.pl$//;
-            my $out = "$bin_dir/$f";
+            my $out = "$bin_dir/$dir/$f";
             open (my $IN, "$dir/$f") or die "Can't read file $f: $!\n";
             open (my $OUT, ">$out") or die "Can't open $out for writing: $!\n";
             while (my $line = <$IN>){
@@ -48,10 +59,12 @@ sub copyAndConvert{
             }
             close $IN;
             close $OUT;
-            push @scripts, "$bin_dir/$f";
+            push @scripts, "$bin_dir/$dir/$f";
+        }elsif($f eq 'accessories'){
+            copyAndConvert("$dir/$f");
         }else{
             print STDERR "Copying $dir/$f...\n";
-            rcopy("$dir/$f", "$bin_dir/$f") or die "error copying $dir/$f: $!\n"; 
+            rcopy("$dir/$f", "$bin_dir/$dir/$f") or die "error copying $dir/$f: $!\n"; 
         }
     }
 }
@@ -62,8 +75,8 @@ foreach my $f (@scripts){
     next if $f =~ /^\./;
     if ($f =~ /\.pl$/){
         (my $exe = $f) =~ s/\.pl$//;
-        my $pp = "pp --lib lib/ --lib lib/dapPerlGenomicLib --lib lib/Bioperl --lib lib/BioASN1EntrezGene/lib";
-        my $pp_cmd = "$pp -c $f -o $exe";
+        my $pp_cmd = "$pp --lib lib/ --lib lib/dapPerlGenomicLib --lib lib/Bioperl --lib lib/BioASN1EntrezGene/lib";
+        $pp_cmd .= " -c $f -o $exe";
         if (grep {$_ eq $f} @needs_tabix){
             $pp_cmd .= " -M Bio::DB::HTS::Tabix";
         }
@@ -82,7 +95,7 @@ foreach my $f (@scripts){
             print STDERR "Done.\n"; 
         }
         unlink $f or warn "Error removing $f from $bin_dir: $!\n"; 
-        chdir("..");
+        push @bins, fileparse($exe);
     }
 }
 print STDERR "Cleaning up $bin_dir...\n";
@@ -92,6 +105,7 @@ close $BDIR;
 chdir($bin_dir) or die "Could not move to $bin_dir: $!\n";
 foreach my $f (@bfiles){
     next if $f =~ /^\./;
+    next if grep {$f eq $_} @bins;
     if ($f !~ /\.pl$/){
         if ( -d $f and $f ne 'data' and $f ne 'accessories'){
             print STDERR "Recursively removing directory $f.\n";
