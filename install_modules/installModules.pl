@@ -19,6 +19,7 @@ print STDERR "Attempting to start and configure CPAN...\n";
 CPAN::HandleConfig->load;
 CPAN::Shell::setup_output;
 CPAN::Index->reload;
+CPAN::Shell->o("conf prerequisites_policy follow");
 
 print STDERR "Attempting to install the following modules with CPAN:\n" . 
  join("\n", @modules) . "\n";
