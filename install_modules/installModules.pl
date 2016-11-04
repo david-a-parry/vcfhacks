@@ -8,7 +8,6 @@ my @modules = qw /
     Parallel::ForkManager
     Sys::CPU
     Term::ProgressBar
-    Bio::DB::HTS::Tabix
     LWP::Simple 
     HTTP::Tiny 
     JSON 
@@ -35,8 +34,66 @@ foreach my $m (@modules){
     }
 }
 
+
+doNonCpan();
+
+sub doNonCpan{
+    print STDERR "Attempting to install Bio::DB::HTS...\n";
+    print STDERR "Retrieving tarball from cpan...\n";
+    chomp (my $get = `which wget`) ;
+    if (not $get){
+        chomp ($get = `which curl`) ;
+        $get .= ' -O ' if ($get);
+    }
+
+    die "ERROR: could not find either curl or wget executables in your PATH.\n" 
+     if not $get;
+    my $success  = 0;
+    if (runSystemCommand("$get http://search.cpan.org/CPAN/authors/id/R/RI/RISHIDEV/Bio-DB-HTS-2.5.tar.gz")){
+        if (runSystemCommand("tar xvf Bio-DB-HTS-2.5.tar.gz")){
+            chdir "Bio-DB-HTS-2.5" or die "Could not cd to Bio-DB-HTS-2.5 dir: $!\n";
+            $success = runSystemCommand("perl INSTALL.pl");
+        }
+    }
+    push @fails, "Bio::DB::HTS" if not $success;
+
+    $success  = 0;
+    if (runSystemCommand("$get http://search.cpan.org/CPAN/authors/id/L/LD/LDS/Bio-SamTools-1.43.tar.gz")){
+        if (runSystemCommand("tar xvf Bio-SamTools-1.43.tar.gz")){
+            chdir "Bio-SamTools-1.43" or die "Could not cd to Bio-SamTools-1.43 dir: $!\n";
+            $success = runSystemCommand("perl INSTALL.pl");
+        }
+    }
+    push @fails, "Bio::DB::Sam" if not $success;
+}
+
+
+
+
 if (@fails){
     warn scalar @fails . " modules failed to install. You may need to install ".
      "these modules manually and investigate the source of the error.\n";
     warn "The modules that failed were:\n" . join("\n", @fails) . "\n";
+}
+
+sub runSystemCommand{
+    my $cmd = shift;
+    system($cmd);
+    return checkExit($?);
+}
+
+sub checkExit{
+    my $e = shift;
+    if($e == -1) {
+        print "Failed to execute: $!\n";
+        return 0;
+    }elsif($e & 127) {
+        printf "Child died with signal %d, %s coredump\n",
+        ($e & 127),  ($e & 128) ? 'with' : 'without';
+        return 0;
+    }elsif($e != 0){
+        printf "Child exited with value %d\n", $e >> 8;
+        return 0;
+    }
+    return 1;
 }
