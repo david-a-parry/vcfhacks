@@ -12,14 +12,24 @@ my @modules = qw /
     HTTP::Tiny 
     JSON 
     Excel::Writer::XLSX 
+    Bio::Perl
 / ;
 
 print STDERR "Attempting to start and configure CPAN...\n";
 
-CPAN::HandleConfig->load;
+#CPAN::HandleConfig->load;
+CPAN::HandleConfig->load
+(
+    doit => 1, 
+    autoconfig => 1,
+    prerequisites_policy => "follow",
+    build_requires_install_policy => "yes",
+);
+CPAN::HandleConfig->commit;
 CPAN::Shell::setup_output;
 CPAN::Index->reload;
-CPAN::Shell->o("conf prerequisites_policy follow");
+#CPAN::Shell->o("conf prerequisites_policy follow");
+#CPAN::Shell->o("conf build_requires_install_policy yes");
 
 print STDERR "Attempting to install the following modules with CPAN:\n" . 
  join("\n", @modules) . "\n";
@@ -39,33 +49,38 @@ foreach my $m (@modules){
 doNonCpan();
 
 sub doNonCpan{
-    print STDERR "Attempting to install Bio::DB::HTS...\n";
-    print STDERR "Retrieving tarball from cpan...\n";
+    my $mod = CPAN::Shell->expand("Module", "Bio::DB::HTS"); 
     chomp (my $get = `which wget`) ;
     if (not $get){
         chomp ($get = `which curl`) ;
         $get .= ' -O ' if ($get);
     }
-
     die "ERROR: could not find either curl or wget executables in your PATH.\n" 
      if not $get;
-    my $success  = 0;
-    if (runSystemCommand("$get http://search.cpan.org/CPAN/authors/id/R/RI/RISHIDEV/Bio-DB-HTS-2.5.tar.gz")){
-        if (runSystemCommand("tar xvf Bio-DB-HTS-2.5.tar.gz")){
-            chdir "Bio-DB-HTS-2.5" or die "Could not cd to Bio-DB-HTS-2.5 dir: $!\n";
-            $success = runSystemCommand("perl INSTALL.pl");
+    if (not $mod->uptodate){
+        print STDERR "Attempting to install Bio::DB::HTS...\n";
+        print STDERR "Retrieving tarball from cpan...\n";
+        my $success  = 0;
+        if (runSystemCommand("$get http://search.cpan.org/CPAN/authors/id/R/RI/RISHIDEV/Bio-DB-HTS-2.5.tar.gz")){
+            if (runSystemCommand("tar xvf Bio-DB-HTS-2.5.tar.gz")){
+                chdir "Bio-DB-HTS-2.5" or die "Could not cd to Bio-DB-HTS-2.5 dir: $!\n";
+                $success = runSystemCommand("perl INSTALL.pl");
+            }
         }
+        push @fails, "Bio::DB::HTS" if not $success;
     }
-    push @fails, "Bio::DB::HTS" if not $success;
 
-    $success  = 0;
-    if (runSystemCommand("$get http://search.cpan.org/CPAN/authors/id/L/LD/LDS/Bio-SamTools-1.43.tar.gz")){
-        if (runSystemCommand("tar xvf Bio-SamTools-1.43.tar.gz")){
-            chdir "Bio-SamTools-1.43" or die "Could not cd to Bio-SamTools-1.43 dir: $!\n";
-            $success = runSystemCommand("perl INSTALL.pl");
+    $mod = CPAN::Shell->expand("Module", "Bio::DB::Sam"); 
+    if (not $mod->uptodate){
+        my $success  = 0;
+        if (runSystemCommand("$get http://search.cpan.org/CPAN/authors/id/L/LD/LDS/Bio-SamTools-1.43.tar.gz")){
+            if (runSystemCommand("tar xvf Bio-SamTools-1.43.tar.gz")){
+                chdir "Bio-SamTools-1.43" or die "Could not cd to Bio-SamTools-1.43 dir: $!\n";
+                $success = runSystemCommand("perl INSTALL.pl");
+            }
         }
+        push @fails, "Bio::DB::Sam" if not $success;
     }
-    push @fails, "Bio::DB::Sam" if not $success;
 }
 
 
