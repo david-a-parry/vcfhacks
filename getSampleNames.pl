@@ -93,8 +93,8 @@ GetOptions(
     'help',
     'manual',
 ) or pod2usage (-message => 'Syntax error.', -exitval => 2);
-pod2usage( -verbose => 2 ) if ($opts{manual});
-pod2usage( -verbose => 1 ) if ($opts{help});
+pod2usage( -verbose => 2, -exitval => 0  ) if ($opts{manual});
+pod2usage( -verbose => 1, -exitval => 0  ) if ($opts{help});
 pod2usage (-message => '--input argument is required. For help run the --help or --manual option', -exitval => 2) if not @vcfs;
 if ($opts{count_only} and $opts{list_only}){
     pod2usage 

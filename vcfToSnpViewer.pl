@@ -29,8 +29,8 @@ GetOptions(\%opts,
         "manual",
         "progress",
         ) or pod2usage(-exitval => 2, -message => "Syntax error") ;
-pod2usage(-verbose => 2) if $opts{manual};
-pod2usage(-verbose => 1) if $opts{help};
+pod2usage(-verbose => 2, -exitval => 0) if $opts{manual};
+pod2usage(-verbose => 1, -exitval => 0) if $opts{help};
 pod2usage(-exitval => 2, -message => "Syntax error: --input argument is required") if not $opts{input};
 
 my @acceptable_chromosomes = (1 .. 22, "X", "Y", "MT"); 

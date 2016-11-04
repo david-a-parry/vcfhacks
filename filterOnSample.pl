@@ -106,8 +106,8 @@ GetOptions(
     'forks=i',
     'cache=i',
 ) or pod2usage(-message => "Syntax error", -exitval => 2);
-pod2usage( -verbose => 2 ) if $manual;
-pod2usage( -verbose => 1 ) if $help;
+pod2usage( -verbose => 2, -exitval => 0 ) if $manual;
+pod2usage( -verbose => 1, -exitval => 0 ) if $help;
 pod2usage( -message => "syntax error: --input (-i) argument is required.\n" )
   if not $vcf;
 pod2usage( -message =>

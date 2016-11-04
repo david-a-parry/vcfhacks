@@ -25,8 +25,8 @@ GetOptions(
     "help|?"       => \$help,
     "manual"       => \$man
 ) or pod2usage( -exitval => 2, -message => "Syntax error" );
-pod2usage( -verbose => 2 ) if $man;
-pod2usage( -verbose => 1 ) if $help;
+pod2usage( -verbose => 2, -exitval => 0  ) if $man;
+pod2usage( -verbose => 1, -exitval => 0  ) if $help;
 pod2usage( -exitval => 2, -message => "Syntax error" ) if not $vcf;
 
 foreach my $bal (@ab){

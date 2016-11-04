@@ -64,8 +64,8 @@ GetOptions(
     "p|progress", 
     "r|rest_server=s{,}" => \$rest_server,
 ) or pod2usage( -message => "Syntax error", -exitval => 2 );
-pod2usage( -verbose => 2, ) if $opts{manual};
-pod2usage( -verbose => 1, ) if $opts{h};
+pod2usage( -verbose => 2, -exitval => 0 ) if $opts{manual};
+pod2usage( -verbose => 1, -exitval => 0 ) if $opts{h};
 pod2usage( -exitval => 2, -message => "--input is required", )
   if not $opts{i}
   and not $opts{D}

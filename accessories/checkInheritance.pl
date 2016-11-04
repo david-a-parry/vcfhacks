@@ -27,8 +27,8 @@ GetOptions(
     'm|manual'
 ) or pod2usage( -message => "Syntax error", exitval => 2 );
 
-pod2usage( -verbose => 2 ) if $opts{m};
-pod2usage( -verbose => 1 ) if $opts{h};
+pod2usage( -verbose => 2, -exitval => 0  ) if $opts{m};
+pod2usage( -verbose => 1, -exitval => 0  ) if $opts{h};
 pod2usage( -message => "Syntax error: --input is required.", exitval => 2 )
   if not $opts{i};
 pod2usage( -message => "Syntax error: a pedigree file must be passed to the --family argument.", exitval => 2 )

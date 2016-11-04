@@ -260,8 +260,8 @@ GetOptions(
     -exitval => 2
 );
 
-pod2usage( -verbose => 2 ) if $man;
-pod2usage( -verbose => 1 ) if $help;
+pod2usage( -verbose => 2, -exitval => 0 ) if $man;
+pod2usage( -verbose => 1, -exitval => 0 ) if $help;
 
 if ( not $vcf or ( not $filter_vcf ) ){
     pod2usage( -message => "Syntax error", exitval => 2 );
