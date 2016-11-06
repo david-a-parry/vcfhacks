@@ -1341,6 +1341,12 @@ sub prepare_database {
 sub downloadBiogrid{
     my $file = shift;
     my $exists = shift;
+    if (not eval "use LWP::Protocol::https; 1"){
+        my $time = strftime( "%H:%M:%S", localtime );
+        warn "[$time] LWP::Protocol::https module does not appear to be ".
+             "installed. Download of Biogrid file will probably fail. ".
+             "If so, please install LWP::Protocol::https using CPAN.\n";
+    }
     my $url = "$file->{url}/$file->{dir}/$file->{file}";
     my $dl  = "$opts{d}/$file->{file}";
     my $time = strftime( "%H:%M:%S", localtime );

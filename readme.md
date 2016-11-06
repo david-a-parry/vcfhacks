@@ -47,6 +47,7 @@ Other perl modules required by these scripts are installable via CPAN - perl wil
     Term::ProgressBar
     Bio::DB::HTS::Tabix
     LWP::Simple (geneAnnotator.pl only)
+    LWP::Protocol::https (for geneAnnotator.pl download of some database files only)
     HTTP::Tiny (geneAnnotator.pl for remote retrieval of gene IDs only)
     JSON (geneAnnotator.pl for remote retrieval of gene IDs only)
     Excel::Writer::XLSX (annovcfToSimple.pl only)
