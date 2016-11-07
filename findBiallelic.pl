@@ -84,8 +84,8 @@ GetOptions(
     'z|homozygous_only',
 ) or pod2usage( -message => "SYNTAX ERROR", exitval => 2 );
 
-pod2usage( -verbose => 2 ) if $opts{manual};
-pod2usage( -verbose => 1 ) if $opts{h};
+pod2usage( -verbose => 2, -exitval => 0 ) if $opts{manual};
+pod2usage( -verbose => 1, -exitval => 0 ) if $opts{h};
 
 ######SANITY CHECKS######
 pod2usage( -message => "SYNTAX ERROR: input is required.", exitval => 2 )

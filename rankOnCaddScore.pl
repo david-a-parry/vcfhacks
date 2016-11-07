@@ -33,8 +33,8 @@ GetOptions(
         "manual|m",
         ) or pod2usage(-message => "Syntax Error.", exitval => 2);
 
-pod2usage(-verbose => 2) if $opts{manual};
-pod2usage(-verbose => 1) if $opts{help};
+pod2usage(-verbose => 2, -exitval => 0) if $opts{manual};
+pod2usage(-verbose => 1, -exitval => 0) if $opts{help};
 pod2usage(-message => "-i/--input argument is required", exitval => 2) if not $opts{input};
 pod2usage(-message => "Either -c/--cadd_file or -r/--dir argument is required", exitval => 2) if not @{$opts{cadd_file}} and not @{$opts{dir}};
 pod2usage(-message => "-f/--filter argument cannot be less than 0", exitval => 2) if defined $opts{filter} && $opts{filter} < 0;

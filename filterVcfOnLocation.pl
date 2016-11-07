@@ -131,8 +131,8 @@ my $progress;
 my $total_lines = 0;
 my $f = 0;
 GetOptions('exclude' => \$exclude, 'regions=s{,}' => \@reg, 'c|offset=i' => \$offset, 'flanks=i' => \$f, 'o|output=s' => \$outfile, 'progress' => \$progress, 'input=s' => \$vcf_file, 'bed=s{,}' => \@bedfile, 'help' => \$help, 'manual' => \$manual) or pod2usage(-message => "Syntax error.", -exitval => 2);
-pod2usage(-verbose => 2) if ($manual);
-pod2usage(-verbose => 1) if ($help);
+pod2usage(-verbose => 2, -exitval => 0) if ($manual);
+pod2usage(-verbose => 1, -exitval => 0) if ($help);
 pod2usage(-message => "Syntax error.", -exitval => 2) if (not $vcf_file or (not @bedfile and not @reg));
 if ($progress and $vcf_file eq "-"){
     print STDERR "Can't use progress option when input is from STDIN.\n";
