@@ -22,6 +22,7 @@ my @modules = qw /
     HTTP::Tiny 
     JSON 
     Excel::Writer::XLSX 
+    Sort::External
 / ;
 
 print STDERR "Attempting to start and configure CPAN...\n";
@@ -70,8 +71,10 @@ my $bpver = eval
 if ($bpver){
     print STDERR "Bio::Perl version $bpver installed - skipping...\n"
 }else{
-    my $ok = CPAN::Shell->install("Bio::Perl");
-    push @fails, 'Bio::Perl' if not $ok;
+    CPAN::Shell->install("Bio::Perl");
+    if (not checkExit($?)){
+        push @fails, 'Bio::Perl';
+    }
 }
 
 doNonCpan();
