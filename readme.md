@@ -6,11 +6,13 @@ Usage examples are included in the examples.md markdown documents which can also
 
 ## INSTALLATION
 
-You may either download these programs as perl scripts or as precompiled binaries for 64-bit Linux or Mac OS X. The binary executables are provided for ease so that users do not have to install the various perl modules required by these scripts. Users that are comfortable installing perl modules may prefer to use the scripts, which take up less space, do not suffer the same lag in startup and provide a scrollable manual page in most cases.
+You may either download these programs as perl scripts or as precompiled binaries for 64-bit Linux or Mac OS X. The binary executables are provided for ease so that users do not have to install the various perl modules required by these scripts. Users that are comfortable installing perl modules may prefer to use the scripts, which take up less space, do not suffer the same lag in startup and provide a scrollable manual page in most cases. The scripts also allow you to receive more regular updates using git (see below).
 
 ### BINARIES
 
 These programs are all command line utilities. To run these programs you simply need to download and extract the tar.bz2 file for your plaform from https://github.com/gantzgraf/vcfhacks/releases (currently only 64 bit Linux Mac OS X systems are supported) and change into the newly created vcfhacks_binaries directory. Each program can be run from this directory using the command *./[program_name]*  (e.g. *./annotateSnps*) or you may prefer to move the programs somewhere in your $PATH or add the new vcfhacks_binaries to your $PATH to be able to run these programs from any directory. You may need to make the programs executable before they will run (e.g. by running 'chmod +x *' from within your vcfhacks_binaries directory). 
+
+To check whether the binaries are functioning and compatible with your system type 'prove' from within the downloaded and extracted directory to run a small series of tests.
 
 ### SCRIPTS
 
@@ -38,7 +40,7 @@ Unpack the tarball cd into the newly created directory and run the 'INSTALL.pl' 
     cd Bio-DB-HTS-2.5
     perl INSTALL.pl
 
-For convenience, the bioperl modules required for the geneAnnotator.pl database creation are provided within the 'lib' folder and should be automatically found by the program. 
+Alternatively, see below for an attempt to automatically install the required perl modules.
 
 Other perl modules required by these scripts are installable via CPAN - perl will complain that they are not available in "@INC" when you attempt to run these programs if they are not on your system. Please see http://www.cpan.org/modules/INSTALL.html for instructions on how to install these modules. Below is a list of these non-core modules that you are likely to need install:
 
@@ -46,6 +48,7 @@ Other perl modules required by these scripts are installable via CPAN - perl wil
     Sys::CPU
     Term::ProgressBar
     Bio::DB::HTS::Tabix
+    List::MoreUtils
     LWP::Simple (geneAnnotator.pl only)
     LWP::Protocol::https (for geneAnnotator.pl download of some database files only)
     HTTP::Tiny (geneAnnotator.pl for remote retrieval of gene IDs only)
@@ -53,9 +56,13 @@ Other perl modules required by these scripts are installable via CPAN - perl wil
     Excel::Writer::XLSX (annovcfToSimple.pl only)
     Bio::DB::Sam (hgmdMartToVcf.pl only)
 
-#### Testing scripts
+An experimental script is also provided to attempt to automate the installation of the required modules. This requires developer tools to be installed (e.g. xcode on Mac OS X or base-devel on debian/ubuntu systems) and for your CPAN installation to be functioning. To try automated install of these modules try the following (prefix with sudo if you have sudo priveleges and require system-wide installation): 
+    
+    perl install_modules/installModules.pl
 
-If you are using the scripts (v0.2.1 or later) rather than the binaries, you can test your installation by simply running the following command from within the vcfhacks directory:
+#### Testing 
+
+You can test your installation by (scripts or binaries) simply running the following command from within the vcfhacks directory:
    
     prove
     
