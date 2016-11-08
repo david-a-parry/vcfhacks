@@ -60,6 +60,20 @@ foreach my $m (@modules){
     }
 }
 
+#require Bio::Perl for remaining modules - but let's not be fussy about version
+my $bpver = eval
+{
+    require Bio::Perl ; 
+    Bio::Perl->import();
+    $Bio::Perl::VERSION 
+};
+if ($bpver){
+    print STDERR "Bio::Perl version $bpver installed - skipping...\n"
+}else{
+    my $ok = CPAN::Shell->install("Bio::Perl");
+    push @fails, 'Bio::Perl' if not $ok;
+}
+
 doNonCpan();
 
 if (@fails){
@@ -118,6 +132,7 @@ sub doNonCpan{
             if (runSystemCommand("tar xvf Bio-SamTools-1.43.tar.gz")){
                 chdir "Bio-SamTools-1.43" or die "Could not cd to Bio-SamTools-1.43 dir: $!\n";
                 $success = runSystemCommand("perl INSTALL.pl");
+                chdir "..";
                 remove_tree("Bio-SamTools-1.43") 
                  or warn "Error removing Bio-SamTools-1.43 directory: $!\n";
             }
