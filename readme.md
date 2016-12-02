@@ -62,7 +62,7 @@ An experimental script is also provided to attempt to automate the installation 
 
 #### Testing 
 
-You can test your installation by (scripts or binaries) simply running the following command from within the vcfhacks directory:
+You can test your installation (scripts or binaries) by simply running the following command from within the vcfhacks directory:
    
     prove
     
