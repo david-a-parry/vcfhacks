@@ -55,8 +55,9 @@ my @hgmd_fields =
 
 foreach my $req (@hgmd_fields){
     if (not exists $hgmd_columns{$req}){
-        die "Required column ($req) not found in HGMD file $opts{i}\nFound the following columns:\n" 
-            .join("\n", @head) . "\n";
+        die "Required column ($req) not found in HGMD file $opts{i}\n"
+            . "Found the following columns:\n" 
+            . join("\n", @head) . "\n";
     }
 }
 
@@ -111,7 +112,7 @@ sub initializeOutput{
     print $OUT "##fileformat=VCFv4.2\n";
     foreach my $f (@hgmd_fields){
         (my $tag = $f) =~ s/\s/_/g; 
-        print $OUT "##INFO=<ID=$tag,Number=1,Type=String,Description=\"$f field from HGMD mart download, source: \"$opts{i}\">\n"
+        print $OUT "##INFO=<ID=$tag,Number=1,Type=String,Description=\"$f field from HGMD mart download, source: $opts{i}\">\n"
     }
     print $OUT '#' . join("\t",  ( qw / CHROM POS ID REF ALT QUAL FILTER INFO / ) ) . "\n";
 
@@ -338,14 +339,14 @@ sub parseHgmdAlleles{
     my $strand = $hgmd->[ $hgmd_columns{strand} ] ;
     my $ref = "";
     my $alt = "";
-    if ($hgvs =~ /c\.\d+([\+-]\d+)*([ATGCN])>([ATGCN])$/i){ #SNV
+    if ($hgvs =~ /c\.[\*-]*\d+([\+-]\d+)*([ATGCN])>([ATGCN])$/i){ #SNV
         $ref = $2;
         $alt = $3;
-    }elsif ($hgvs =~ /c\.\d+([\+-]\d+)*(_\d+([\+-]\d+)*)*del([ATGCN]+)$/i){
+    }elsif ($hgvs =~ /c\.[\*-]*\d+([\+-]\d+)*(_[\*-]*\d+([\+-]\d+)*)*del([ATGCN]+)$/i){
         $ref = $4;
-    }elsif ($hgvs =~ /c\.\d+([\+-]\d+)*(_\d+([\+-]\d+)*)*(ins|dup)([ATGCN]+)$/i){
+    }elsif ($hgvs =~ /c\.[\*-]*\d+([\+-]\d+)*(_[\*-]*\d+([\+-]\d+)*)*(ins|dup)([ATGCN]+)$/i){
         $alt = $5;
-    }elsif ($hgvs =~ /c\.\d+([\+-]\d+)*(_\d+([\+-]\d+)*)*del([ATGCN]+)ins([ATGCN]+)$/i){
+    }elsif ($hgvs =~ /c\.[\*-]*\d+([\+-]\d+)*(_[\*-]*\d+([\+-]\d+)*)*del([ATGCN]+)ins([ATGCN]+)$/i){
         $ref = $4;
         $alt = $5;
     }
