@@ -10,7 +10,11 @@ use Getopt::Long;
 use lib "$RealBin/../lib/dapPerlGenomicLib";
 use VcfReader 0.3;
 
-my %opts = (gq => 0);
+my %opts = 
+(
+    gq => 0
+    d  => 0
+);
 GetOptions(
     \%opts,
     "output|o=s",
@@ -19,6 +23,7 @@ GetOptions(
     "f|fasta=s",
     "v|vcf=s",
     "gq=i",
+    "d|dp=i",
     "help|h|?",
     "manual",
 ) or pod2usage( -exitval => 2, -message => "Syntax error" );
@@ -174,7 +179,8 @@ sub parseTable{
                     if ($allele_match and $genotype eq 'hom'){
                         $gt_match = ($g[0] eq $match and $g[1] eq $match);
                     }elsif ($allele_match and $genotype eq 'het'){
-                        $gt_match = (
+                        $gt_match = 
+                        (
                             ($g[0] eq $match and $g[1] ne $match) or
                             ($g[1] eq $match and $g[0] ne $match) 
                         );
