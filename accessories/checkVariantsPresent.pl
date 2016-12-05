@@ -173,7 +173,13 @@ sub parseTable{
                     }
                     if ($allele_match and $genotype eq 'hom'){
                         $gt_match = ($g[0] eq $match and $g[1] eq $match);
+                    }elsif ($allele_match and $genotype eq 'het'){
+                        $gt_match = (
+                            ($g[0] eq $match and $g[1] ne $match) or
+                            ($g[1] eq $match and $g[0] ne $match) 
+                        );
                     }
+                    $gt_match ||= 0;
                 }
             }
         }
