@@ -173,7 +173,7 @@ GetOptions
     'g|gene_ids=s{,}',
     'e|matching',
     'q|quiet',
-    's|silent',
+    'silent',
     'species|s=s',
     'd|defaultRestServer',
     'h|?|help',
