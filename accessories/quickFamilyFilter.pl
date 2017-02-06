@@ -175,9 +175,9 @@ foreach my $ped (@{$opts{p}}){
     }
 }
 
-foreach my $k (keys %commands){
-    @{$commands{$k}} = map { /^java/ ? $_ : "perl $RealBin/$_" } @{$commands{$k}}; 
-}
+#foreach my $k (keys %commands){
+#    @{$commands{$k}} = map { /^java/ ? $_ : "perl $RealBin/$_" } @{$commands{$k}}; 
+#}
 
 if ($opts{n}){
     printCommands();
