@@ -23,9 +23,14 @@ my $gatk = "$ENV{HOME}/programs/GATK/v3.6/GenomeAnalysisTK.jar";
 my $fasta = "$ENV{HOME}/ref/GRCh37/hs37d5.fa";
 
 if ($ENV{HOSTNAME} and $ENV{HOSTNAME} =~ /^login\d+.ecdf.ed.ac.uk$/){
-    $cadd_dir = "/exports/igmm/eddie/aitman-lab/ref/GRCh37/cadd/v1.3/";
+    my $rdir = "/exports/igmm/eddie/aitman-lab";
+    if ($ENV{USER} eq 'clogan2'){
+        $rdir = "/exports/igmm/eddie/mopd";
+    }
+
+    $cadd_dir = "$rdir/ref/GRCh37/cadd/v1.3/";
     $gatk = "$ENV{HOME}/GATK/v3.6/GenomeAnalysisTK.jar";
-    $fasta = "/exports/igmm/eddie/aitman-lab/ref/GRCh37/hs37d5.fa";
+    $fasta = "$rdir/ref/GRCh37/hs37d5.fa";
     $eddie = 1;
 }
 

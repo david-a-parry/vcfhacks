@@ -23,7 +23,7 @@ my $fasta = "$ENV{HOME}/shared/bcbio/bcbio/genomes/Hsapiens/hg38/seq/hg38.fa";
 
 if ($ENV{HOSTNAME} and $ENV{HOSTNAME} =~ /^(node\S{2}|login)\d+.ecdf.ed.ac.uk$/){
     $gatk = "$ENV{HOME}/GATK/v3.6/GenomeAnalysisTK.jar";
-    $fasta = "/exports/igmm/software/pkg/el7/apps/bcbio/share/bcbio-nextgen/genomes/Hsapiens/hg38/seq/hg38.fa";
+    $fasta = "/exports/igmm/software/pkg/el7/apps/bcbio/share2/genomes/Hsapiens/hg38/seq/hg38.fa";
     $eddie = 1;
 }
 
