@@ -158,6 +158,19 @@ my $script_dir = '.';
 makeOutputDirectories();
 
 my %commands = (); 
+
+my @samp_hashes = ();
+foreach my $inp (@input){
+    my %sample_to_col = VcfReader::getSamples
+    (
+        vcf         => $inp,
+        get_columns => 1,
+    );
+    push @samp_hashes, \%sample_to_col;
+}
+if (@samp_hashes < 2){
+    push @samp_hashes, $samp_hashes[0];
+}
     
 foreach my $ped (@{$opts{p}}){
     my $p = ParsePedfile->new( file => $ped );
@@ -170,16 +183,6 @@ foreach my $ped (@{$opts{p}}){
 #foreach my $k (keys %commands){
 #    @{$commands{$k}} = map { /^(bgzip|tabix|java)/ ? $_ : "perl $RealBin/$_" } @{$commands{$k}}; 
 #}
-
-my @samp_hashes = ();
-foreach my $inp (@input){
-    my %sample_to_col = VcfReader::getSamples
-    (
-        vcf         => $inp,
-        get_columns => 1,
-    );
-    push @samp_hashes, \%sample_to_col;
-}
 
 if ($opts{n}){
     printCommands();
