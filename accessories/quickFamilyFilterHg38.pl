@@ -424,7 +424,7 @@ sub getSegCommands{
         push @seg_commands, $seg_cmd;
         my $ens_cmd = "$script_prefix/geneAnnotator.pl -r http://rest.ensembl.org --functional -i $seg_out -o $seg_out.geneanno"; 
         push @seg_commands, $ens_cmd;
-        my $fnc_cmd = "$script_prefix/getFunctionalVariants.pl --input $seg_out.geneanno -o $seg_out.geneanno.functional --damaging MetaLR_rankscore MetaSVM_rankscore --consensus --score_filter 'ada_score>0.6 or rf_score>0.6' -d all -k --af 0.01 --pass ";
+        my $fnc_cmd = "$script_prefix/getFunctionalVariants.pl --input $seg_out.geneanno -o $seg_out.geneanno.functional --damaging MetaLR_rankscore MetaSVM_rankscore --consensus --eval_filter 'ada_score > 0.6 or rf_score > 0.6' -d all -k --af 0.01 --pass ";
         push @seg_commands, $fnc_cmd;
         my $anno_cmd = "$script_prefix/annovcfToSimple.pl --all -n  AS_CLNSIG AS_CLNALLE AS_CLNHGVS AS_CLNDSDBID AS_CLNDBN  -v -g -u all -p $temp_ped -i $seg_out.geneanno.functional -o $dom_x_dir/$seg_out.geneanno.functional.xlsx"; 
         push @seg_commands, $anno_cmd;
@@ -438,7 +438,7 @@ sub getSegCommands{
         makeDirectory($rec_x_dir); 
         my $seg_out ="$rec_v_dir/biallelic_$f.$stubs[0].vcf";
         #create temp ped file of just this family
-        push @bial_commands, sprintf("$script_prefix/findBiallelic.pl --af 0.01 -g 0.05 --damaging MetaLR_rankscore MetaSVM_rankscore --consensus --score_filter 'ada_score>0.6 or rf_score>0.6' -i %s -o %s -l %s.genelist -f %s --x_linked 2", 
+        push @bial_commands, sprintf("$script_prefix/findBiallelic.pl --af 0.01 -g 0.05 --damaging MetaLR_rankscore MetaSVM_rankscore --consensus --eval_filter 'ada_score > 0.6 or rf_score > 0.6' -i %s -o %s -l %s.genelist -f %s --x_linked 2", 
                                 $filtered[0], 
                                 $seg_out,
                                 $seg_out,
@@ -451,7 +451,7 @@ sub getSegCommands{
             my $len_x_dir = "$opts{out_dir}/xlsx/recessive_lenient";
             makeDirectory($len_x_dir); 
             my $lenient_out = "$len_v_dir/biallelic_lenient_$f.$stubs[0].vcf";
-            push @bial_commands, sprintf("$script_prefix/findBiallelic.pl --af 0.01 --damaging MetaLR_rankscore MetaSVM_rankscore --consensus --score_filter 'ada_score>0.6 or rf_score>0.6' -i %s -o %s -l %s.genelist -f %s -t --x_linked 2", 
+            push @bial_commands, sprintf("$script_prefix/findBiallelic.pl --af 0.01 --damaging MetaLR_rankscore MetaSVM_rankscore --consensus --eval_filter 'ada_score > 0.6 or rf_score > 0.6' -i %s -o %s -l %s.genelist -f %s -t --x_linked 2", 
                                     $filtered[0], 
                                     $lenient_out,
                                     $lenient_out,
@@ -465,7 +465,7 @@ sub getSegCommands{
             my $db_x_dir = "$opts{out_dir}/xlsx/recessive_denovo";
             makeDirectory($db_x_dir); 
             my $denovo_b_out = "$db_v_dir/biallelic_denovo_$f.$stubs[0].vcf";
-            push @bial_commands, sprintf("$script_prefix/findBiallelic.pl --af 0.01 -g 0.05 --damaging MetaLR_rankscore MetaSVM_rankscore --consensus --score_filter 'ada_score>0.6 or rf_score>0.6' -i %s -o %s -l %s.genelist -f %s --denovo_biallelic_mode --x_linked 2", 
+            push @bial_commands, sprintf("$script_prefix/findBiallelic.pl --af 0.01 -g 0.05 --damaging MetaLR_rankscore MetaSVM_rankscore --consensus --eval_filter 'ada_score > 0.6 or rf_score > 0.6' -i %s -o %s -l %s.genelist -f %s --denovo_biallelic_mode --x_linked 2", 
                                     $filtered[0], 
                                     $denovo_b_out,
                                     $denovo_b_out,
@@ -520,7 +520,7 @@ sub getSegCommands{
         push @seg_commands, $denovo_cmd;
         my $ens_cmd = "$script_prefix/geneAnnotator.pl -r http://rest.ensembl.org --functional -i $denovo_out -o $denovo_out.geneanno"; 
         push @seg_commands, $ens_cmd;
-        my $fnc_cmd = "$script_prefix/getFunctionalVariants.pl --input $denovo_out.geneanno -o $denovo_out.geneanno.functional --damaging MetaLR_rankscore MetaSVM_rankscore --consensus --score_filter 'ada_score>0.6 or rf_score>0.6'   --af 0.01 --pass ";
+        my $fnc_cmd = "$script_prefix/getFunctionalVariants.pl --input $denovo_out.geneanno -o $denovo_out.geneanno.functional --damaging MetaLR_rankscore MetaSVM_rankscore --consensus --eval_filter 'ada_score > 0.6 or rf_score > 0.6'   --af 0.01 --pass ";
         push @seg_commands, $fnc_cmd;
         (my $xlsx = "$denovo_out.geneanno.functional.xlsx") =~ s,$opts{out_dir}/vcf/denovo,$opts{out_dir}/xlsx/denovo,;
         my $anno_cmd = "$script_prefix/annovcfToSimple.pl --all  -n hiConfDeNovo loConfDeNovo AS_CLNSIG AS_CLNALLE AS_CLNHGVS AS_CLNDSDBID AS_CLNDBN -v -g -u all -p $temp_ped -i $denovo_out.geneanno.functional -o $xlsx"; 
@@ -542,7 +542,7 @@ sub getSegCommands{
             push @seg_commands, $gatk_cmd;
             my $ens_cmd = "$script_prefix/geneAnnotator.pl -r http://rest.ensembl.org --functional -i $denovo_v_dir/$gatk_out -o $denovo_v_dir/$gatk_out.geneanno"; 
             push @seg_commands, $ens_cmd;
-            my $fnc_cmd = "$script_prefix/getFunctionalVariants.pl --input $denovo_v_dir/$gatk_out.geneanno -o $denovo_v_dir/functional.$gatk_out.geneanno  --damaging MetaLR_rankscore MetaSVM_rankscore --consensus --score_filter 'ada_score>0.6 or rf_score>0.6' --af 0.01 --pass ";
+            my $fnc_cmd = "$script_prefix/getFunctionalVariants.pl --input $denovo_v_dir/$gatk_out.geneanno -o $denovo_v_dir/functional.$gatk_out.geneanno  --damaging MetaLR_rankscore MetaSVM_rankscore --consensus --eval_filter 'ada_score > 0.6 or rf_score > 0.6' --af 0.01 --pass ";
             push @seg_commands, $fnc_cmd;
             my $anno_cmd = "$script_prefix/annovcfToSimple.pl --all  -n hiConfDeNovo loConfDeNovo AS_CLNSIG AS_CLNALLE AS_CLNHGVS AS_CLNDSDBID AS_CLNDBN -v -g -u all -p $temp_ped -i $denovo_v_dir/functional.$gatk_out.geneanno -o $denovo_x_dir/functional.$gatk_out.geneanno.xlsx"; 
             push @seg_commands, $anno_cmd;
