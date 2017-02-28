@@ -11,6 +11,7 @@ use Data::Dumper;
 use FindBin qw ( $RealBin ) ;
 use lib "$FindBin::Bin/../lib/dapPerlGenomicLib";
 use ParsePedfile;
+use VcfReader;
 
 my $script_prefix = "perl $RealBin/..";
 my @input = ();
@@ -169,6 +170,16 @@ foreach my $ped (@{$opts{p}}){
 #foreach my $k (keys %commands){
 #    @{$commands{$k}} = map { /^(bgzip|tabix|java)/ ? $_ : "perl $RealBin/$_" } @{$commands{$k}}; 
 #}
+
+my @samp_hashes = ();
+foreach my $inp (@input){
+    my %sample_to_col = VcfReader::getSamples
+    (
+        vcf         => $inp,
+        get_columns => 1,
+    );
+    push @samp_hashes, \%sample_to_col;
+}
 
 if ($opts{n}){
     printCommands();
@@ -373,7 +384,9 @@ sub getSegCommands{
     my $check_dominant = 0;
     foreach my $af (@aff){
         foreach my $p ($ped->getParents($af)){
-            $check_dominant++ if $ped->isAffected($p);
+            if (grep {$_ eq $p} $ped->getSamplesFromFamily($f)){
+                $check_dominant++ if $ped->isAffected($p);
+            }
         }
     }
     if ($check_dominant and not $opts{o}){
@@ -443,7 +456,7 @@ sub getSegCommands{
                                 );
             push @out_files, $lenient_out; 
         }
-        if ($opts{z}){
+        if ($opts{z} and hasParents($ped, $f, 0)){
             my $db_v_dir = "$opts{out_dir}/vcf/recessive_denovo";
             makeDirectory($db_v_dir); 
             my $db_x_dir = "$opts{out_dir}/xlsx/recessive_denovo";
@@ -484,7 +497,7 @@ sub getSegCommands{
         }
     }
     my $bgzipped = $filtered[1] . ".gz";
-    if (not $check_dominant and not $opts{s}){
+    if (not $check_dominant and not $opts{s} and hasParents($ped, $f, 1)){
         print STDERR "Checking de novo occurence in family $f...\n";
         push @seg_commands, "bgzip -f $filtered[1]";#gets around a funny GATK issue with order of contigs
         push @seg_commands, "tabix -fp vcf $bgzipped";
@@ -510,7 +523,7 @@ sub getSegCommands{
         my $anno_cmd = "$script_prefix/annovcfToSimple.pl --all  -n hiConfDeNovo loConfDeNovo AS_CLNSIG AS_CLNALLE AS_CLNHGVS AS_CLNDSDBID AS_CLNDBN -v -g -u all -p $temp_ped -i $denovo_out.geneanno.functional -o $xlsx"; 
         push @seg_commands, $anno_cmd;
     }
-    if (not $check_dominant and not $opts{s} and $opts{g}){
+    if (not $check_dominant and not $opts{s} and $opts{g} and hasParents($ped, $f, 1)){
         #weird dictionary errors with uncompressed vcfs using GATK sometimes :/
         foreach my $d_type ( qw /hiConfDeNovo loConfDeNovo / ){ 
             my $denovo_v_dir = "$opts{out_dir}/vcf/denovo_GATK_$d_type";
@@ -536,3 +549,20 @@ sub getSegCommands{
 }
 
 
+##################################################
+sub hasParents{
+    my $ped = shift;
+    my $fam = shift;
+    my $i = shift;
+    my @aff = $ped->getAffectedsFromFamily($fam);
+    foreach my $af (@aff){
+        my $pars = 0;
+        foreach my $p ($ped->getParents($af)){
+            if (exists $samp_hashes[$i]->{$p}){#parent is in vcf
+                $pars++;
+            }
+        }
+        return 1 if $pars == 2; #only need one affected to have parents(?)
+    }
+    return 0;
+}
