@@ -171,6 +171,19 @@ for (my $i = 0; $i < @input; $i++){
         $input[$i] = $scored;
     }
 }
+
+my @samp_hashes = ();
+foreach my $inp (@input){
+    my %sample_to_col = VcfReader::getSamples
+    (
+        vcf         => $inp,
+        get_columns => 1,
+    );
+    push @samp_hashes, \%sample_to_col;
+}
+if (@samp_hashes < 2){
+    push @samp_hashes, $samp_hashes[0];
+}
     
 foreach my $ped (@{$opts{p}}){
     my $p = ParsePedfile->new( file => $ped );
@@ -431,7 +444,7 @@ sub getSegCommands{
                                 );
             push @out_files, $lenient_out; 
         }
-        if ($opts{z}){
+        if ($opts{z} and hasParents($ped, $f, 0)){
             my $denovo_b_out = "biallelic_denovo_$f.$seg_out.vcf";
             push @bial_commands, sprintf("$script_prefix/findBiallelic.pl --af 0.01 -g 0.05 -c 10 --add splice_region_variant -i %s -o %s -l %s.genelist -f %s --denovo_biallelic_mode", 
                                     $filtered[0], 
@@ -466,7 +479,7 @@ sub getSegCommands{
             push @seg_commands, $anno_cmd;
         }
     }
-    if (not $check_dominant and not $opts{s}){
+    if (not $check_dominant and not $opts{s} and hasParents($ped, $f, 1)){
         print STDERR "Checking de novo occurence in family $f...\n";
         my $denovo_cmd = sprintf("$script_prefix/filterOnSample.pl -i %s -o %s -s %s -r %s --confirm -z 0.2 ", 
                 $filtered[1],
@@ -487,7 +500,7 @@ sub getSegCommands{
         my $anno_cmd = "$script_prefix/annovcfToSimple.pl -n hiConfDeNovo loConfDeNovo CaddPhredScore -v -g -u all -p $temp_ped -i functional.denovo_$f.$filtered[1].caddranked.geneanno"; 
         push @seg_commands, $anno_cmd;
     }
-    if (not $check_dominant and not $opts{s} and $opts{g}){
+    if (not $check_dominant and not $opts{s} and $opts{g} and hasParents($ped, $f, 1)){
         foreach my $d_type ( qw /hiConfDeNovo loConfDeNovo / ){ 
             my $gatk_cmd = "java -Xmx4g -jar $gatk -R $fasta -T SelectVariants -select \"vc.hasAttribute('$d_type') "; 
             foreach my $af (@aff){
@@ -510,4 +523,20 @@ sub getSegCommands{
     return @seg_commands;
 }
 
-
+##################################################
+sub hasParents{
+    my $ped = shift;
+    my $fam = shift;
+    my $i = shift;
+    my @aff = $ped->getAffectedsFromFamily($fam);
+    foreach my $af (@aff){
+        my $pars = 0;
+        foreach my $p ($ped->getParents($af)){
+            if (exists $samp_hashes[$i]->{$p}){#parent is in vcf
+                $pars++;
+            }
+        }
+        return 1 if $pars == 2; #only need one affected to have parents(?)
+    }
+    return 0;
+}
