@@ -102,7 +102,7 @@ sub countCalls{
     if ($id =~ /^rs\d/){
         $var_info{dbSNP} = 1;
     }else{
-        $var_info{novel} = 1;
+        $var_info{Novel} = 1;
     }
     my @alleles = VcfReader::readAlleles(line => \@split);
     my %allele_impacts = ();
