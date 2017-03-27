@@ -96,6 +96,16 @@ One or more samples to check variants for. Default is to check all samples in vc
 
 Minimum genotype quality to specify for het variants.  Anything less will be counted as a no call.
 
+=item B<-a    --ab>
+
+Minimum and optional maximum allele balance for heterozygous variants. For 
+example, use "--ab 0.3" to only consider heterozygous variants where the ALT 
+allele makes up at least 30% of reads for a sample. To only consider 
+heterozygous variants with an allele balance in the range of 40-60% use 
+"--ab 0.4 0.6".
+
+This option is ignored when the -r/--reverse option is in effect.
+
 =item B<-r    --reverse>
 
 Use this flag to print homozygous variants rather than heterozygous variants.
