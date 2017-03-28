@@ -58,6 +58,7 @@ GetOptions(
     "manual" ,
     "m|mode=s" ,
     "no_biotype_filtering",
+    "no_indels",
     "n|num_matching=i",
     "o|output=s" ,
     "pass_filters" ,
@@ -65,7 +66,7 @@ GetOptions(
     "skip_unpredicted" ,
     "t|target_genes=s",
     "v|var_quality=i",
-    "u|max_sample_allele_frequency=f",
+    "u|max_control_allele_frequency=f",
 ) or pod2usage(-message => "Syntax error", -exitval => 2);
 pod2usage(-verbose => 2, -exitval => 0) if ($opts{manual});
 pod2usage(-verbose => 1, -exitval => 0) if ($opts{h});
@@ -98,7 +99,7 @@ if (defined $opts{u} ){
     if ($opts{u} < 0 or $opts{u} > 1.0){
         pod2usage
         (
-            -message =>  "-u/--max_sample_allele_frequency option requires a ". 
+            -message =>  "-u/--max_control_allele_frequency option requires a ". 
                          "value between 0.00 and 1.00 to filter on allele ".
                          "frequency.\n", 
             -exitval => 2
@@ -365,6 +366,9 @@ sub countFunctionalCsq{
     #assess each ALT allele (REF is index 0)
 ALT: for (my $i = 1; $i < @alleles; $i++){
         next ALT if $alleles[$i] eq '*';
+        if ($opts{no_indels}){
+            next if length($alleles[0]) != length($alleles[$i]);
+        }
         #if CADD filtering skip if less than user-specified cadd filter
         #if no CADD score for allele then we won't skip unless using --
         if (@cadd_scores){
@@ -419,23 +423,25 @@ CSQ:    foreach my $annot (@a_csq){
           not keys %{$allele_to_csq{benign}};#no variant in valid transcript
 
     splitRemainingFields($split);
-    # get allele frequencies in  @samples if using -u/--max_sample_allele_frequency
+    # get allele frequencies in  @samples if using -u/--max_control_allele_frequency
     my %s_allele_counts = ();
     my $allele_count;
     if ($opts{u}){
         %s_allele_counts = VcfReader::countAlleles
         (
-            minGQ => $opts{g},
-            line  => $split,
+            minGQ   => $opts{g},
+            line    => $split,
+            samples => \@controls,
+            sample_to_columns => \%sample_to_col,
         );
         map { $allele_count += $s_allele_counts{$_} } keys %s_allele_counts;
-        # filter if frequency in @samples is greater or equal to 
-        # -u/--max_sample_allele_frequency
+        # filter if frequency in @controls is greater or equal to 
+        # -u/--max_control_allele_frequency
         if ($opts{u} and $allele_count > 0){
             foreach my $i (keys %{$allele_to_csq{damaging}}){
                 my $freq = $s_allele_counts{$i}/$allele_count;
                 if ($freq >= $opts{u}){
-                    $allele_to_csq{benign}->{$i} = $allele_to_csq{damaging}->{$i};
+                    push @{$allele_to_csq{benign}->{$i}}, @{$allele_to_csq{damaging}->{$i}};
                     delete $allele_to_csq{damaging}->{$i} 
                 }
             }
@@ -1455,7 +1461,7 @@ Note: allele frequencies added by VEP are not used for filtering as they check t
 
 If using the --af/--allele_frequency option and your data contains allele frequency fields from sources not recognised by this program, you may give the name of these allele frequency INFO fields here and they will be used for filtering in addition to the default fields. Note that these annotations must contain an annotation per ALT allele (i.e. the INFO field header must specify 'Number=A') to work properly and the allele frequency should be expressed as a number between 0.00 and 1.00 in order to be compatible with the default allele frequency fields recognised by this program.
 
-=item B<-u  --max_sample_allele_frequency>
+=item B<-u  --max_control_allele_frequency>
 
 Use this option to specify an allele frequency (between 0.00 and 1.00) for filtering alleles in your VCF. Alleles present at this frequency or higher in your samples of interest will be filtered. If -s/--samples argument is specified, only these samples will be used for calculating the allele frequency, otherwise all samples in your VCF will be used.
 
