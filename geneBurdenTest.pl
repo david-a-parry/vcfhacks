@@ -64,6 +64,7 @@ GetOptions(
     "pass_filters" ,
     "pl=f", 
     "skip_unpredicted" ,
+    "s|var_summaries=s",
     "t|target_genes=s",
     "v|var_quality=i",
     "u|max_control_allele_frequency=f",
@@ -181,6 +182,8 @@ my %csq_header = getAndCheckCsqHeader();
 my $feature_id = $opts{m} eq 'vep' ? "feature" : "feature_id";
 my $symbol_id  = $opts{m} eq 'vep' ? "symbol"  : "gene_name";
 my $gene_id    = $opts{m} eq 'vep' ? "gene"    : "gene_id";
+my $hgvsc      = $opts{m} eq 'vep' ? "hgvsc"   : "hgvs.c";
+my $hgvsp      = $opts{m} eq 'vep' ? "hgvsp"   : "hgvs.p";
 
 #set default consequence fields to retrieve 
 my @csq_fields = getCsqFields();#consequence fields to retrieve from VCF
@@ -215,7 +218,7 @@ if ( $opts{c} ){
 
 #if using -t/--target_genes argument, check file
 
-my $OUT = openOutput();
+my ($OUT, $VAR) = openOutput();
 
 #write header and program run parameters
 writeOptionsToHeader();
@@ -461,12 +464,46 @@ CSQ:    foreach my $annot (@a_csq){
                 #add sample IDs as entries to this variant count class
                 # e.g. $counts{ENST00001234567}->{benign}->{sample_1} = undef
                 # we will count no. keys for each transcript at end of chromosome
-                map { $counts{$t}->{$k}->{$_} = undef } addSamplesWithAllele
+                my %samps_with_allele = map {$_ => 1 } addSamplesWithAllele
                 (
                     \%samp_to_gt, 
                     $j,
                     $split,
                 );
+                map { $counts{$t}->{$k}->{$_} = undef } keys %samps_with_allele;
+                #output annotation details and sample counts if --q 
+                if ($VAR and $k eq 'damaging'){
+                    my @cases_with_allele = grep { $samps_with_allele{$_} } @cases;
+                    my @hom_cases = grep { $samp_to_gt{$_} =~ /^$j[\|\/]$j$/ } @cases_with_allele;
+                    my @het_cases = grep { $samp_to_gt{$_} !~ /^$j[\|\/]$j$/ } @cases_with_allele;
+                    my @conts_with_allele = grep { $samps_with_allele{$_} } @controls;
+                    my @hom_conts = grep { $samp_to_gt{$_} =~ /^$j[\|\/]$j$/ } @conts_with_allele;
+                    my @het_conts = grep { $samp_to_gt{$_} !~ /^$j[\|\/]$j$/ } @conts_with_allele;
+                    print $VAR join
+                    (
+                        "\t", 
+                        @$split[0..1],
+                        $alleles[0],
+                        $alleles[$j],
+                        $annot->{$symbol_id},
+                        $annot->{$gene_id},
+                        $t,
+                        $annot->{$hgvsc},
+                        $annot->{$hgvsp},
+                        scalar(@cases_with_allele),
+                        scalar(@conts_with_allele),
+                        join(",", @cases_with_allele) || '.',
+                        join(",", @conts_with_allele) || '.',
+                        scalar(@het_cases),
+                        scalar(@het_conts),
+                        join(",", @het_cases) || '.',
+                        join(",", @het_conts) || '.',
+                        scalar(@hom_cases),
+                        scalar(@hom_conts),
+                        join(",", @hom_cases) || '.' ,
+                        join(",", @hom_conts) || '.' ,
+                    ) . "\n";
+                }
             }
         }
     }
@@ -688,6 +725,8 @@ sub getCsqFields{
             consequence
             symbol
             biotype
+            hgvsc
+            hgvsp
         );
         if ($opts{canonical_only}){
             push @fields, "canonical";
@@ -706,6 +745,8 @@ sub getCsqFields{
             feature_type
             feature_id
             transcript_biotype
+            hgvs.c
+            hgvs.p
         );
     }
     foreach my $f (@fields){
@@ -827,21 +868,26 @@ sub splitRemainingFields{
 #################################################
 sub openOutput{
     my $OUT_FH;
+    my $VAR_FH;
     if ($opts{o}) {
         open( $OUT_FH, ">", $opts{o} ) || die "Can't open $opts{o} for writing: $!\n";
     }
     else {
         $OUT_FH = \*STDOUT;
     }
-    return $OUT_FH;
+    if ($opts{s}){
+        open( $VAR_FH, ">", $opts{s} ) || die "Can't open $opts{s} for writing: $!\n";
+    }
+    return ($OUT_FH, $VAR_FH);
 }
 
 #################################################
 sub writeOptionsToHeader{
     #print meta header lines
     #add header line detailing program options
-    print $OUT VcfhacksUtils::getOptsVcfHeader(%opts) . "\n"; 
-    print join
+    my $head_opts = VcfhacksUtils::getOptsVcfHeader(%opts) . "\n"; 
+    print $OUT $head_opts;
+    print $OUT join
     (
         "\t",
         qw/ 
@@ -866,6 +912,36 @@ sub writeOptionsToHeader{
             Benign_u95
         /
     ) , "\n";
+    if ($VAR){
+        print $VAR $head_opts ;
+        print $VAR join
+        (
+            "\t", 
+            qw /
+                CHROM
+                POS
+                REF
+                ALT
+                SYMBOL
+                GENE
+                TRANSCRIPT
+                HGVSC
+                HGVSP
+                N_CASES
+                N_CONTROLS
+                CASE_IDS
+                CONTROL_IDS
+                N_HET_CASES
+                N_HET_CONTROLS
+                HET_CASE_IDS
+                HET_CONTROL_IDS
+                N_HOM_CASES
+                N_HOM_CONTROLS
+                HOM_CASE_IDS
+                HOM_CONTROL_IDS
+            /
+        ) . "\n";
+    }
 }
 
 #################################################
