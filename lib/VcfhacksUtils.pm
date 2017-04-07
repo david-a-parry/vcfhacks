@@ -230,7 +230,7 @@ Return a hash of in silico prediction program names with values being anonymous 
 
 sub readVepInSilicoFile{
     my $insilico_file = "$data_dir/vep_insilico_pred.tsv";
-    return _readInSilicoFile($insilico_file);
+    return _readInSilicoFile($insilico_file, 1);
 }
 
 
@@ -244,11 +244,12 @@ Return a hash of dbNSFP in silico prediction program names with values being ano
 
 sub readSnpEffInSilicoFile{
     my $insilico_file = "$data_dir/snpeff_insilico_pred.tsv";
-    return _readInSilicoFile($insilico_file);
+    return _readInSilicoFile($insilico_file, 0);
 }
 
 sub _readInSilicoFile{
     my $insilico_file = shift;
+    my $convert_case = shift;
     open (my $INS, $insilico_file) or die 
 "Could not open in silico classes file '$insilico_file': $!\n";
     my %pred = (); 
@@ -258,7 +259,11 @@ sub _readInSilicoFile{
         next if not $line;
         my @split = split("\t", $line);
         die "Not enough fields in classes file line: $line\n" if @split < 3;
-        $pred{lc($split[0])}->{lc($split[1])} = lc($split[2]) ;
+        if ($convert_case){
+            $pred{lc($split[0])}->{lc($split[1])} = lc($split[2]) ;
+        }else{
+            $pred{$split[0]}->{$split[1]} = $split[2] ;
+        }
     }
     close $INS;
     return %pred;
@@ -280,15 +285,19 @@ sub getAndCheckInSilicoPred{
         croak "Second argument to 'getAndCheckInSilicoPred' method must be an".
             " array reference!\n";
     }
-    my %pred = _readInSilicoFile("$data_dir/$mode"."_insilico_pred.tsv");
+    my $conv_case = $mode eq 'vep' ? 1 : 0;
+    my %pred = _readInSilicoFile("$data_dir/$mode"."_insilico_pred.tsv", $conv_case);
     my %filters = (); 
     foreach my $d (@$damaging) {
-        $d = lc($d); 
-        my ( $prog, $label ) = split( "=", $d );
-        if ($mode eq 'snpeff' and $prog ne 'all'){
-            $prog = "dbnsfp_$prog" if $prog !~ /^dbnsfp_/;
+        if ($conv_case){
+            $d = lc($d); 
         }
-        if ($prog eq 'all'){
+        my ( $prog, $label ) = split( "=", $d );
+        if ($mode eq 'snpeff' and $prog !~ /^all$/i){
+            $prog = "dbNSFP_$prog" if $prog !~ /^dbNSFP_/;
+            $prog =~ s/\-/_/g; 
+        }
+        if ($prog =~ /^all$/i){
             foreach my $k (keys %pred){
                 foreach my $j ( keys %{$pred{$k}} ){
                     push @{ $filters{$k} }, $j if $pred{$k}->{$j} eq 'default';
