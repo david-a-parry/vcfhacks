@@ -54,20 +54,17 @@ GetOptions(
     "i|input=s" ,
     "j|custom_af=s{,}",
     "k|keep_any_damaging" ,
-    "maf=f" ,
     "manual" ,
     "m|mode=s" ,
     "no_biotype_filtering",
     "no_indels",
-    "n|num_matching=i",
     "o|output=s" ,
     "pass_filters" ,
     "pl=f", 
     "skip_unpredicted" ,
     "s|var_summaries=s",
-    "t|target_genes=s",
     "v|var_quality=i",
-    "u|max_control_allele_frequency=f",
+    "u|max_sample_allele_frequency=f",
 ) or pod2usage(-message => "Syntax error", -exitval => 2);
 pod2usage(-verbose => 2, -exitval => 0) if ($opts{manual});
 pod2usage(-verbose => 1, -exitval => 0) if ($opts{h});
@@ -100,7 +97,7 @@ if (defined $opts{u} ){
     if ($opts{u} < 0 or $opts{u} > 1.0){
         pod2usage
         (
-            -message =>  "-u/--max_control_allele_frequency option requires a ". 
+            -message =>  "-u/--max_sample_allele_frequency option requires a ". 
                          "value between 0.00 and 1.00 to filter on allele ".
                          "frequency.\n", 
             -exitval => 2
@@ -312,7 +309,6 @@ sub processLine{
 #################################################
 sub isNewChromosome{
     my $chrom = shift;
-    return 0 if $opts{t};
     if (exists $contigs{$chrom} ){
         #require chroms to be ordered together
         if ($contigs{$chrom} != scalar(keys %contigs) - 1){
@@ -436,12 +432,12 @@ CSQ:    foreach my $annot (@a_csq){
         (
             minGQ   => $opts{g},
             line    => $split,
-            samples => \@controls,
+            samples => \@samples,
             sample_to_columns => \%sample_to_col,
         );
         map { $allele_count += $s_allele_counts{$_} } keys %s_allele_counts;
         # filter if frequency in @controls is greater or equal to 
-        # -u/--max_control_allele_frequency
+        # -u/--max_sample_allele_frequency
         if ($opts{u} and $allele_count > 0){
             foreach my $i (keys %{$allele_to_csq{damaging}}){
                 my $freq = $s_allele_counts{$i}/$allele_count;
@@ -1326,13 +1322,13 @@ PROG: foreach my $k ( sort keys %in_silico_filters) {
 
 =head1 NAME
 
-getFunctionalVariants.pl - retrieve variants according to their functional annotation
+geneBurdenTest.pl - identify damaging variants in genes and perform a gene burden test in cases vs controls 
 
 =head1 SYNOPSIS
 
-    getFunctionalVariants.pl -i <variants.vcf> [options]
-    getFunctionalVariants.pl --help (show help message)
-    getFunctionalVariants.pl --manual (show manual page)
+    geneBurdenTest.pl -i <variants.vcf> -f <cases_and_controls.ped> [options]
+    geneBurdenTest.pl --help (show help message)
+    geneBurdenTest.pl --manual (show manual page)
 
 =cut 
 
@@ -1344,43 +1340,42 @@ getFunctionalVariants.pl - retrieve variants according to their functional annot
 
 VCF file annotated with Ensembl's variant_effect_predictor.pl (VEP) script or SnpEff.
 
+=item B<-f    --ped_file>
+
+PED file giving sample IDs of cases and controls. 
+
+PED format - from the PLINK documentation:
+
+       The PED file is a white-space (space or tab) delimited file: the first six columns are mandatory:
+
+            Family ID
+            Individual ID
+            Paternal ID
+            Maternal ID
+            Sex (1=male; 2=female; other=unknown)
+            Phenotype
+
+       Affection status, by default, should be coded:
+
+           -9 missing
+            0 missing
+            1 unaffected
+            2 affected
+
+In this manner, only samples present in this file and with an affectation status of '2' will be used as 'cases'. Only samples present in this file and with an affectation status of '1' will be used as 'controls'.
+
+
 =item B<-o    --output>
 
-File to print output (optional). Will print to STDOUT by default.
+File to print output table (optional). Will print to STDOUT by default.
+
+=item B<-s    --var_summaries>
+
+Optional file to print details of each 'damaging' variant used in the gene burden analyses.
 
 =item B<-m    --mode>
 
 This program will attempt to detect the format of your input automatically by looking for VEP or SnpEff annotations, but you may specify either 'vep' or 'snpeff' with this option to select the mode employed by the script if you have a file with both VEP and SnpEff annotations. By default, if both annotations are present and the program is run without this option, VEP annotations will be used. NOTE: Only SnpEff annotations using the more recent 'ANN' style annotations rather than the older 'EFF' style are recognised by this program.
-
-=item B<-s    --samples>
-
-Only keep variants present in one of these samples.  You may specify 'all' (without quotes) instead of a sample name to select all samples in the VCF.  
-
-=item B<-f    --find_shared_genes>
-
-Use this switch to only output variants that make up 'functional' variants in the same genes for the samples specified by the -s/--samples argument. If -s/--samples option is not specified this will act as if ALL samples in the VCF were specified.  This will also return a list of genes containing 'functional' variants in these samples. If a filename is passed to this option the list will be printed to file, otherwise the list will be printed to STDERR.
-
-=item B<-n    --num_matching>
-
-If s/--samples or -f/--find_shared_genes arguments are specified use this option to specify the minimum number of samples with variants in the same gene before outputting variants (and genes). 
-
-=item B<-e    --equal_genotype>
-
-If -s/--samples argument is specified use this flag if you only want to keep variants with identical genotypes in each sample (or a minimum number of samples as specified by the -n/--num_matching option).
-
-=item B<--gene_counts>
-
-Give a filename for outputting the counts of gene IDs vs number of samples with qualifying variants (e.g. for input to a burden test). Optionally the user may also add the positional arguments 'model', 'count mode' and 'sample count' separated by a commas after the filename (e.g. --gene_counts gene_counts.txt,recessive). 
-
-Valid values for B<model> are 'dominant' (only samples with heterozygous variants counted), 'recessive' (requires annotations from findBiallelic.pl to identify samples with compound het or homozygous variants) or 'both' (count a sample regardless of whether it is heterozygous or homozygous). If using the 'recessive' model you will need to annotate your variants with findBiallelic.pl first and use consistent settings for functional/in silico filters between both programs.
-
-Valid values for B<count mode> are 'genotypes' or 'allele_counts'. The 'genotypes' setting is the default, where sample numbers are analyzed from genotype calls. The 'allele_counts' setting involves inferring sample numbers from INFO field annotations such as 'AC' or standard ExAC style het/hom counts.
-
-The B<sample count> argument is a way of specifying the total number of samples. The main reason for using this would be when using 'allele_counts' to infer the number of samples where the total number of samples in the cohort would otherwise be unknown or could only be guessed from 'AN' style annotations. 
-
-An example use for this argument with a VEP annotated ExAC VCF might is given below:
-    
-    --gene_counts ExAC.r0.3.gene_counts.txt,both,allele_counts,60706
 
 =item B<--classes>
 
@@ -1442,30 +1437,6 @@ Only consider canonical transcripts (VEP annotations only).
 =item B<-c    --cadd_filter>
 
 If you have annotated CADD phred scores for alleles using rankOnCaddScore.pl you may use this option to specify a CADD phred score threshold for variants. Any alleles that have a CADD phred score below the value specified here will be filtered. Variants without a CADD phred score will not be filtered unless using the --skip_unpredicted option. You should have run rankOnCaddScore.pl with the --do_not_sort option to maintain chromosome order of your variants if you use this option with the -f/--find_shared_genes option or else you will need to sort your VCF before running getFunctionalVariants.pl.
-
-=item B<--clinvar>
-
-Specify the mode for dealing with ClinVar annotations. By default, if ClinVar annotations added by annotateSnps.pl are found, variants with 'pathogenic' or 'likely pathogenic' annotations are kept regardless of their functional consequence. Here you may specify the following values:
-
-=over 12
-
-=item B<all>
-
-default behaviour, any variant with a ClinVar 'pathogenic' or 'likely pathogenic' will be kept
-
-=item B<no_conflicted>
-
-as above except that variants with conflicting annotations (e.g. 'benign' and 'likely pathogenic') will not be automatically kept
-
-=item B<functional>           
-
-only keep ClinVar 'pathogenic' or 'likely pathogenic variants if they match one of the default 'functional' classes (see --classes argument). This option can be combined with 'all' or 'no_conflicted' options, separate the values with a comma.
-
-=item B<disable>
-
-turns off automatic retention of variants with ClinVar annotations.
-
-=back
 
 =item B<-d    --damaging>
 
@@ -1551,7 +1522,7 @@ The 'data/biotypes.tsv' file contains a list of valid biotypes.
 
 Use this flag to consider consequences affecting ALL biotypes.
 
-=item B<-a    --allele_frequency>
+=item B<-a    --af>
 
 Use a value between 0.00 and 1.00 to specify allele frequencey filtering for annotations from annotateSnps.pl, filterOnEvsMaf.pl or filterVcfOnVcf.pl if you've previously run these programs to annotate your VCF. If an allele frequency is available for an allele it will be filtered if equal to or greater than the value specfied here. 
 
@@ -1561,9 +1532,9 @@ Note: allele frequencies added by VEP are not used for filtering as they check t
 
 If using the --af/--allele_frequency option and your data contains allele frequency fields from sources not recognised by this program, you may give the name of these allele frequency INFO fields here and they will be used for filtering in addition to the default fields. Note that these annotations must contain an annotation per ALT allele (i.e. the INFO field header must specify 'Number=A') to work properly and the allele frequency should be expressed as a number between 0.00 and 1.00 in order to be compatible with the default allele frequency fields recognised by this program.
 
-=item B<-u  --max_control_allele_frequency>
+=item B<-u  --max_sample_allele_frequency>
 
-Use this option to specify an allele frequency (between 0.00 and 1.00) for filtering alleles in your VCF. Alleles present at this frequency or higher in your samples of interest will be filtered. If -s/--samples argument is specified, only these samples will be used for calculating the allele frequency, otherwise all samples in your VCF will be used.
+Use this option to specify an allele frequency (between 0.00 and 1.00) for filtering alleles in your VCF. Alleles present at this frequency or higher in your case and control samples (combined) will be filtered. 
 
 =item B<-v    --var_qual>
 
@@ -1614,23 +1585,38 @@ Show the program's manual page.
 
 =head1 EXAMPLES
 
- getFunctionalVariants.pl -i input.vcf -o out.vcf 
- #output variants with a default 'functional' consequence (annotated by VEP or SnpEff)
+ Perform a case/control test using default options:
 
- getFunctionalVariants.pl -i input.vcf -o out.vcf -s sample1 sample2 -f shared_genes.txt
- #as above but only for variants where sample1 or sample2 contain a variant allele with a 'functional' consequence
+    geneBurdenText.pl -i input.vcf \
+    -o out.tsv \
+    -f cases_controls.ped
 
- getFunctionalVariants.pl -s all -i input.vcf -o out.vcf -n 2 -af 0.001  -f shared_genes.txt 
- #
+Exclude missense variants predicted as 'Tolerated' by FATHMM and with a minor allele
+frequency of 0.1 \% or higher in dbSNP or ExAC. The former requires that you annotated
+your VCF with FATHMM annotations using dbNSFP when running VEP or SnpSift. The latter
+requires that you annotated frequencies using annotateSnps.pl and/or [for ExAC]
+filterVcfOnVcf.pl
 
+    geneBurdenText.pl -i input.vcf \
+    -o out.tsv \
+    -f cases_controls.ped \
+    -d FATHMM_pred \
+    --af 0.001
+
+As above but specifying a subset of qualifying consequence classes:
+
+ geneBurdenText.pl -i input.vcf \
+ -o out.tsv \
+ -f cases_controls.ped \
+ -d FATHMM_pred \
+ --af 0.001 \
+ --classes frameshift_variant missense_variant splice_acceptor_variant splice_donor_variant stop_lost stop_gained
 
 =cut
 
 =head1 DESCRIPTION
 
-In its simplest form this program will print specific variant classes from a VCF file annotated with either Ensembl's variant_effect_predictor.pl program or SnpEff and filter out other variant classes. Input must be a VCF annotated by the variant_effect_predictor.pl program using the '--vcf' option or a VCF annotated with SnpEff using the (now default) ANN style annotations.
-
-As well as outputting variants on the basis of functional annotation, this program can identify genes with functional variants in specific samples using the --samples and --find_shared genes options.
+This program reads functional consequence annotations in a VCF and performs a case/control burden test for qualifying 'damaging' variants in transcripts using a one-tailed Fisher's exact test. A p-value for every qualifying transcript is provided in the output as well as counts for cases/controls with 'damaging' and 'benign' variants.
 
 =cut
 
@@ -1642,7 +1628,7 @@ University of Edinburgh
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2015, David A. Parry
+Copyright 2017, David A. Parry
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with this program. If not, see <http://www.gnu.org/licenses/>.
 
