@@ -2210,7 +2210,9 @@ turns off automatic retention of variants with ClinVar annotations.
 
 Specify in silico prediction scores to filter on. 
 
-If running on VEP annotations you may either use PolyPhen, SIFT and/or Condel scores given by VEP or annotations from dbNSFP added using the dbNSFP VEP plugin. If running on SnpEff, annotations scores provided by SnpSift's 'dbnsfp' mode will be used.  
+If running on VEP annotations you may either use PolyPhen, SIFT and/or Condel scores given by VEP or annotations from dbNSFP added using the dbNSFP VEP plugin. If running on SnpEff, annotations scores provided by SnpSift's 'dbnsfp' mode will be used.
+
+NOTE: when using SnpEff annotations, prediction program names are case-sensitive.
 
 =over 12
 
