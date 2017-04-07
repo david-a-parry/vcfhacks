@@ -179,11 +179,13 @@ EOT
 my %csq_header = getAndCheckCsqHeader();
   # hash of functional annotations from SnpEff/VEP to their annotation index
     
-my $feature_id = $opts{m} eq 'vep' ? "feature" : "feature_id";
-my $symbol_id  = $opts{m} eq 'vep' ? "symbol"  : "gene_name";
-my $gene_id    = $opts{m} eq 'vep' ? "gene"    : "gene_id";
-my $hgvsc      = $opts{m} eq 'vep' ? "hgvsc"   : "hgvs.c";
-my $hgvsp      = $opts{m} eq 'vep' ? "hgvsp"   : "hgvs.p";
+my $feature_id  = $opts{m} eq 'vep' ? "feature"     : "feature_id";
+my $symbol_id   = $opts{m} eq 'vep' ? "symbol"      : "gene_name";
+my $gene_id     = $opts{m} eq 'vep' ? "gene"        : "gene_id";
+my $hgvsc       = $opts{m} eq 'vep' ? "hgvsc"       : "hgvs.c";
+my $hgvsp       = $opts{m} eq 'vep' ? "hgvsp"       : "hgvs.p";
+my $biotype     = $opts{m} eq 'vep' ? "biotype"     : "transcript_biotype";
+my $consequence = $opts{m} eq 'vep' ? "consequence" : "annotation";
 
 #set default consequence fields to retrieve 
 my @csq_fields = getCsqFields();#consequence fields to retrieve from VCF
@@ -300,11 +302,11 @@ sub processLine{
         return if $qual < $opts{v};
     }
     #get alleles to arrays of 'functional' consequences
-    $functional_count += countFunctionalCsq(\@split);
     if (isNewChromosome($chrom)){
         #if new chrom check genes and clear collected data
         outputCounts();
     }
+    $functional_count += countFunctionalCsq(\@split);
 }
 
 #################################################
@@ -402,9 +404,9 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
         # and allele is not flagged as pathogenic in ClinVar
 CSQ:    foreach my $annot (@a_csq){
             #intergenic variants have no feature associated with them - skip
-            next CSQ if $annot->{consequence} eq "intergenic_variant";
+            next CSQ if $annot->{$consequence} eq "intergenic_variant";
             #skip unwanted biotypes
-            next CSQ if (not exists $biotype_keep{$annot->{biotype}}) ;
+            next CSQ if (not exists $biotype_keep{$annot->{$biotype}}) ;
             #skip non-canonical transcripts if --canonical_only selected
             if ($opts{canonical_only}) {
                 next CSQ if ( not $annot->{canonical} );
@@ -748,6 +750,14 @@ sub getCsqFields{
             hgvs.c
             hgvs.p
         );
+        if ($opts{canonical_only}){
+            informUser
+            ( 
+                "WARNING: --canonical_only option is ignored when ".
+                "working with SnpEff annotations.\n"
+            );
+            delete $opts{canonical_only};
+        }
     }
     foreach my $f (@fields){
         if (not exists $csq_header{$f}){
@@ -1459,51 +1469,65 @@ turns off automatic retention of variants with ClinVar annotations.
 
 =item B<-d    --damaging>
 
-Specify in silico prediction scores to filter on. If running on VEP annotations PolyPhen, SIFT and Condel scores given by VEP will be used. If running on SnpEff annotations scores given by running SnpSift's 'dbnsfp' mode will be used.  
+Specify in silico prediction scores to filter on. 
 
-B<VEP mode:> Specify SIFT, PolyPhen or Condel labels or scores to filter on. Add the names of the programs you want to use, separated by spaces, after the --damaging option. By default SIFT will keep variants labelled as 'deleterious', Polyphen will keep variants labelled as 'possibly_damaging' or 'probably_damaging' and  Condel will keep variants labelled as 'deleterious'.
+If running on VEP annotations you may either use PolyPhen, SIFT and/or Condel scores given by VEP or annotations from dbNSFP added using the dbNSFP VEP plugin. If running on SnpEff, annotations scores provided by SnpSift's 'dbnsfp' mode will be used.
 
-If you want to filter on custom values specify values after each program name in the like so: 'polyphen=probably_damaging'. Seperate multiple values with commas - e.g. 'polyphen=probably_damaging,possibly_damaging,unknown'. You may specify scores between 0 and 1 to filter on scores rather than labels - e.g. 'sift=0.3'. For polyphen, variants with scores lower than this score are considered benign and filtered, for SIFT and Condel higher scores are considered benign.
+NOTE: when using SnpEff annotations, prediction program names are case-sensitive.
 
-Valid labels for SIFT: deleterious, tolerated
+=over 12
 
-Valid labels for Polyphen: probably_damaging, possibly_damaging, benign, unknown
+=item B<VEP mode:> 
 
-Valid labels for Condel : deleterious, neutral
+Specify SIFT, PolyPhen or Condel labels or scores to filter on. Add the names of the programs you want to use, separated by spaces, after the --damaging option. By default SIFT will keep variants labelled as 'deleterious', Polyphen will keep variants labelled as 'possibly_damaging' or 'probably_damaging' and  Condel will keep variants labelled as 'deleterious'.
 
-To use default values for all three programs use 'all' (i.e. '--damaging all').
+If you want to filter on custom values specify values after each program name in the like so: 
 
-The default behaviour is to only keep variants predicted as damaging by ALL programs specified, although if the value is not available for one or more programs than that program will be ignored for filtering purposes.
+    'polyphen=probably_damaging' 
 
-B<SnpEff mode:> Specify one of the following annotations provided by dbNSFP (your input must have been annotated using SnpSift's dbnsfp mode): 
+Seperate multiple values with commas - e.g. 
 
-    dbNSFP_LRT_pred
-    dbNSFP_MutationAssessor_pred
-    dbNSFP_MutationTaster_pred
-    dbNSFP_Polyphen2_HVAR_pred
-    dbNSFP_SIFT_pred
+    'polyphen=probably_damaging,possibly_damaging,unknown' 
 
-You may omit the 'dbNSFP_' from the beginning if you wish. As with the VEP scores, you may specify 'all' to use the default values for all programs. Choosing custom values is also performed in the same way as for VEP annotations (e.g. dbNSFP_MutationAssessor_pred=H,M,L). 
+You may specify scores between 0 and 1 to filter on scores rather than labels - e.g. 
 
-The default scores considered 'damaging' are the following:
+    'sift=0.3' 
 
-    dbNSFP_LRT_pred=D
-    dbNSFP_MutationAssessor_pred=H,M
-    dbNSFP_MutationTaster_pred=A,D
-    dbNSFP_Polyphen2_HVAR_pred=P,D
-    dbNSFP_SIFT_pred=D
+For polyphen, variants with scores lower than this score are considered benign and filtered, for SIFT and Condel higher scores are considered benign.
 
-Other valid scores, not used by default:
+B<Valid labels for SIFT:> deleterious, tolerated
 
-    dbNSFP_LRT_pred=N
-    dbNSFP_MutationAssessor_pred=L,N
-    dbNSFP_MutationTaster_pred=N,P
-    dbNSFP_Polyphen2_HVAR_pred=B
-    dbNSFP_SIFT_pred=T
+B<Valid labels for Polyphen:> probably_damaging, possibly_damaging, benign, unknown
 
-The default behaviour is to only keep variants predicted as damaging by ALL programs specified, although if the value is not available for one or more programs than that program will be ignored for filtering purposes.
+B<Valid labels for Condel:> deleterious, neutral
 
-B<WARNING:> At the time of writing, SnpSift (latest version - SnpSift version 4.1l, build 2015-10-03) does not properly annotate the prediction values per allele. Multiple scores for the same allele are separated by commas, as are values per allele, therefore it is not possible to determine if a prediction is for a particular allele. For this reason, getFunctionalVariants.pl will use the highest present prediction value found for a variant in order to decide whether or not to filter an allele when using SnpEff/SnpSift annotations.
+To use default values for all three programs you may use 'all' (i.e. '--damaging all') BUT PLEASE NOTE: if you have added dbNSFP annotations to your input VCF these will also be included (see below).
+
+=item B<SnpEff or VEP dbNSFP mode:> 
+
+Your input must have been annotated using SnpSift's dbnsfp option (if using SnpEff annotations) or using the dbNSFP VEP plugin (if using VEP annotations). Recognised annotations are:
+
+    fathmm-MKL_coding_pred
+    FATHMM_pred
+    LRT_pred
+    MetaLR_pred
+    MetaSVM_pred
+    MutationAssessor_pred
+    MutationTaster_pred
+    PROVEAN_pred
+    Polyphen2_HDIV_pred
+    Polyphen2_HVAR_pred
+    SIFT_pred
+
+You may instead choose to use the 'score' or dbNSFP 'rankscore' annotations for these tools (e.g. 'fathmm-MKL_coding_score'). 
+
+You may specify 'all' to use the default values for all programs. Choosing custom values is also performed in the same way as for VEP annotations above (e.g. dbNSFP_MutationAssessor_pred=H,M,L). 
+
+=back
+
+For more details of the available and default settings for these programs please see the files 'data/snpeff_insilico_pred.tsv' or 'data/vep_insilico_pred.tsv'.
+
+The default behaviour is to only keep variants predicted as damaging by ALL programs specified, although if the value is not available for one or more programs than that program will be ignored for filtering purposes. See the next two options for alternative behaviours.
 
 =item B<-k    --keep_any_damaging>
 
