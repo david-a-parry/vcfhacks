@@ -1,15 +1,60 @@
+#dbNSFP annotations
+#predictions
+dbNSFP_fathmm_MKL_coding_pred	D	default
+dbNSFP_fathmm_MKL_coding_pred	T	valid
+dbNSFP_FATHMM_pred	D	default
+dbNSFP_FATHMM_pred	T	valid
+dbNSFP_LRT_pred	D	default
+dbNSFP_LRT_pred	U	valid
+dbNSFP_LRT_pred	N	valid
+dbNSFP_MetaLR_pred	D	default
+dbNSFP_MetaLR_pred	T	valid
+dbNSFP_MetaSVM_pred	D	default
+dbNSFP_MetaSVM_pred	T	valid
 dbNSFP_MutationAssessor_pred	H	default
 dbNSFP_MutationAssessor_pred	M	default
-dbNSFP_LRT_pred	D	default
-dbNSFP_MutationTaster_pred	A	default
-dbNSFP_MutationTaster_pred	D	default
-dbNSFP_Polyphen2_HVAR_pred	P	default
-dbNSFP_Polyphen2_HVAR_pred	D	default
-dbNSFP_SIFT_pred	D	default
 dbNSFP_MutationAssessor_pred	L	valid
 dbNSFP_MutationAssessor_pred	N	valid
-dbNSFP_LRT_pred	N	valid
+dbNSFP_MutationTaster_pred	A	default
+dbNSFP_MutationTaster_pred	D	default
 dbNSFP_MutationTaster_pred	N	valid
 dbNSFP_MutationTaster_pred	P	valid
+dbNSFP_PROVEAN_pred	D	default
+dbNSFP_PROVEAN_pred	N	valid
+dbNSFP_Polyphen2_HDIV_pred	D	default
+dbNSFP_Polyphen2_HDIV_pred	P	default
+dbNSFP_Polyphen2_HDIV_pred	B	valid
+dbNSFP_Polyphen2_HVAR_pred	D	default
+dbNSFP_Polyphen2_HVAR_pred	P	default
 dbNSFP_Polyphen2_HVAR_pred	B	valid
+dbNSFP_SIFT_pred	D	default
 dbNSFP_SIFT_pred	T	valid
+#scores
+dbNSFP_CADD_phred	10	score
+dbNSFP_Eigen_phred	10	score
+dbNSFP_fathmm_MKL_coding_score	0.5	score
+dbNSFP_FATHMM_score	0	score	lower=damaging
+dbNSFP_LRT_score	0	score	
+dbNSFP_MetaLR_score	0.5	score	
+dbNSFP_MetaSVM_score	1	score
+dbNSFP_MutationAssessor_score	0	score	
+dbNSFP_MutationTaster_score	0.5	score
+dbNSFP_PROVEAN_score	0.5	score	lower=damaging
+dbNSFP_Polyphen2_HDIV_score	0.5	score
+dbNSFP_Polyphen2_HVAR_score	0.5	score
+dbNSFP_SIFT_score	0.5	score	lower=damaging
+#rank scores
+dbNSFP_CADD_raw_rankscore	0.5	score
+dbNSFP_fathmm_MKL_coding_rankscore	0.28317	score
+dbNSFP_FATHMM_converted_rankscore	0.5	score
+dbNSFP_LRT_converted_rankscore	0.5	score
+dbNSFP_MetaLR_rankscore	0.81113	score
+dbNSFP_MetaSVM_rankscore	0.82268	score
+dbNSFP_MutationAssessor_score_rankscore	0.61	score
+dbNSFP_MutationTaster_converted_rankscore	0.5	score
+dbNSFP_PROVEAN_converted_rankscore	0.5	score
+dbNSFP_Polyphen2_HDIV_rankscore	0.5	score
+dbNSFP_Polyphen2_HVAR_rankscore	0.5	score
+dbNSFP_SIFT_converted_rankscore	0.5	score
+dbNSFP_Eigen_PC_raw_rankscore	0.5	score
+dbNSFP_Eigen_raw_rankscore	0.5	score
