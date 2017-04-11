@@ -35,9 +35,9 @@ If you want to use scripts to search bgzip compressed VCFs or use rankOnCaddScor
     
 Unpack the tarball cd into the newly created directory and run the 'INSTALL.pl' script. For example:
 
-    wget http://search.cpan.org/CPAN/authors/id/R/RI/RISHIDEV/Bio-DB-HTS-2.5.tar.gz
-    tar xvf Bio-DB-HTS-2.5.tar.gz
-    cd Bio-DB-HTS-2.5
+    wget http://search.cpan.org/CPAN/authors/id/R/RI/RISHIDEV/Bio-DB-HTS-2.7.tar.gz
+    tar xvf Bio-DB-HTS-2.7.tar.gz
+    cd Bio-DB-HTS-2.7
     perl INSTALL.pl
 
 Alternatively, see below for an attempt to automatically install the required perl modules.
