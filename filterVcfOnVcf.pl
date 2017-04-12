@@ -5,7 +5,6 @@ use Getopt::Long;
 use Parallel::ForkManager;
 use Sys::CPU;
 use Pod::Usage;
-use Term::ProgressBar;
 use Data::Dumper;
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use POSIX qw(strftime);
@@ -468,14 +467,10 @@ my $prev_chrom = 0;
 my $progressbar;
 my $next_update = 0;
 if ($progress) {
-    my $count = $total_variants ? $total_variants * 3 : -1;
-    $progressbar = Term::ProgressBar->new(
-        {
-            name  => "Filtering",
-            count => $count,
-
-            #ETA   => "linear",
-        }
+    ($progressbar, $total_variants) = VcfhacksUtils::getProgressBar(
+        input  => $vcf,
+        name   => "Filtering",
+        factor => 3,
     );
 }else{
     $time = strftime( "%H:%M:%S", localtime );
@@ -524,9 +519,7 @@ sub processLine{
     checkProgress(1);
     if ( $forks > 1 ) {
         push @lines_to_process, $line;
-        if ($progressbar) {
-            $next_update = $progressbar->update($n) if $n >= $next_update;
-        }
+        checkProgress();
         if ( @lines_to_process >= $buffer_size ) {
             process_buffer();
             @lines_to_process = ();
@@ -550,21 +543,14 @@ sub processLine{
 
 ################################################
 sub checkProgress{
-    return if not $progressbar;
+    return if not $progress;
     my $do_count_check = shift;
-    if ($total_variants > 0){
+    if ($progressbar) {
         $next_update = $progressbar->update($n) if $n >= $next_update;
     }elsif($do_count_check){#input from STDIN/pipe
-        if (not $variants_done % 10000) {
-            my $time = strftime( "%H:%M:%S", localtime );
-            $progressbar->message
-            ( 
-                "[INFO - $time] $variants_done variants read" 
-            );
-        }
+        VcfhacksUtils::simpleProgress($variants_done, " variants read" );
     }
 }
-
 
 ################################################
 sub process_buffer {
@@ -608,10 +594,8 @@ sub process_buffer {
                 if ( $res{filter} ) {
                     $filtered += $res{filter};
                 }
-                if ($progressbar) {
-                    $n += $res{batch_size};
-                    checkProgress();
-                }
+                $n += $res{batch_size};
+                checkProgress();
             }
             else {
                 die "[ERROR] no message received from child process $pid!\n";

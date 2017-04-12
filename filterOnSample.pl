@@ -11,7 +11,6 @@ use Sys::CPU;
 use Getopt::Long;
 use Pod::Usage;
 use Data::Dumper;
-use Term::ProgressBar;
 use POSIX qw/strftime/;
 use List::Util qw(sum);
 use FindBin qw($RealBin);
@@ -102,7 +101,7 @@ GetOptions(
     'num_matching=i',
     'h|?|help',
     'm|manual',
-    'b|progress:i',
+    'b|progress',
     'forks=i',
     'cache=i',
 ) or pod2usage(-message => "Syntax error", -exitval => 2);
@@ -191,23 +190,23 @@ print STDERR "[$time] INFO - Initializing input VCF...\n";
 my ($header, $first_var, $VCF)  = VcfReader::getHeaderAndFirstVariant($vcf);
 die "Header not ok for input ($vcf) "
     if not VcfReader::checkHeader( header => $header );
-if ( defined $progress ) {
-    $time = strftime( "%H:%M:%S", localtime );
-    if (-p $vcf or $vcf eq "-") {
-        print STDERR "[$time] INFO - - Input is from STDIN or pipe - will report progress per 10000 variants.\n";
-    }elsif($progress != 1){
-        $total_variants = VcfReader::countVariants($vcf);
-        print STDERR "[$time] INFO - $vcf has $total_variants variants.\n";
-    }
-}
 
 my %sample_to_col = VcfReader::getSamples(
         get_columns => 1,
         header      => $header,
 );
 
+my $progressbar;
+my $next_update = 0;
+if (defined $progress) {
+    ($progressbar, $total_variants) = VcfhacksUtils::getProgressBar(
+        input  => $vcf,
+        name   => "Filtering",
+        factor => 3,
+    );
+}
 $time = strftime( "%H:%M:%S", localtime );
-print STDERR "[$time] INFO - Finished initializing input VCF\n";
+print STDERR "\n[$time] INFO - Finished initializing input VCF\n";
 
 my @not_found       = ();
 my @samples_checked = ();
@@ -263,18 +262,6 @@ else {
     $OUT = \*STDOUT;
 }
 
-my $progressbar;
-my $next_update = 0;
-if (defined $progress) {
-    my $count = $total_variants ? $total_variants * 3 : -1;
-    $progressbar = Term::ProgressBar->new(
-        {
-            name  => "Filtering",
-            count => $count,
-            ETA   => "linear",
-        }
-    );
-}
 my $meta_head = join("\n", grep {/^##/} @$header);
 print $OUT "$meta_head\n";
 print $OUT VcfhacksUtils::getOptsVcfHeader(%opts) . "\n"; 
@@ -343,19 +330,14 @@ sub processLine{
 
 ################################################
 sub checkProgress{
-    return if not $progressbar;
+    return if not defined $progress;
     my $do_count_check = shift;
-    if ($total_variants > 0){
+    if ($progressbar) {
         $next_update = $progressbar->update($n) if $n >= $next_update;
     }elsif($do_count_check){#input from STDIN/pipe
-        if (not $variants_done % 10000) {
-            my $time = strftime( "%H:%M:%S", localtime );
-            $progressbar->message( "[INFO - $time] $variants_done variants read" );
-        }
+        VcfhacksUtils::simpleProgress($variants_done, " variants read" );
     }
 }
-
-
 
 ################################################
 sub process_buffer {
@@ -914,7 +896,7 @@ Cache size. Variants are processed in batches to allow for efficient parallelisa
 
 =item B<-b    --progress>
 
-Show a progress bar. Add 1 after this option to report progress for every 10,000 variants instead of counting total variants in the VCF and showing a bar (prevents startup delay for large files).
+Show progress. 
 
 =item B<-h    --help>
 

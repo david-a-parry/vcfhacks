@@ -233,7 +233,7 @@ my $total_vars       = 0;
 my $var_count        = 0;
 my $functional_count = 0;
 if ($opts{b}) {
-    $progressbar = getProgressBar();
+    $progressbar = VcfhacksUtils::getProgressBar(input => $opts{i});
 }
 
 processByLine();
@@ -268,6 +268,9 @@ sub processByLine{
     updateProgressBar();  
     close $OUT;
 
+    if ($opts{b} and not $progressbar){
+        print STDERR "\r$var_count variants processed...\n";
+    }
     informUser
     (
         "$functional_count variants matching criteria found from $var_count total".
@@ -484,10 +487,10 @@ CSQ:    foreach my $annot (@a_csq){
                         $alleles[0],
                         $alleles[$j],
                         $annot->{$symbol_id},
-                        $annot->{$gene_id},
+                        $annot->{$gene_id} ,
                         $t,
-                        $annot->{$hgvsc},
-                        $annot->{$hgvsp},
+                        $annot->{$hgvsc} || '.',
+                        $annot->{$hgvsp} || '.',
                         scalar(@cases_with_allele),
                         scalar(@conts_with_allele),
                         join(",", @cases_with_allele) || '.',
@@ -966,33 +969,8 @@ sub updateProgressBar{
         if ($var_count >= $next_update){
             $next_update = $progressbar->update( $var_count )
         }
-    }
-}
-
-#################################################
-sub getProgressBar{
-    my $msg = <<EOT
-WARNING: -b/--progress option requires installation of the perl module 'Term::ProgressBar'.
-WARNING: 'Term::ProgressBar' module was not found. No progress will be shown.
-EOT
-;
-    eval "use Term::ProgressBar; 1 " or informUser($msg) and return;
-    
-    if ( $opts{i} eq "-" ) {
-        informUser("Can't use -b/--progress option when input is from STDIN\n");
-        return;
-    }else{
-        informUser("Counting variants in input for progress monitoring.\n"); 
-        $total_vars = VcfReader::countVariants($opts{i});
-        informUser("$opts{i} has $total_vars variants.\n");
-        return Term::ProgressBar->new
-        (
-            {
-                name  => "Filtering",
-                count => $total_vars,
-                ETA   => "linear",
-            }
-        );
+    }elsif($opts{b}){
+        VcfhacksUtils::simpleProgress($var_count);
     }
 }
 

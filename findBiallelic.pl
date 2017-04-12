@@ -271,28 +271,10 @@ my $next_update = 0;
 my $total_vars  = 0; 
 my $var_count   = 0;
 if ($opts{b}) {
-    if ( $opts{i} eq "-" ) {
-        informUser("Can't use -b/--progress option when input is from STDIN\n");
-    }else{
-        my $msg = <<EOT
-WARNING: -b/--progress option requires installation of the perl module 'Term::ProgressBar'.
-WARNING: 'Term::ProgressBar' module was not found. No progress will be shown.
-EOT
-;
-        eval "use Term::ProgressBar; 1 " or informUser($msg);
-        if (not $@){
-            informUser("Counting variants in input for progress monitoring.\n"); 
-            $total_vars = VcfReader::countVariants($opts{i});
-            informUser("$opts{i} has $total_vars variants.\n");
-            $progressbar = Term::ProgressBar->new(
-                {
-                    name  => "Biallelic",
-                    count => $total_vars,
-                    ETA   => "linear",
-                }
-            );
-        }
-    }
+    ($progressbar, $total_vars) = VcfhacksUtils::getProgressBar(
+        input  => $opts{i},
+        name   => "Biallelic",
+    );
 }
 
 ######READ VARIANTS AND PROCESS######
@@ -1918,6 +1900,8 @@ sub updateProgressBar{
         if ($var_count >= $next_update){
             $next_update = $progressbar->update( $var_count )
         }
+    }elsif($opts{b}){
+        VcfhacksUtils::simpleProgress($var_count, " variants processed" );
     }
 }
 

@@ -5,7 +5,6 @@ use Parallel::ForkManager;
 use Getopt::Long qw(:config no_ignore_case);
 use Sys::CPU;
 use Pod::Usage;
-use Term::ProgressBar;
 use Data::Dumper;
 use List::MoreUtils qw(first_index);
 use POSIX qw/strftime/;
@@ -118,14 +117,23 @@ print STDERR "[$time] INFO - Initializing input VCF...\n";
 my ($header, $first_var, $VCF)  = VcfReader::getHeaderAndFirstVariant($opts{input});
 die "Header not ok for input ($opts{input}) "
     if not VcfReader::checkHeader( header => $header );
-if ( defined $opts{progress} and not -p $opts{input} and  $opts{input} ne '-') {
-    $total_vcf = VcfReader::countVariants( $opts{input} );
-    $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "\n[$time] INFO - $opts{input} has $total_vcf variants.\n";
-}elsif(defined $opts{progress}){
-    $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "\n[$time] INFO - Input is from STDIN or pipe - will report progress per 10000 variants.\n";
+
+my $prog_total = -1;
+if ( $opts{progress} ){
+    my $x_prog = 3;
+    $x_prog = 4 if $KNOWN;
+    my $name = "Annotating";
+    if ( $opts{build} || $freq ) {
+        $name = "Filtering";
+    }
+    ($progressbar, $total_vcf) = VcfhacksUtils::getProgressBar(
+        input  => $opts{input},
+        name   => $name,
+        factor => $x_prog,
+    );
+    #$progressbar->minor(0);
 }
+
 my %sample_to_col = ();
 if (@samples) {
     %sample_to_col = VcfReader::getSamples(
@@ -251,27 +259,6 @@ elsif ( $opts{pathogenic} ) {
 "WARNING: --pathogenic flag acheives nothing if neither --build or --freq filtering is in effect and --known_out output is not specified\n";
     }
 }
-my $prog_total = -1;
-my $x_prog = 3;
-$x_prog = 4 if $KNOWN;
-if ( defined $opts{progress}){
-    my $name = "Annotating";
-    if ( $opts{build} || $freq ) {
-        $name = "Filtering";
-    }
-    if ($total_vcf ) {
-        $prog_total = $total_vcf * $x_prog;
-    }
-    $progressbar = Term::ProgressBar->new(
-        { 
-          name => $name,
-          count => ($prog_total), 
-          ETA => "linear" 
-        } 
-    );
-    #$progressbar->minor(0);
-}
-
 my $n                = 0;
 my $vars             = 0;
 my @lines_to_process = ();
@@ -376,15 +363,12 @@ sub print_header{
 
 ################################################
 sub checkProgress{
-    return if not $progressbar;
+    return if not $opts{progress};
     my $do_count_check = shift;
-    if ($prog_total > 0){
+    if ($progressbar) {
         $next_update = $progressbar->update($n) if $n >= $next_update;
     }elsif($do_count_check){#input from STDIN/pipe
-        if (not $vars % 10000) {
-            my $time = strftime( "%H:%M:%S", localtime );
-            $progressbar->message( "[INFO - $time] $vars variants read" );
-        }
+        VcfhacksUtils::simpleProgress($vars, " variants read" );
     }
 }
 

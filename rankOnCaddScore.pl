@@ -7,7 +7,6 @@ use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use Getopt::Long;
 use Pod::Usage;
 use Data::Dumper;
-use Term::ProgressBar;
 use Bio::DB::HTS::Tabix; 
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
@@ -71,8 +70,6 @@ foreach my $cadd_file (@{$opts{cadd_file}}){
 my ($header, $first_var, $VCF)  = VcfReader::getHeaderAndFirstVariant($opts{input});
 die "Header not ok for input ($opts{input}) "
     if not VcfReader::checkHeader( header => $header );
-my $total_vcf = VcfReader::countVariants( $opts{input} ) if defined $opts{progress};
-print STDERR "$opts{input} has $total_vcf variants\n" if defined $opts{progress};
 my $NOT_FOUND;
 if ($opts{not_found}){
     open ($NOT_FOUND, ">$opts{not_found}") or die "Can't open $opts{not_found} for writing: $!\n";
@@ -94,16 +91,15 @@ my $filtered  = 0;
 my $progressbar;
 my $next_update = 0;
 my $time = strftime("%H:%M:%S", localtime);
-print STDERR "CADD annotation commencing: $time\n";
+my $total_vcf = 0;
+ VcfReader::countVariants( $opts{input} ) if defined $opts{progress};
 if (defined $opts{progress} and $total_vcf){
-    $progressbar = Term::ProgressBar->new
-    (
-        {
-            name => "Annotating", 
-            count => $total_vcf, 
-            ETA => "linear", 
-        }
+    ($progressbar, $total_vcf) = VcfhacksUtils::getProgressBar(
+        input  => $opts{input},
+        name => "Annotating", 
     );
+}else{
+    print STDERR "CADD annotation commencing: $time\n";
 }
 processLine($first_var); 
 while (my $line = <$VCF>){
@@ -170,11 +166,9 @@ sub processLine{
             }
         }
     }
-    if (defined $opts{progress}){
-           $next_update = $progressbar->update($n) if $n >= $next_update;
-    }
+    updateProgress();
 }
-if (defined $opts{progress} and $total_vcf){
+if ($progressbar){
     $progressbar->update($total_vcf) if $total_vcf >= $next_update;
 }
 
@@ -229,6 +223,17 @@ print STDERR "$scored alleles scored\n";
 print STDERR "$not_found alleles not found.\n";
 if ($opts{filter}){
     print STDERR "$filtered variants filtered on CADD score.\n";
+}
+
+##########################
+sub updateProgress{
+    if ($progressbar) {
+        if ($n >= $next_update){
+            $next_update = $progressbar->update( $n )
+        }
+    }elsif($opts{progress}){
+        VcfhacksUtils::simpleProgress($n, " variants processed" );
+    }
 }
 
 ##########################

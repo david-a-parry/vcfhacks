@@ -307,7 +307,10 @@ my $total_vars       = 0;
 my $var_count        = 0;
 my $functional_count = 0;
 if ($opts{b}) {
-    $progressbar = getProgressBar();
+    $progressbar = VcfhacksUtils::getProgressBar(
+        input => $opts{i}, 
+        name  => "filtering",
+    );
 }
 
 if ($opts{t}){
@@ -368,6 +371,9 @@ sub processByLine{
     outputGeneList();
     close $OUT;
 
+    if ($opts{b} and not $progressbar){
+        print STDERR "\r$var_count variants processed...\n";
+    }
     informUser
     (
         "$functional_count variants matching criteria found from $var_count total".
@@ -1666,45 +1672,8 @@ sub updateProgressBar{
         if ($var_count >= $next_update){
             $next_update = $progressbar->update( $var_count )
         }
-    }
-}
-
-#################################################
-sub getProgressBar{
-    my $msg = <<EOT
-WARNING: -b/--progress option requires installation of the perl module 'Term::ProgressBar'.
-WARNING: 'Term::ProgressBar' module was not found. No progress will be shown.
-EOT
-;
-    eval "use Term::ProgressBar; 1 " or informUser($msg) and return;
-    
-    if ($opts{t}){
-        my $ts = keys %targets;
-        informUser("Processing $ts gene targets\n");
-        return Term::ProgressBar->new
-        (
-            {
-                name  => "Filtering",
-                count => $ts, 
-                ETA   => "linear",
-            }
-        );
-    }
-    if ( $opts{i} eq "-" ) {
-        informUser("Can't use -b/--progress option when input is from STDIN\n");
-        return;
-    }else{
-        informUser("Counting variants in input for progress monitoring.\n"); 
-        $total_vars = VcfReader::countVariants($opts{i});
-        informUser("$opts{i} has $total_vars variants.\n");
-        return Term::ProgressBar->new
-        (
-            {
-                name  => "Filtering",
-                count => $total_vars,
-                ETA   => "linear",
-            }
-        );
+    }elsif($opts{b}){
+        VcfhacksUtils::simpleProgress($var_count);
     }
 }
 

@@ -5,7 +5,6 @@ use POSIX qw/strftime/;
 use Data::Dumper;
 use FindBin qw($RealBin);
 use List::Util qw(first sum max);
-use Term::ProgressBar;
 use Getopt::Long;
 use Pod::Usage;
 use lib "$RealBin/lib";
@@ -57,21 +56,12 @@ if ( $opts{o} ) {
 my $progressbar;
 my $next_update      = 0;
 my $total_vcf        = 0;
-my $time = strftime( "%H:%M:%S", localtime );
 
-if ( defined $opts{p} and not -p $opts{i} and  $opts{i} ne '-') {
-    informUser("Counting variants for progress reporting...\n");
-    $total_vcf = VcfReader::countVariants( $opts{i} );
-    informUser("$opts{i} has $total_vcf variants.\n");
-    $progressbar = Term::ProgressBar->new(
-        { name => "Analyzing", 
-          count => ($total_vcf), 
-          ETA => "linear" 
-        } 
+if ( $opts{p} ){
+    ($progressbar, $total_vcf) = VcfhacksUtils::getProgressBar(
+        input  => $opts{input},
+        name   => "Analyzing",
     );
-}elsif(defined $opts{p}){
-    $time = strftime( "%H:%M:%S", localtime );
-    informUser("Input is from STDIN or pipe - will report progress per 10000 variants.\n");
 }else{
     print STDERR "Processing variants...\n";
 }
@@ -79,21 +69,27 @@ if ( defined $opts{p} and not -p $opts{i} and  $opts{i} ne '-') {
 print_header();
 print $OUT filterGts($first_var);
 my $n = 1;
-if ($progressbar){
-    $next_update = $progressbar->update($n) if $n >= $next_update;
-}
+updateProgress();
 while (my $l = <$VCF>){
     next if $l =~ /^#/;
     $n++;
     chomp $l;
     print $OUT filterGts($l);
-    if ($progressbar){
-        $next_update = $progressbar->update($n) if $n >= $next_update;
-    }
-    
+    updateProgress();
 } 
 close $VCF;
 close $OUT;
+
+################################################
+sub updateProgress{
+    return if not $opts{p};
+    if ($progressbar) {
+        $next_update = $progressbar->update($n) if $n >= $next_update;
+    }else{
+        VcfhacksUtils::simpleProgress($n, " variants processed" );
+    }
+}
+
 ################################################
 sub filterGts{
     my $line = shift;
