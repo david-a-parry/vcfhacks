@@ -20,6 +20,7 @@ use strict;
 use warnings;
 use Carp;
 use File::Basename; 
+use POSIX qw/strftime/;
 use FindBin qw($RealBin);
 
 my $data_dir = "$RealBin/data";
@@ -448,7 +449,6 @@ sub evalFilter{
 
 =head2 Misc Utilities
 
-
 =over 12
 
 =item B<removeDups>
@@ -462,6 +462,128 @@ Remove duplicate entries from an array.
 sub removeDups{
     my %seen = ();
     return grep { ! $seen{$_}++ } @_;
+}
+
+=item B<getProgressBar>
+
+Given an input file return a progress bar and total number of variants if 
+Term::Progressbar is installed and input file is not STDIN, pipe or huge. 
+Otherwise returns 0.
+
+Arguments
+
+=over 16
+
+=item input
+
+Input VCF filename or filehandle. Required.
+
+=item total
+
+Number to use as total for progressbar - providing this argument stops any 
+calculation from input and will return a progressbar regardless of input type 
+or size.
+
+=item name
+
+Name for progressbar. Default = "processing".
+
+=item factor
+
+Multiply total count calculated from input by this number. Default = 1.
+
+=back
+
+ my ($bar, $total) = VcfhacksUtils::getProgressBar(input => $vcf, namne =>  "filtering");
+
+=cut
+
+sub getProgressBar{
+    my %args = @_;
+    croak "input or total argument is required for getProgressBar method " 
+      if not defined $args{input} and not defined $args{total};
+    $args{name}   ||= "Processing";
+    $args{factor} ||= 1;
+    my $msg = <<EOT
+WARNING: 'Term::ProgressBar' module was not found. Progress will be displayed 
+as the number of variants processed.
+EOT
+    ;
+    eval "use Term::ProgressBar; 1 " or informUser($msg) and return;
+    if ($args{total}){
+        return (
+            Term::ProgressBar->new
+            (
+                {
+                    name  => $args{name},
+                    count => $args{total} * $args{factor},
+                    ETA   => "linear",
+                }
+            ), 
+            $args{total}
+            );
+    }
+    if ( $args{input} eq "-" or -p $args{input}) {
+        informUser(
+            "Progress will be shown as counts of variants processed ".
+            "when input is from STDIN or pipe\n"
+        );
+    }elsif( ($args{input} =~ /\.(b)*gz$/ and -s $args{input} > 500*1024*1024 ) or 
+            ($args{input} !~ /\.(b)*gz$/ and -s $args{input} > 4*1024*1024*1024 ) ) {
+        informUser( "Input file size is large - progress will be shown as ".
+                    "counts of variants processed.\n"
+        );
+    }else{
+        informUser("Counting variants in input for progress monitoring.\n"); 
+        my $total_vars = VcfReader::countVariants($args{input});
+        informUser("$args{input} has $total_vars variants.\n");
+        return Term::ProgressBar->new
+        (
+            {
+                name  => $args{name},
+                count => $total_vars * $args{factor},
+                ETA   => "linear",
+            }
+        );
+    }
+    return 0;
+}
+
+#################################################
+sub informUser{
+    my $msg = shift;
+    my $time = strftime( "%H:%M:%S", localtime );
+    print STDERR "[INFO - $time] $msg";
+}
+
+=item B<simpleProgress>
+
+Print an updating progress count to STDERR
+    
+Takes the current count as first argument and an optional second argument as 
+the message to output alongside the count (default = "variants processed...").
+
+ while (<$FH>){
+     ...
+     VcfhacksUtils::simpleProgress(++$n, "variants converted...");
+ } 
+
+=cut
+
+sub simpleProgress{
+    my ($count, $msg) = @_;
+    $msg ||= "variants processed...";
+    local $| = 0;
+    my $mod = 1;
+    if ($count >= 100000){
+        $mod = 100;
+    }elsif($count > 0){
+        my $exp = int ( log($count)/log(10)); 
+        $mod *= 10**($exp-2);
+    }
+    if ($mod  < 1 or not $count % $mod){
+        print STDERR "\r$count $msg";
+    }
 }
 
 =back
