@@ -23,6 +23,7 @@ my @modules = qw /
     JSON 
     Excel::Writer::XLSX 
     Sort::External
+    Statistics::R
 / ;
 
 print STDERR "Attempting to start and configure CPAN...\n";
@@ -108,15 +109,15 @@ sub doNonCpan{
         print STDERR "Attempting to install Bio::DB::HTS...\n";
         print STDERR "Retrieving tarball from cpan...\n";
         my $success  = 0;
-        if (runSystemCommand("$get http://search.cpan.org/CPAN/authors/id/R/RI/RISHIDEV/Bio-DB-HTS-2.5.tar.gz")){
-            if (runSystemCommand("tar xvf Bio-DB-HTS-2.5.tar.gz")){
-                chdir "Bio-DB-HTS-2.5" or die "Could not cd to Bio-DB-HTS-2.5 dir: $!\n";
+        if (runSystemCommand("$get http://search.cpan.org/CPAN/authors/id/R/RI/RISHIDEV/Bio-DB-HTS-2.7.tar.gz")){
+            if (runSystemCommand("tar xvf Bio-DB-HTS-2.7.tar.gz")){
+                chdir "Bio-DB-HTS-2.7" or die "Could not cd to Bio-DB-HTS-2.7 dir: $!\n";
                 $success = runSystemCommand("perl INSTALL.pl");
                 chdir "..";
-                remove_tree("Bio-DB-HTS-2.5") 
-                 or warn "Error removing Bio-DB-HTS-2.5 directory: $!\n";
+                remove_tree("Bio-DB-HTS-2.7") 
+                 or warn "Error removing Bio-DB-HTS-2.7 directory: $!\n";
             }
-            unlink("Bio-DB-HTS-2.5.tar.gz") or warn "Error removing Bio-DB-HTS-2.5.tar.gz: $!\n";
+            unlink("Bio-DB-HTS-2.7.tar.gz") or warn "Error removing Bio-DB-HTS-2.7.tar.gz: $!\n";
         }
         push @fails, "Bio::DB::HTS" if not $success;
     }
