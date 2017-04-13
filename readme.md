@@ -55,6 +55,7 @@ Other perl modules required by these scripts are installable via CPAN - perl wil
     JSON (geneAnnotator.pl for remote retrieval of gene IDs only)
     Excel::Writer::XLSX (annovcfToSimple.pl only)
     Bio::DB::Sam (hgmdMartToVcf.pl only)
+    Statistics::R (geneBurdenTest.pl only)
 
 An experimental script is also provided to attempt to automate the installation of the required modules. This requires developer tools to be installed (e.g. xcode on Mac OS X or base-devel on debian/ubuntu systems) and for your CPAN installation to be functioning. To try automated install of these modules try the following (prefix with sudo if you have sudo priveleges and require system-wide installation): 
     
