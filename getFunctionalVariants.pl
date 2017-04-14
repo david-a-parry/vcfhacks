@@ -1530,7 +1530,7 @@ sub getAndCheckInSilicoPred{
     return if not @damaging;
     my %filters = VcfhacksUtils::getAndCheckInSilicoPred($opts{m}, \@damaging);
     if ($opts{m} eq 'vep'){#VEP prediction results will be in CSQ field
-        foreach my $d (@damaging){
+        foreach my $d (keys %filters){
             if ($d ne 'all' and not exists $csq_header{$d}){
                 informUser
                 (
@@ -1543,7 +1543,21 @@ sub getAndCheckInSilicoPred{
                    grep { exists $csq_header{$_} } 
                    keys %filters;
         push @csq_fields, keys %filters;
-    }#SnpEff predictions will be added via SnpSift
+    }else{#SnpEff predictions will be added via SnpSift
+        foreach my $d (keys %filters){
+            if (not exists $info_fields{$d}){
+                informUser
+                (
+                    "WARNING: No '$d' field found in INFO fields of VCF. ".
+                    "No in silico filtering will be performed for $d. Did ".
+                    "you annotate with SnpSift?\n"
+                ); 
+            }
+            %filters = map  { $_ => $filters{$_} } 
+                       grep { exists $info_fields{$_} } 
+                       keys %filters;
+        }
+    }
     return %filters;
 }
 
