@@ -1443,6 +1443,7 @@ sub getCsqFields{
         if ($opts{consensus_splice_site}){
             push @fields, "splice_consensus";
         }
+        
     }else{
         @fields = 
         qw(
@@ -1463,6 +1464,14 @@ sub getCsqFields{
             );
             delete $opts{canonical_only};
         }
+        if ($opts{consensus_splice_site}){
+            informUser
+            ( 
+                "WARNING: --consensus_splice_site option is ignored when ".
+                "working with SnpEff annotations.\n"
+            );
+            delete $opts{consensus_splice_site};
+        }
     }
     foreach my $f (@fields){
         if (not exists $csq_header{$f}){
@@ -1472,8 +1481,8 @@ sub getCsqFields{
                   "running VEP.\n";
             }
             die "Could not find '$f' field in $opts{m} consequence header " .
-              "- please ensure you have annotated your file including the appropriate ".
-              "fields.\n";
+              "- please ensure you have annotated your file including the ".
+              "appropriate fields.\n";
         }
     }
     return @fields;
