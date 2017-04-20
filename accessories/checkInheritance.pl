@@ -8,9 +8,10 @@ use Pod::Usage;
 use Term::ProgressBar;
 use Data::Dumper;
 use FindBin qw($RealBin);
-use lib "$RealBin/lib";
+use lib "$RealBin/../lib";
+use lib "$RealBin/../lib/dapPerlGenomicLib";
 use ParsePedfile;
-use VcfReader;
+use VcfReader 0.3;
 
 my %opts = ();
 GetOptions(
@@ -26,8 +27,8 @@ GetOptions(
     'm|manual'
 ) or pod2usage( -message => "Syntax error", exitval => 2 );
 
-pod2usage( -verbose => 2 ) if $opts{m};
-pod2usage( -verbose => 1 ) if $opts{h};
+pod2usage( -verbose => 2, -exitval => 0  ) if $opts{m};
+pod2usage( -verbose => 1, -exitval => 0  ) if $opts{h};
 pod2usage( -message => "Syntax error: --input is required.", exitval => 2 )
   if not $opts{i};
 pod2usage( -message => "Syntax error: a pedigree file must be passed to the --family argument.", exitval => 2 )

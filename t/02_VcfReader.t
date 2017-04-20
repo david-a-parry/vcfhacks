@@ -1,8 +1,9 @@
 use strict;
 use warnings;
-use Test::More tests => 27;
+use Test::More tests => 28;
 use FindBin qw($RealBin);
 use lib "$RealBin/../lib";
+use lib "$RealBin/../lib/dapPerlGenomicLib";
 use lib "$RealBin/../lib/Bioperl";
 use lib "$RealBin/../lib/BioASN1EntrezGene/lib";
 BEGIN 
@@ -33,6 +34,13 @@ ok
 (
     my $FH = VcfReader::openVcf($vcf), 
     "use openVcf to return a filehandle"
+);
+$n_tests++; 
+
+ok 
+(
+    my $BH = VcfReader::openVcf($gz), 
+    "use openVcf to return a filehandle from a compressed VCF"
 );
 $n_tests++; 
 

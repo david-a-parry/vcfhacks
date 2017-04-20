@@ -4,14 +4,13 @@ use strict;
 use Parallel::ForkManager;
 use Getopt::Long;
 use Pod::Usage;
-use Term::ProgressBar;
 use Data::Dumper;
 use POSIX qw/strftime/;
 use Sys::CPU;
 use List::Util qw(sum);
 use FindBin qw($RealBin);
-use lib "$RealBin/lib";
-use VcfReader;
+use lib "$RealBin/lib/dapPerlGenomicLib";
+use VcfReader 0.3;
 
 my $minGQ = 0;
 my $cpus  = Sys::CPU::cpu_count();
@@ -30,8 +29,8 @@ GetOptions(
     "forks=i" => \$forks,
     "cache=i" => \$buffer_size,
 ) or pod2usage( -exitval => 2, -message => "Syntax error" );
-pod2usage( -verbose => 2 ) if $opts{manual};
-pod2usage( -verbose => 1 ) if $opts{help};
+pod2usage( -verbose => 2, -exitval => 0  ) if $opts{manual};
+pod2usage( -verbose => 1, -exitval => 0  ) if $opts{help};
 pod2usage( -exitval => 2, -message => "Syntax error" )  if not $opts{input};
 if ($opts{genotype_quality}){
     $minGQ = $opts{genotype_quality} 
@@ -69,12 +68,18 @@ print STDERR "[$time] Initializing input VCF... ";
 die "Header not ok for input ($opts{input}) "
     if not VcfReader::checkHeader( vcf => $opts{input} );
 if ( defined $opts{progress} ) {
-    $total_vcf = VcfReader::countVariants( $opts{input} );
-    print STDERR "$opts{input} has $total_vcf variants. ";
+    my $f = 1;
+    if ($forks){
+        $f = 3;
+    }
+    ($progressbar, $total_vcf) = VcfhacksUtils::getProgressBar(
+        input  => $opts{input},
+        name   => "Converting",
+        factor => $f,
+    );
 }
 my %contigs = ();
 if ($forks){
-    $total_vcf *= 3;
     %contigs = VcfReader::getContigOrder($opts{input});
 }
 
@@ -128,16 +133,9 @@ if (defined $opts{keep_calls}){
 }else{
     print $OUT "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n";
 }
-$time = strftime( "%H:%M:%S", localtime );
-print STDERR "[$time] Conversion starting\n";
-
-if ( defined $opts{progress} and $total_vcf ) {
-    $progressbar = Term::ProgressBar->new(
-        { name => "Converting", 
-          count => ($total_vcf), 
-          ETA => "linear" 
-        } 
-    );
+if (not $progressbar){
+    $time = strftime( "%H:%M:%S", localtime );
+    print STDERR "[$time] Conversion starting\n";
 }
 
 my $n   = 0;
@@ -159,16 +157,14 @@ VAR: while ( my $line = <$VCF> ) {
         my $l = convertCallsToInfo( \@split_line);
         print $OUT join("\t", @$l) ."\n";
     }
-    if ($progressbar) {
-        $next_update = $progressbar->update($n) if $n >= $next_update;
-    }
+    updateProgress();
 }
 if ($forks){
     process_buffer();
 }
 close $VCF;
 close $OUT;
-if ( defined $opts{progress} ) {
+if ( $progressbar ) {
     $progressbar->update($total_vcf) if $total_vcf >= $next_update;
 }
 $time = strftime( "%H:%M:%S", localtime );
@@ -216,11 +212,8 @@ sub process_buffer {
                 }else{
                     die "Unexpected return from child process $pid:\n". Dumper %res;
                 }
-                if ($progressbar) {
-                    $n += $res{batch_size};
-                    $next_update = $progressbar->update($n)
-                      if $n >= $next_update;
-                }
+                $n += $res{batch_size};
+                updateProgress();
             }
             else {
                 die "ERROR: no message received from child process $pid!\n";
@@ -248,19 +241,26 @@ sub process_buffer {
                 else {
                     print $OUT "$l\n";
                 }
-                if ($progressbar) {
-                    $n += $incr_per_line;
-                    $next_update = $progressbar->update($n)
-                      if $n >= $next_update;
-                }
+                $n += $incr_per_line;
+                updateProgress();
             }
         }
     }
     else {
-        if ($progressbar) {
-            $n += @lines_to_process;
-            $next_update = $progressbar->update($n) if $n >= $next_update;
+        $n += @lines_to_process;
+        updateProgress();
+    }
+}
+
+
+################################################
+sub updateProgress{
+    if ($progressbar) {
+        if ($n >= $next_update){
+            $next_update = $progressbar->update( $n )
         }
+    }elsif($opts{progress}){
+        VcfhacksUtils::simpleProgress($n, " variants converted" );
     }
 }
 

@@ -6,8 +6,8 @@ use Getopt::Long;
 use Pod::Usage;
 use Data::Dumper;
 use FindBin qw($RealBin);
-use lib "$RealBin/lib";
-use VcfReader;
+use lib "$RealBin/lib/dapPerlGenomicLib";
+use VcfReader 0.3;
 
 my @samples = ();
 my %opts = (s => \@samples);

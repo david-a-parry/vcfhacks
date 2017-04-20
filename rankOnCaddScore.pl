@@ -7,14 +7,12 @@ use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use Getopt::Long;
 use Pod::Usage;
 use Data::Dumper;
-use Term::ProgressBar;
 use Bio::DB::HTS::Tabix; 
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
-use ParseVCF;
-
-#TO DO - allow multiple cadd files, do not annotate if exact variant not found
-#and optionally output not found variants to separate file
+use lib "$RealBin/lib/dapPerlGenomicLib";
+use VcfReader 0.3;
+use VcfhacksUtils;
 
 my @cadd_files = ();
 my @cadd_dirs = ();
@@ -34,8 +32,8 @@ GetOptions(
         "manual|m",
         ) or pod2usage(-message => "Syntax Error.", exitval => 2);
 
-pod2usage(-verbose => 2) if $opts{manual};
-pod2usage(-verbose => 1) if $opts{help};
+pod2usage(-verbose => 2, -exitval => 0) if $opts{manual};
+pod2usage(-verbose => 1, -exitval => 0) if $opts{help};
 pod2usage(-message => "-i/--input argument is required", exitval => 2) if not $opts{input};
 pod2usage(-message => "Either -c/--cadd_file or -r/--dir argument is required", exitval => 2) if not @{$opts{cadd_file}} and not @{$opts{dir}};
 pod2usage(-message => "-f/--filter argument cannot be less than 0", exitval => 2) if defined $opts{filter} && $opts{filter} < 0;
@@ -69,9 +67,9 @@ foreach my $cadd_file (@{$opts{cadd_file}}){
     $cadd_iters{$cadd_file} = Bio::DB::HTS::Tabix->new(filename =>  $cadd_file);
 }
 
-my $vcf_obj = ParseVCF->new(file=> $opts{input});
-my $total_vcf = $vcf_obj->countLines("variants") if defined $opts{progress};
-print STDERR "$opts{input} has $total_vcf variants\n" if defined $opts{progress};
+my ($header, $first_var, $VCF)  = VcfReader::getHeaderAndFirstVariant($opts{input});
+die "Header not ok for input ($opts{input}) "
+    if not VcfReader::checkHeader( header => $header );
 my $NOT_FOUND;
 if ($opts{not_found}){
     open ($NOT_FOUND, ">$opts{not_found}") or die "Can't open $opts{not_found} for writing: $!\n";
@@ -82,47 +80,40 @@ if ($opts{output}){
 }else{
     $OUT = \*STDOUT;
 }
-print $OUT  $vcf_obj->getHeader(0);
-print $OUT "##INFO=<ID=CaddPhredScore,Number=A,Type=Float,Description=\"Variant site CADD phred score. ".
-    "Score provided for each allele and given as '.' if not found.\">\n";
-print $OUT "##rankOnCaddScore.pl=\"";
 
-my @opt_string = ();
-foreach my $k (sort keys %opts){
-    if (not ref $opts{$k}){
-        push @opt_string, "$k=$opts{$k}";
-    }elsif (ref $opts{$k} eq 'SCALAR'){
-        if (defined ${$opts{$k}}){
-            push @opt_string, "$k=${$opts{$k}}";
-        }else{
-            push @opt_string, "$k=undef";
-        }
-    }elsif (ref $opts{$k} eq 'ARRAY'){
-        if (@{$opts{$k}}){
-            push @opt_string, "$k=" .join(",", @{$opts{$k}});
-        }else{
-            push @opt_string, "$k=undef";
-        }
-    }
-}
+printHeader();
+
 my @variants = ();
-print $OUT join(" ", @opt_string) . "\"\n" .  $vcf_obj->getHeader(1);
-
-
-my $time = strftime("%H:%M:%S", localtime);
-print STDERR "CADD annotation commencing: $time\n";
 my $n         = 0; #variants/lines
 my $scored    = 0;
 my $not_found = 0;
 my $filtered  = 0;
 my $progressbar;
 my $next_update = 0;
+my $time = strftime("%H:%M:%S", localtime);
+my $total_vcf = 0;
+ VcfReader::countVariants( $opts{input} ) if defined $opts{progress};
 if (defined $opts{progress} and $total_vcf){
-    $progressbar = Term::ProgressBar->new({name => "Annotating", count => $total_vcf, ETA => "linear", });
+    ($progressbar, $total_vcf) = VcfhacksUtils::getProgressBar(
+        input  => $opts{input},
+        name => "Annotating", 
+    );
+}else{
+    print STDERR "CADD annotation commencing: $time\n";
 }
-while (my $line = $vcf_obj->readLine){
+processLine($first_var); 
+while (my $line = <$VCF>){
+    processLine($line); 
+}
+
+sub processLine{
+    my $line = shift;
+    next if $line =~ /^#/;
     $n++;
-    my %min_vars = $vcf_obj->minimizeAlleles();
+    chomp $line;
+    my @split = split("\t", $line, 9); #only need first 8 fields, possible 
+                                       #optimization for VERY long lines
+    my %min_vars = VcfReader::minimizeAlleles(\@split);
     #get score for each allele or '-' if it can't be found
     my @cadd_scores = findCaddScore(\%min_vars, \%cadd_iters);
     my @nf_alts = getAltsWithoutScore(\@cadd_scores, \%min_vars);
@@ -131,12 +122,23 @@ while (my $line = $vcf_obj->readLine){
         next if $min_vars{$al}->{ALT} eq '*';
         $not_found++;
         if ($opts{not_found}){
-            print $NOT_FOUND "$min_vars{$al}->{CHROM}\t$min_vars{$al}->{POS}".
-                "\t.\t$min_vars{$al}->{REF}\t$min_vars{$al}->{ALT}\n";
+            print $NOT_FOUND join
+            (
+                "\t", 
+                $min_vars{$al}->{CHROM},
+                $min_vars{$al}->{POS},
+                '.',
+                $min_vars{$al}->{REF},
+                $min_vars{$al}->{ALT},
+            ) . "\n";
         }
     }
-    my $max = ( sort {$b <=> $a} 
-                grep {! /^\.$/ } @cadd_scores)[0];
+    my $max = 
+    (
+        sort {$b <=> $a} 
+        grep {! /^\.$/ } 
+        @cadd_scores
+    )[0];
     #if there is no score set $max to -1 so it goes to bottom of the pile
     $max = -1 if not defined $max;
     if ($opts{filter}){
@@ -147,15 +149,16 @@ while (my $line = $vcf_obj->readLine){
             }
         }
     }
-    $line = $vcf_obj->addVariantInfoField
-        (
-            'CaddPhredScore', 
-            join(",", @cadd_scores),
-        );
+    my $out_line = VcfReader::addVariantInfoField 
+    (
+        line  => \@split,
+        id    => 'CaddPhredScore', 
+        value => join(",", @cadd_scores),
+    );
     if ($opts{do_not_rank}){
-        print $OUT "$line\n";
+        print $OUT join("\t", @$out_line ) . "\n";
     }else{
-        push @variants, sprintf("%-6s%s", $max, $line);
+        push @variants, sprintf("%-6s%s", $max, join("\t", @$out_line) );
         if ($sortex){#no Sort::External , sort in memory
             if (@variants > 99999){
                 $sortex->feed(@variants);
@@ -163,24 +166,30 @@ while (my $line = $vcf_obj->readLine){
             }
         }
     }
-    if (defined $opts{progress}){
-           $next_update = $progressbar->update($n) if $n >= $next_update;
-    }
+    updateProgress();
 }
-if (defined $opts{progress} and $total_vcf){
+if ($progressbar){
     $progressbar->update($total_vcf) if $total_vcf >= $next_update;
 }
+
 print STDERR "\nDone annotating CADD scores.\n";
-if (not $opts{do_not_rank}){
+unless ($opts{do_not_rank}){
     $n = 0;
     $next_update = 0;
+    if (defined $opts{progress} and $total_vcf){
+        $progressbar = Term::ProgressBar->new
+        (
+            {
+                name => "Writing", 
+                count => $total_vcf, 
+                ETA => "linear", 
+            }
+        );
+    }
     if ($sortex){
         $sortex->feed(@variants) if @variants;
         $sortex->finish;
         print STDERR "Writing output...\n";
-        if (defined $opts{progress} and $total_vcf){
-            $progressbar = Term::ProgressBar->new({name => "Writing", count => $total_vcf, ETA => "linear", });
-        }
         while ( defined( $_ = $sortex->fetch ) ) {
             print $OUT substr($_, 6) ."\n";
             $n++;
@@ -190,13 +199,11 @@ if (not $opts{do_not_rank}){
         }
     }else{
         print STDERR "Performing sort in memory...\n";
-        @variants = sort{
+        @variants = sort
+        {
             substr($b, 0, 6) <=> substr($a, 0, 6) 
         } @variants;#rev numeric sort CADD scores
         print STDERR "Writing output...\n";
-        if (defined $opts{progress} and $total_vcf){
-            $progressbar = Term::ProgressBar->new({name => "Writing", count => $total_vcf, ETA => "linear", });
-        }
         foreach my $var (@variants){
             print $OUT substr($var, 6) ."\n";
             $n++;
@@ -217,20 +224,39 @@ print STDERR "$not_found alleles not found.\n";
 if ($opts{filter}){
     print STDERR "$filtered variants filtered on CADD score.\n";
 }
+
+##########################
+sub updateProgress{
+    if ($progressbar) {
+        if ($n >= $next_update){
+            $next_update = $progressbar->update( $n )
+        }
+    }elsif($opts{progress}){
+        VcfhacksUtils::simpleProgress($n, " variants processed" );
+    }
+}
+
 ##########################
 sub findCaddScore{
     my ($vars, $tabix_iter) = @_;
     my @scores = ();#return score for each allele
 ALLELE: foreach my $al (sort {$a<=>$b} keys %{$vars}){
         foreach my $iter (keys %{$tabix_iter}){
-                my $it = $tabix_iter->{$iter}->query
-                    ("$vars->{$al}->{CHROM}:$vars->{$al}->{POS}-" .  
-                    ($vars->{$al}->{POS} + 1) );
+            my $it = $tabix_iter->{$iter}->query
+            ( 
+                "$vars->{$al}->{CHROM}:$vars->{$al}->{POS}-" . 
+                ($vars->{$al}->{POS} + 1) 
+            );
             while (my $result = $it->next){
                 chomp($result);
                 my @res = split("\t", $result);
                 next if $res[0] ne $vars->{$al}->{CHROM};
-                my ($pos, $ref, $alt) = reduceRefAlt($res[1], $res[2], $res[3]);
+                my ($pos, $ref, $alt) = VcfReader::reduceRefAlt
+                (
+                    $res[1], 
+                    $res[2], 
+                    $res[3]
+                );
                 next if ($vars->{$al}->{POS} != $pos);
                 next if ($vars->{$al}->{REF} ne $ref); #should we error here?
                 next if ($vars->{$al}->{ALT} ne $alt); #diff alt allele
@@ -246,11 +272,6 @@ ALLELE: foreach my $al (sort {$a<=>$b} keys %{$vars}){
 ##########################
 sub checkCaddFile{
     my ($file) = @_;
-    my $index = "$file.tbi";
-    if (not -e $index ){
-        die "Can't find tabix index for $file - please ensure $file is bgzip ".
-            "compressed and indexed with tabix.\n";
-    }
     if ($file !~ /\.gz$/){
         die "CADD file $file does not have a '.gz' extension and is ".
             "presumably not bgzip compressed. Please ensure to use a ".
@@ -259,6 +280,7 @@ sub checkCaddFile{
     my $FH = new IO::Uncompress::Gunzip $file or 
       die "IO::Uncompress::Gunzip failed while opening $file ".
       "for reading: \n$GunzipError";
+    my $valid_header = 0;
     while (my $line = <$FH>){
         if ($line =~ /^##/){
             next;
@@ -268,41 +290,22 @@ sub checkCaddFile{
                 "Expected to find a header as follows:\n\n".
                 "#Chrom\tPos\tRef\tAlt\tRawScore\tPHRED\n";
             }else{
-                return;
+                $valid_header++;
             }
         }else{
             last;
         }
     }
-    die "No header found for CADD file $file!\n";
-}
+    close $FH;
+    die "No valid header found for CADD file $file!\n" if not $valid_header;
 
-##########################
-sub reduceRefAlt{
-    #reduce a single ref/alt pair to their simplest representation
-    my ($pos, $ref, $alt) = @_;
-    if (length($ref) > 1 and length($alt) > 1){
-        #can only reduce if both REF and ALT are longer than 1
-        my @r = split('', $ref);
-        my @al = split('', $alt);
-        while ($r[-1] eq $al[-1] and @r > 1 and @al > 1){
-            #remove identical suffixes
-            pop @r;
-            pop @al;
-        }
-        while ($r[0] eq $al[0] and @r > 1 and @al > 1){
-            #remove identical prefixes
-            #increment position accordingly
-            shift @r;
-            shift @al;
-            $pos++;
-        }
-        $ref = join('', @r);
-        $alt = join('', @al);
+    my $index = "$file.tbi";
+    if (not -e $index ){
+        warn "No index found for $file - attempting to index with tabix...\n";
+        VcfReader::indexVcf($file);
+        warn "Done.\n";
     }
-    return ($pos, $ref, $alt);
 }
-
 
 ##########################
 sub getAltsWithoutScore{
@@ -318,6 +321,23 @@ sub getAltsWithoutScore{
     return @alts;
 }
 
+##########################
+sub printHeader{
+    my %inf_h  = 
+    (
+        ID          =>  "CaddPhredScore",
+        Number      =>  "A",
+        Type        =>  "Float",
+        Description =>  "Variant site CADD phred score. Score provided " . 
+                        "for each allele and given as '.' if not found.",
+    );
+    my @headstring = grep {/^##/} @$header;
+    push @headstring, VcfhacksUtils::getInfoHeader(%inf_h);
+    push @headstring, VcfhacksUtils::getOptsVcfHeader(%opts);  
+    push @headstring, "$header->[-1]";
+
+    print $OUT join("\n", @headstring) . "\n"; 
+}
 
 ##########################
 =head1 NAME

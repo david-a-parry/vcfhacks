@@ -5,14 +5,14 @@ use Parallel::ForkManager;
 use Getopt::Long;
 use Sys::CPU;
 use Pod::Usage;
-use Term::ProgressBar;
 use Data::Dumper;
 use List::Util qw (sum);
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use POSIX qw/strftime/;
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
-use VcfReader;
+use lib "$RealBin/lib/dapPerlGenomicLib";
+use VcfReader 0.3;
 use VcfhacksUtils;
 
 my @samples;
@@ -37,8 +37,8 @@ GetOptions(\%opts,
         "cache=i"      => \$buffer_size,
         "Progress",
         ) or pod2usage(-exitval => 2, -message => "Syntax error") ;
-pod2usage (-verbose => 2) if $opts{manual};
-pod2usage (-verbose => 1) if $opts{help};
+pod2usage (-verbose => 2, -exitval => 0) if $opts{manual};
+pod2usage (-verbose => 1, -exitval => 0) if $opts{help};
 
 pod2usage(-exitval => 2, -message => "Syntax error") if not $opts{input} or (not $opts{dir} and not @{$opts{esp_file}});
 if (defined $freq){
@@ -74,15 +74,19 @@ print STDERR "[$time] Initializing input VCF...\n";
 my ($header, $first_var, $VCF)  = VcfReader::getHeaderAndFirstVariant($opts{input});
 die "Header not ok for input ($opts{input}) "
     if not VcfReader::checkHeader( header => $header );
-if ( defined $opts{Progress} ) {
-    $time = strftime( "%H:%M:%S", localtime );
-    if (-p $opts{input} or $opts{input} eq "-" ) {
-        print STDERR "\n[$time] INFO - Input is from STDIN or pipe - will report progress per 10000 variants. ";
-    }else {
-        $total_vcf= VcfReader::countVariants($opts{input});
-        print STDERR "[$time] INFO - $opts{input} has $total_vcf variants.\n";
-    }
+
+my $prog_total;
+my $progressbar;
+my $next_update = 0;
+my $prev_percent = 0;
+if ( $opts{Progress} ) {
+    ($progressbar, $total_vcf) = VcfhacksUtils::getProgressBar(
+        input  => $opts{input},
+        name   => "Filtering",
+        factor => 3,
+    );
 }
+
 my %sample_to_col = ();
 if (@samples) {
     %sample_to_col = VcfReader::getSamples(
@@ -152,20 +156,6 @@ writeHeaders();
 $time = strftime("%H:%M:%S", localtime);
 print STDERR "[$time] EVS filter starting\n";
 
-my $prog_total;
-my $progressbar;
-my $next_update = 0;
-my $prev_percent = 0;
-if ( defined $opts{Progress} and $total_vcf ) {
-    $prog_total = $total_vcf * 3;
-    $progressbar = Term::ProgressBar->new(
-        #{ name => "Filtering", count => ($prog_total), ETA => "linear", } );
-        { name => "Filtering", 
-          count => ($prog_total), 
-          ETA => "linear",
-        } 
-    );
-}
 my $kept = 0; #variants not filtered
 my $filtered = 0; #variants filtered
 my $found = 0; #variants that match a known SNP
@@ -234,15 +224,12 @@ sub processLine{
 
 ################################################
 sub checkProgress{
-    return if not $progressbar;
+    return if not $opts{Progress};
     my $do_count_check = shift;
-    if ($prog_total > 0){
+    if ($progressbar) {
         $next_update = $progressbar->update($n) if $n >= $next_update;
     }elsif($do_count_check){#input from STDIN/pipe
-        if (not $vars % 10000) {
-            my $time = strftime( "%H:%M:%S", localtime );
-            $progressbar->message( "[INFO - $time] $vars variants read" );
-        }
+        VcfhacksUtils::simpleProgress($vars, " variants read" );
     }
 }
 
@@ -335,10 +322,8 @@ sub process_buffer {
             }
         }
     }else{
-        if ($progressbar) {
-            $n += @lines_to_process;
-            checkProgress();
-        }
+        $n += @lines_to_process;
+        checkProgress();
 
     }
 }
@@ -383,9 +368,7 @@ sub process_batch {
 sub filter_on_evs_maf{
     my ( $vcf_line, $search_args ) = @_;
     my %r = (keep => undef, found => 0, filter => 0);
-    if (defined $opts{Progress}){
-           $next_update = $progressbar->update($n) if $n >= $next_update;
-    }
+    checkProgress();
     my %min_vars       = VcfReader::minimizeAlleles($vcf_line);
     my %sample_alleles = ();
     if (@samples){

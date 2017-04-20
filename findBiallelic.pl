@@ -8,8 +8,9 @@ use List::Util qw ( first max min ) ;
 use POSIX qw/strftime/;
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
+use lib "$RealBin/lib/dapPerlGenomicLib";
 use ParsePedfile;
-use VcfReader;
+use VcfReader 0.3;
 use VcfhacksUtils;
 
 my $progressbar;
@@ -21,7 +22,7 @@ my @add_classes = ();
 my @damaging = ();
 my @biotypes = ();
 my @custom_af = ();
-my @score_filters = (); 
+my @eval_filters = (); 
 
 my %opts   = (
     s                => \@samples,
@@ -33,7 +34,7 @@ my %opts   = (
     biotype_filters  => \@biotypes,
     j                => \@custom_af,
     min_af_counts    => 0,
-    score_filters    => \@score_filters,
+    eval_filters    => \@eval_filters,
 );
 
 
@@ -70,7 +71,7 @@ GetOptions(
     "pl=f", 
     'q|quality=i',
     'r|reject=s{,}',    
-    "score_filters=s{,}",
+    "eval_filters=s{,}",
     'skip_unpredicted',
     's|samples=s{,}',
     'splice_prediction=s{,}',
@@ -83,8 +84,8 @@ GetOptions(
     'z|homozygous_only',
 ) or pod2usage( -message => "SYNTAX ERROR", exitval => 2 );
 
-pod2usage( -verbose => 2 ) if $opts{manual};
-pod2usage( -verbose => 1 ) if $opts{h};
+pod2usage( -verbose => 2, -exitval => 0 ) if $opts{manual};
+pod2usage( -verbose => 1, -exitval => 0 ) if $opts{h};
 
 ######SANITY CHECKS######
 pod2usage( -message => "SYNTAX ERROR: input is required.", exitval => 2 )
@@ -194,7 +195,7 @@ my %class_filters = map { $_ => undef } getAndCheckClasses();
 #check in silico prediction classes/scores are acceptable
 my %in_silico_filters = getAndCheckInSilicoPred();
   #hash of prediction program names and values to filter
-my @score_exp = getAndCheckScoreFilters();
+my @eval_exp = getAndCheckEvalFilters();
 
 #and check biotype classes are acceptable
 my %biotype_filters = map { $_ => undef } getAndCheckBiotypes();
@@ -270,28 +271,10 @@ my $next_update = 0;
 my $total_vars  = 0; 
 my $var_count   = 0;
 if ($opts{b}) {
-    if ( $opts{i} eq "-" ) {
-        informUser("Can't use -b/--progress option when input is from STDIN\n");
-    }else{
-        my $msg = <<EOT
-WARNING: -b/--progress option requires installation of the perl module 'Term::ProgressBar'.
-WARNING: 'Term::ProgressBar' module was not found. No progress will be shown.
-EOT
-;
-        eval "use Term::ProgressBar; 1 " or informUser($msg);
-        if (not $@){
-            informUser("Counting variants in input for progress monitoring.\n"); 
-            $total_vars = VcfReader::countVariants($opts{i});
-            informUser("$opts{i} has $total_vars variants.\n");
-            $progressbar = Term::ProgressBar->new(
-                {
-                    name  => "Biallelic",
-                    count => $total_vars,
-                    ETA   => "linear",
-                }
-            );
-        }
-    }
+    ($progressbar, $total_vars) = VcfhacksUtils::getProgressBar(
+        input  => $opts{i},
+        name   => "Biallelic",
+    );
 }
 
 ######READ VARIANTS AND PROCESS######
@@ -923,7 +906,7 @@ sub getAndCheckInSilicoPred{
     return if not @damaging;
     my %filters = VcfhacksUtils::getAndCheckInSilicoPred($opts{m}, \@damaging);
     if ($opts{m} eq 'vep'){#VEP prediction results will be in CSQ field
-        foreach my $d (@damaging){
+        foreach my $d (keys %filters){
             if ($d ne 'all' and not exists $csq_header{$d}){
                 informUser
                 (
@@ -936,24 +919,38 @@ sub getAndCheckInSilicoPred{
                    grep { exists $csq_header{$_} } 
                    keys %filters;
         push @csq_fields, keys %filters;
-    }#SnpEff predictions will be added via SnpSift
+    }else{#SnpEff predictions will be added via SnpSift
+        foreach my $d (keys %filters){
+            if (not exists $info_fields{$d}){
+                informUser
+                (
+                    "WARNING: No '$d' field found in INFO fields of VCF. ".
+                    "No in silico filtering will be performed for $d. Did ".
+                    "you annotate with SnpSift?\n"
+                ); 
+            }
+            %filters = map  { $_ => $filters{$_} } 
+                       grep { exists $info_fields{$_} } 
+                       keys %filters;
+        }
+    }
     return %filters;
 }
     
 #################################################
-sub getAndCheckScoreFilters{
-    return if not @score_filters;
+sub getAndCheckEvalFilters{
+    return if not @eval_filters;
     my @filters = (); 
     my %csq_add = ();
-FLT: foreach my $s (@score_filters){
-        my %f =  VcfhacksUtils::getScoreFilter($s);
+FLT: foreach my $s (@eval_filters){
+        my %f =  VcfhacksUtils::getEvalFilter($s);
         foreach my $fld (@{$f{field}}){
             (my $fb = $fld) =~ s/^\(//;#we may have used ( to specify precedence
             if (not exists $csq_header{lc($fb)}){
                 informUser
                 (
                     "WARNING: No '$fb' field found in CSQ header of ".
-                    "VCF. Cannot use --score_filter expression '$s' ".
+                    "VCF. Cannot use --eval_filter expression '$s' ".
                     "for filtering.\n"
                 ); 
                 next FLT;
@@ -1043,6 +1040,9 @@ sub getCsqFields{
             symbol
             biotype
         );
+        if ($opts{canonical_only}){
+            push @fields, "canonical";
+        }
         if ($opts{consensus_splice_site}){
             push @fields, "splice_consensus";
         }
@@ -1058,6 +1058,22 @@ sub getCsqFields{
             feature_id
             transcript_biotype
         );
+        if ($opts{canonical_only}){
+            informUser
+            ( 
+                "WARNING: --canonical_only option is ignored when ".
+                "working with SnpEff annotations.\n"
+            );
+            delete $opts{canonical_only};
+        }
+        if ($opts{consensus_splice_site}){
+            informUser
+            ( 
+                "WARNING: --consensus_splice_site option is ignored when ".
+                "working with SnpEff annotations.\n"
+            );
+            delete $opts{consensus_splice_site};
+        }
     }
     foreach my $f (@fields){
         if (not exists $csq_header{$f}){
@@ -1579,8 +1595,8 @@ sub consequenceMatchesVepClass{
     return 0 if ( grep { /NMD_transcript_variant/i } @anno_csq );
     
     #score filters trump annotation class
-    foreach my $scf (@score_exp){
-        return 1 if VcfhacksUtils::scoreFilter($scf, $annot);
+    foreach my $evf (@eval_exp){
+        return 1 if VcfhacksUtils::evalFilter($evf, $annot);
     }
 
 ANNO: foreach my $ac (@anno_csq){
@@ -1616,9 +1632,9 @@ sub consequenceMatchesSnpEffClass{
     #skip unwanted biotypes
     return 0 if exists $biotype_filters{lc $annot->{transcript_biotype} };
 
-    #score filters trump annotation class
-    foreach my $scf (@score_exp){
-        return 1 if VcfhacksUtils::scoreFilter($scf, $annot);
+    #eval filters trump annotation class
+    foreach my $evf (@eval_exp){
+        return 1 if VcfhacksUtils::evalFilter($evf, $annot);
     }
     
     my @anno_csq = split( /\&/, $annot->{annotation} );
@@ -1832,7 +1848,7 @@ sub keepClinvar{
                         'ClinVarConflicted',
                     )
                 );
-                @c_path = map {$c_path[$_] == 1 and $c_conf[$_] == 0} 0..$#c_path;
+                @c_path = map {$c_path[$_] eq '1' and $c_conf[$_] eq '0'} 0..$#c_path;
             }
         }
     }
@@ -1859,7 +1875,7 @@ sub keepClinvar{
                 }
             }
             if ($keep_clinvar eq 'no_conflicted'){
-                @d_path = map {$d_path[$_] == 1 and  $d_conf[$_] == 0} 0..$#d_path;
+                @d_path = map {$d_path[$_] eq '1' and  $d_conf[$_] eq '0'} 0..$#d_path;
             }
         }
     }
@@ -1871,11 +1887,11 @@ sub keepClinvar{
                 #conflicted if ClinVarConflicted annotation is 1 or $d_path[$_] == 0
                 #in this case, if we have annotations from VCF in @d_path,
                 #about what is in @c_path
-                return map { $d_path[$_] == 1  and $c_conf[$_] == 0} 0..$#d_path;
+                return map { $d_path[$_] eq '1'  and $c_conf[$_] ne '1'} 0..$#d_path;
             }else{  
                 #don't care about conflicted annotations
                 #keep if either source is flagged as pathogenic
-                return map {$d_path[$_] == 1 or $c_path[$_] == 1} 0..$#d_path;
+                return map {$d_path[$_] eq '1' or $c_path[$_] eq '1'} 0..$#d_path;
             }
         }else{
             return @c_path;
@@ -1914,6 +1930,8 @@ sub updateProgressBar{
         if ($var_count >= $next_update){
             $next_update = $progressbar->update( $var_count )
         }
+    }elsif($opts{b}){
+        VcfhacksUtils::simpleProgress($var_count, " variants processed" );
     }
 }
 
@@ -2081,51 +2099,65 @@ If you have annotated CADD phred scores for alleles using rankOnCaddScore.pl you
 
 =item B<-d    --damaging>
 
-Specify in silico prediction scores to filter on. If running on VEP annotations PolyPhen, SIFT and Condel scores given by VEP will be used. If running on SnpEff annotations scores given by running SnpSift's 'dbnsfp' mode will be used.  
+Specify in silico prediction scores to filter on. 
 
-B<VEP mode:> Specify SIFT, PolyPhen or Condel labels or scores to filter on. Add the names of the programs you want to use, separated by spaces, after the --damaging option. By default SIFT will keep variants labelled as 'deleterious', Polyphen will keep variants labelled as 'possibly_damaging' or 'probably_damaging' and  Condel will keep variants labelled as 'deleterious'.
+If running on VEP annotations you may either use PolyPhen, SIFT and/or Condel scores given by VEP or annotations from dbNSFP added using the dbNSFP VEP plugin. If running on SnpEff, annotations scores provided by SnpSift's 'dbnsfp' mode will be used.
 
-If you want to filter on custom values specify values after each program name in the like so: 'polyphen=probably_damaging'. Seperate multiple values with commas - e.g. 'polyphen=probably_damaging,possibly_damaging,unknown'. You may specify scores between 0 and 1 to filter on scores rather than labels - e.g. 'sift=0.3'. For polyphen, variants with scores lower than this score are considered benign and filtered, for SIFT and Condel higher scores are considered benign.
+NOTE: when using SnpEff annotations, prediction program names are case-sensitive.
 
-Valid labels for SIFT: deleterious, tolerated
+=over 12
 
-Valid labels for Polyphen: probably_damaging, possibly_damaging, benign, unknown
+=item B<VEP mode:> 
 
-Valid labels for Condel : deleterious, neutral
+Specify SIFT, PolyPhen or Condel labels or scores to filter on. Add the names of the programs you want to use, separated by spaces, after the --damaging option. By default SIFT will keep variants labelled as 'deleterious', Polyphen will keep variants labelled as 'possibly_damaging' or 'probably_damaging' and  Condel will keep variants labelled as 'deleterious'.
 
-To use default values for all three programs use 'all' (i.e. '--damaging all').
+If you want to filter on custom values specify values after each program name in the like so: 
 
-The default behaviour is to only keep variants predicted as damaging by ALL programs specified, although if the value is not available for one or more programs than that program will be ignored for filtering purposes.
+    'polyphen=probably_damaging' 
 
-B<SnpEff mode:> Specify one of the following annotations provided by dbNSFP (your input must have been annotated using SnpSift's dbnsfp mode): 
+Seperate multiple values with commas - e.g. 
 
-    dbNSFP_LRT_pred
-    dbNSFP_MutationAssessor_pred
-    dbNSFP_MutationTaster_pred
-    dbNSFP_Polyphen2_HVAR_pred
-    dbNSFP_SIFT_pred
+    'polyphen=probably_damaging,possibly_damaging,unknown' 
 
-You may omit the 'dbNSFP_' from the beginning if you wish. As with the VEP scores, you may specify 'all' to use the default values for all programs. Choosing custom values is also performed in the same way as for VEP annotations (e.g. dbNSFP_MutationAssessor_pred=H,M,L). 
+You may specify scores between 0 and 1 to filter on scores rather than labels - e.g. 
 
-The default scores considered 'damaging' are the following:
+    'sift=0.3' 
 
-    dbNSFP_LRT_pred=D
-    dbNSFP_MutationAssessor_pred=H,M
-    dbNSFP_MutationTaster_pred=A,D
-    dbNSFP_Polyphen2_HVAR_pred=P,D
-    dbNSFP_SIFT_pred=D
+For polyphen, variants with scores lower than this score are considered benign and filtered, for SIFT and Condel higher scores are considered benign.
 
-Other valid scores, not used by default:
+B<Valid labels for SIFT:> deleterious, tolerated
 
-    dbNSFP_LRT_pred=N
-    dbNSFP_MutationAssessor_pred=L,N
-    dbNSFP_MutationTaster_pred=N,P
-    dbNSFP_Polyphen2_HVAR_pred=B
-    dbNSFP_SIFT_pred=T
+B<Valid labels for Polyphen:> probably_damaging, possibly_damaging, benign, unknown
 
-The default behaviour is to only keep variants predicted as damaging by ALL programs specified, although if the value is not available for one or more programs than that program will be ignored for filtering purposes.
+B<Valid labels for Condel:> deleterious, neutral
 
-B<WARNING:> At the time of writing, SnpSift (latest version - SnpSift version 4.1l, build 2015-10-03) does not properly annotate the prediction values per allele. Multiple scores for the same allele are separated by commas, as are values per allele, therefore it is not possible to determine if a prediction is for a particular allele. For this reason, findBiallelic.pl will use the highest present prediction value found for a variant in order to decide whether or not to filter an allele when using SnpEff/SnpSift annotations.
+To use default values for all three programs you may use 'all' (i.e. '--damaging all') BUT PLEASE NOTE: if you have added dbNSFP annotations to your input VCF these will also be included (see below).
+
+=item B<SnpEff or VEP dbNSFP mode:> 
+
+Your input must have been annotated using SnpSift's dbnsfp option (if using SnpEff annotations) or using the dbNSFP VEP plugin (if using VEP annotations). Recognised annotations are:
+
+    fathmm-MKL_coding_pred
+    FATHMM_pred
+    LRT_pred
+    MetaLR_pred
+    MetaSVM_pred
+    MutationAssessor_pred
+    MutationTaster_pred
+    PROVEAN_pred
+    Polyphen2_HDIV_pred
+    Polyphen2_HVAR_pred
+    SIFT_pred
+
+You may instead choose to use the 'score' or dbNSFP 'rankscore' annotations for these tools (e.g. 'fathmm-MKL_coding_score'). 
+
+You may specify 'all' to use the default values for all programs. Choosing custom values is also performed in the same way as for VEP annotations above (e.g. dbNSFP_MutationAssessor_pred=H,M,L). 
+
+=back
+
+For more details of the available and default settings for these programs please see the files 'data/snpeff_insilico_pred.tsv' or 'data/vep_insilico_pred.tsv'.
+
+The default behaviour is to only keep variants predicted as damaging by ALL programs specified, although if the value is not available for one or more programs than that program will be ignored for filtering purposes. See the next two options for alternative behaviours.
 
 =item B<-k    --keep_any_damaging>
 
@@ -2221,6 +2253,21 @@ When using a PED file to specify family members, use this flag to prevent checki
 =item B<--pass_filters>
 
 Only consider variants with a PASS filter field. If the FILTER field for variant is not PASS the variant will be skipped.
+
+=item B<--eval_filters>
+
+Use this option to create custom filters for KEEPING variants on the basis of values in the VEP or SnpEff consequence fields. 
+
+Expressions must take the format of 'field name' 'comparator' 'value to compare' separated by white space. Multiple expressions can be used together along with the logical operators 'and', 'or' or 'xor'. The value for 'field name' will be used to extract the value for the given field from the VEP/SnpEff consequence INFO field. The resulting expression is evaluated using perl's built-in 'eval' function.
+
+For example:
+
+    --eval_filters "LoF eq 'HC'" 
+    #keeps any variant with a LoF annotation of 'HC'
+
+    --eval_filters "(ada_score >= 0.6 and rf_score >= 0.6) or maxentscan_diff > 5"
+    #keeps variants with ada_score and rf_scores of 0.6 or higher or with 
+    #maxenstscan diff of 5 or higher
 
 =item B<-b    --progress>
 

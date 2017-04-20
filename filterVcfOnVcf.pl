@@ -5,13 +5,13 @@ use Getopt::Long;
 use Parallel::ForkManager;
 use Sys::CPU;
 use Pod::Usage;
-use Term::ProgressBar;
 use Data::Dumper;
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 use POSIX qw(strftime);
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
-use VcfReader;
+use lib "$RealBin/lib/dapPerlGenomicLib";
+use VcfReader 0.3;
 use VcfhacksUtils;
 
 =head1 NAME
@@ -253,44 +253,64 @@ GetOptions(
     'x|not_samples=s{,}',
     'y|allele_frequency_filter=f',
     'z|filter_homozygotes',
-  )
-  or pod2usage(
+) or pod2usage
+(
     -message => "Syntax error.",
     -exitval => 2
-  );
+);
 
-pod2usage( -verbose => 2 ) if $man;
-pod2usage( -verbose => 1 ) if $help;
-pod2usage( -message => "Syntax error", exitval => 2 )
-  if ( not $vcf or ( not $filter_vcf ) );
-pod2usage(
-    -message =>
-      "Syntax error - cannot use --reject and --not_samples argument together",
-    exitval => 2
-) if ( @reject and @ignore_samples );
-pod2usage(
-    -message =>
-"Syntax error - cannot use --reject or --not_samples arguments with --info_filter option",
-    exitval => 2
-  )
-  if ( @reject or @ignore_samples )
-  and $filter_with_info;
-pod2usage(
-    -message => "Variant quality scores must be 0 or greater.\n",
-    -exitval => 2
-) if ( $min_qual < 0 );
-pod2usage(
-    -message => "Genotype quality scores must be 0 or greater.\n",
-    -exitval => 2
-) if ( $minGQ < 0 );
-pod2usage(
-    -message =>
-      "--allele_frequency_filter (-y) value must be between 0 and 1.\n",
-    -exitval => 2
-) if ( $maf < 0 or $maf > 1 );
+pod2usage( -verbose => 2, -exitval => 0 ) if $man;
+pod2usage( -verbose => 1, -exitval => 0 ) if $help;
+
+if ( not $vcf or ( not $filter_vcf ) ){
+    pod2usage( -message => "Syntax error", exitval => 2 );
+}
+
+if ( @reject and @ignore_samples ){
+    pod2usage
+    (
+        -message => "Syntax error - cannot use --reject ".
+                    "and --not_samples argument together",
+        exitval  => 2,
+    );
+} 
+
+if (( @reject or @ignore_samples ) and $filter_with_info){
+    pod2usage
+    (
+        -message => "Syntax error - cannot use --reject or --not_samples ".
+                    "arguments with --info_filter option",
+        exitval  => 2,
+    );
+}
+
+if ( $min_qual < 0 ){
+    pod2usage
+    (
+        -message => "Variant quality scores must be 0 or greater.\n",
+        -exitval => 2
+    );
+}
+if ( $minGQ < 0 ){
+    pod2usage
+    (
+        -message => "Genotype quality scores must be 0 or greater.\n",
+        -exitval => 2
+    );
+}
+
+if ( $maf < 0 or $maf > 1 ){
+    pod2usage
+    (
+        -message =>  "--allele_frequency_filter (-y) value ".
+                     "must be between 0 and 1.\n",
+        -exitval => 2
+    );
+}
 
 if ( defined $aff_quality ) {
-    pod2usage(
+    pod2usage
+    (
         -message => "Genotype quality scores must be 0 or greater.\n",
         -exitval => 2
     ) if $aff_quality < 0;
@@ -312,11 +332,14 @@ if (not @pop_ids){
 } 
 elsif ( grep{ /^disable$/i } @pop_ids ){
     @pop_ids = ();
-    print STDERR "[INFO] Filtering on population allele count / allele number disabled.\n";
+    my $time = strftime( "%H:%M:%S", localtime );
+    print STDERR "[$time] INFO - Filtering on population allele count / allele".
+                 " number disabled.\n";
 }
 
 if (not defined $MIN_AN){
-#if using --info_filter we use require at least 100 alleles by default before filtering on freq
+#if using --info_filter we use require at least 100 alleles by default 
+# before filtering on freq
     if ($filter_with_info) {
         $MIN_AN = 100;
     }else{
@@ -331,13 +354,16 @@ if ( $forks < 2 ) {
 else {
     if ( $forks > $cpus ) {
         print STDERR
-"[Warning]: Number of forks ($forks) exceeds number of CPUs on this machine ($cpus)\n";
+        my $time = strftime( "%H:%M:%S", localtime );
+        print STDERR "[$time] WARNING - Number of forks ($forks) exceeds " .
+                     "number of CPUs on this machine ($cpus)\n";
     }
     if ( not $buffer_size ) {
         $buffer_size = 10000 > $forks * 1000 ? 10000 : $forks * 1000;
     }
-    print STDERR
-"[INFO] Processing in batches of $buffer_size variants split among $forks forks.\n";
+    my $time = strftime( "%H:%M:%S", localtime );
+    print STDERR "[$time] INFO - Processing in batches of $buffer_size ".
+                 "variants split among $forks forks.\n";
 }
 
 my $time = strftime( "%H:%M:%S", localtime );
@@ -349,7 +375,8 @@ die "[ERROR] Header not ok for input ($vcf) "
 if ( defined $progress ) {
     $time = strftime( "%H:%M:%S", localtime );
     if (-p $vcf or $vcf eq "-" ) {
-        print STDERR "\n[$time] INFO - Input is from STDIN or pipe - will report progress per 10000 variants. ";
+        print STDERR "\n[$time] INFO - Input is from STDIN or pipe - ".
+                     "will report progress per 10000 variants. ";
     }else {
         $total_variants = VcfReader::countVariants($vcf);
         print STDERR "[$time] - INFO $vcf has $total_variants variants.\n";
@@ -363,7 +390,7 @@ if (@samples) {
     );
     foreach my $samp (@samples){ 
         if (not exists $sample_to_col{$samp}){
-            die "[$time] ERROR - Sample $samp was not found in input VCF ($vcf)\n"; 
+            die "ERROR - Sample $samp was not found in input VCF ($vcf)\n"; 
         }
     }
 }
@@ -372,7 +399,11 @@ $time = strftime( "%H:%M:%S", localtime );
 print STDERR "[$time] INFO - Finished initializing input VCF\n";
 
 print STDERR "[$time] INFO - Initializing filter VCF ($filter_vcf)...\n";
-my ($filter_vcf_index, $filter_vcf_samples, $filter_info) = initializeFilterVcfs( $filter_vcf );
+my (
+    $filter_vcf_index, 
+    $filter_vcf_samples, 
+    $filter_info
+) = initializeFilterVcfs( $filter_vcf );
 print STDERR "[$time] INFO - Finished initializing filter VCF.\n";
 if ($filter_with_info) {
     check_filter_vcf_info_fields();
@@ -387,15 +418,16 @@ if ( keys %{ $filter_vcf_samples } == 0 ) {
 "Filter VCF $filter_vcf has no samples - cannot run with --reject argument.\n";
     }
     if (@ignore_samples) {
-        die
-"Filter VCF $filter_vcf has no samples - cannot run with --not_samples argument.\n";
+        die "Filter VCF $filter_vcf has no samples - cannot run with ".
+            "--not_samples argument.\n";
     }
     if ( $threshold or $maf or $filter_homozygotes ) {
         if ( not $filter_with_info ) {
-            die
-"Filter VCF $filter_vcf has no samples. Use of --allele_frequency_filter, --threshold".
-" or --filter_homozygotes options is not allowed with filter VCFs without samples ".
-"unless used with the --info_filter option.\n";
+            die "Filter VCF $filter_vcf has no samples. Use of ".
+                "--allele_frequency_filter, --threshold or ".
+                "--filter_homozygotes options is not allowed with ".
+                "filter VCFs without samples unless used with the ".
+                "--info_filter option.\n";
         }
     }
 }
@@ -404,13 +436,13 @@ foreach my $ignore (@ignore_samples) {
     if ( exists $filter_vcf_samples->{$ignore} ) {
         delete $filter_vcf_samples->{$ignore};
     }else{
-        die "[ERROR] Sample $ignore was not found in --filter VCF ($filter_vcf).\n";
+        die "[ERROR] Sample $ignore not found in --filter VCF ($filter_vcf).\n";
     }
 }
 
 foreach my $rej (@reject){
     if (not exists $filter_vcf_samples->{$rej} ) {
-        die "[ERROR] Sample $rej was not found in --filter VCF ($filter_vcf).\n";
+        die "[ERROR] Sample $rej not found in --filter VCF ($filter_vcf).\n";
     }
 }
 
@@ -435,14 +467,10 @@ my $prev_chrom = 0;
 my $progressbar;
 my $next_update = 0;
 if ($progress) {
-    my $count = $total_variants ? $total_variants * 3 : -1;
-    $progressbar = Term::ProgressBar->new(
-        {
-            name  => "Filtering",
-            count => $count,
-
-            #ETA   => "linear",
-        }
+    ($progressbar, $total_variants) = VcfhacksUtils::getProgressBar(
+        input  => $vcf,
+        name   => "Filtering",
+        factor => 3,
     );
 }else{
     $time = strftime( "%H:%M:%S", localtime );
@@ -457,7 +485,11 @@ my @lines_to_process = ();
 my %no_fork_args     = ();
 
 if ( $forks < 2 ) {
-    %no_fork_args = VcfReader::getSearchArguments( $filter_vcf, $filter_vcf_index );
+    %no_fork_args = VcfReader::getSearchArguments
+    ( 
+        $filter_vcf, 
+        $filter_vcf_index 
+    );
 }
 
 processLine($first_var);
@@ -487,9 +519,7 @@ sub processLine{
     checkProgress(1);
     if ( $forks > 1 ) {
         push @lines_to_process, $line;
-        if ($progressbar) {
-            $next_update = $progressbar->update($n) if $n >= $next_update;
-        }
+        checkProgress();
         if ( @lines_to_process >= $buffer_size ) {
             process_buffer();
             @lines_to_process = ();
@@ -513,18 +543,14 @@ sub processLine{
 
 ################################################
 sub checkProgress{
-    return if not $progressbar;
+    return if not $progress;
     my $do_count_check = shift;
-    if ($total_variants > 0){
+    if ($progressbar) {
         $next_update = $progressbar->update($n) if $n >= $next_update;
     }elsif($do_count_check){#input from STDIN/pipe
-        if (not $variants_done % 10000) {
-            my $time = strftime( "%H:%M:%S", localtime );
-            $progressbar->message( "[INFO - $time] $variants_done variants read" );
-        }
+        VcfhacksUtils::simpleProgress($variants_done, " variants read" );
     }
 }
-
 
 ################################################
 sub process_buffer {
@@ -561,15 +587,15 @@ sub process_buffer {
             if ( defined($data_structure_reference) ) {
                 my %res = %{$data_structure_reference};
                 if ( ref $res{keep} eq 'ARRAY' ) {
-                    $lines_to_print[$res{order}] = \@{ $res{keep} } if @{ $res{keep} };
+                    if (@{ $res{keep} }){
+                        $lines_to_print[$res{order}] = \@{ $res{keep} } ;
+                    }
                 }
                 if ( $res{filter} ) {
                     $filtered += $res{filter};
                 }
-                if ($progressbar) {
-                    $n += $res{batch_size};
-                    checkProgress();
-                }
+                $n += $res{batch_size};
+                checkProgress();
             }
             else {
                 die "[ERROR] no message received from child process $pid!\n";
@@ -654,8 +680,9 @@ sub printHeader{
             ID          => "FVOV_AF_$pop",
             Number      => "A",
             Type        => "Float",
-            Description => "Putative population allele number from $filter_vcf. ".
-                           "Description of original AC_$pop was as follows: $desc",
+            Description => "Putative population allele number from $filter_vcf.".
+                           " Description of original AC_$pop was as follows:" .
+                           " $desc",
         );
         my %ac_info = 
         (
@@ -663,7 +690,8 @@ sub printHeader{
             Number      => "A",
             Type        => "Integer",
             Description => "Putative population allele number from $filter_vcf. ".
-                           "Description of original AN_$pop was as follows: $an_desc",
+                           "Description of original AN_$pop was as follows:".
+                           " $an_desc",
         );  
         print $OUT VcfhacksUtils::getInfoHeader(%af_info) . "\n"; 
         print $OUT VcfhacksUtils::getInfoHeader(%ac_info) . "\n"; 
@@ -676,16 +704,22 @@ sub printHeader{
             ID          => "$annotate_af" ."_AF",
             Number      => "A",
             Type        => "Float",
-            Description => "Allele frequency calculated by filterVcfOnVcf.pl from $filter_vcf."
+            Description => "Allele frequency calculated by ".
+                           "filterVcfOnVcf.pl from $filter_vcf."
         );
         my %ac_info = 
         (
             ID          => "$annotate_af" ."_AN",
             Number      => "A",
             Type        => "Integer",
-            Description => "Allele number annotated by filterVcfOnVcf.pl from $filter_vcf.",
+            Description => "Allele number annotated by ".
+                           "filterVcfOnVcf.pl from $filter_vcf.",
         );  
-        print STDERR "[INFO] Adding INFO fields $annotate_af" ."_AF and $annotate_af" ."_AN to output for allele frequency and allele numbers calculated from $filter_vcf...\n";
+        my $time = strftime( "%H:%M:%S", localtime );
+        print STDERR "[$time] INFO - Adding INFO fields $annotate_af" .
+                     "_AF and $annotate_af" ."_AN to output for allele ".
+                     "frequency and allele numbers calculated from ".
+                     "$filter_vcf...\n";
         print $OUT VcfhacksUtils::getInfoHeader(%af_info) . "\n"; 
         print $OUT VcfhacksUtils::getInfoHeader(%ac_info) . "\n"; 
     }
@@ -701,7 +735,8 @@ sub filter_on_info_fields {
         return;
     }
 
-#process each allele separately in case we have MNVs/deletions that need to be simplified
+#process each allele separately in case we have MNVs/deletions 
+#that need to be simplified
 
     my %min_vars       = VcfReader::minimizeAlleles( $vcf_line, );
     my %sample_alleles = ();
@@ -724,14 +759,14 @@ sub filter_on_info_fields {
         deleteRefAndNoCallAlleles(\%sample_alleles, \%min_vars);
     }
 
-    my %sample_matches = ()
-      ; #check each allele matches in all filter_vcfs but don't reset after each file
-    my %thresh_counts =
-      ();    #count samples in all filter_vcfs i.e. don't reset after each file
-    my %af_counts
-      ; #count allele occurences and total alleles to calculate allele frequency and don't reset after each file
-    my %f_genos = (); #store genotypes as keys if we're using $filter_homozygote
-    my %alleles_over_maf = ();    #store alleles that have exceeded maf in here
+    my %sample_matches   = (); #check each allele matches in all filter_vcfs 
+                               # but don't reset after each file
+    my %thresh_counts    = (); #count samples in all filter_vcfs 
+                               # i.e. don't reset after each file
+    my %af_counts;             #count allele occurences and total alleles to calc 
+                               # allele frequency and don't reset after each file
+    my %f_genos          = (); #store genotypes as keys if using $filter_homozygote
+    my %alleles_over_maf = (); #store alleles that have exceeded maf in here
 
   ALLELE: foreach my $allele ( keys %sample_alleles ) {
         if (
@@ -755,7 +790,6 @@ FILTER_LINE: foreach my $snp_line (@snp_hits) {
                 }
                 my %filter_min = VcfReader::minimizeAlleles( \@snp_split, );
 
-#%f_alts = map {$_ => undef} $filter_obj->getSampleActualGenotypes(multiple => \@temp_reject, return_alleles_only => 1, minGQ => $unaff_quality);
                 my @alts = VcfReader::readAlleles( line => \@snp_split, );
                 for ( my $i = 0 ; $i < @alts ; $i++ ) {
                     push @f_alts, $i;
@@ -773,15 +807,16 @@ FILTER_LINE: foreach my $snp_line (@snp_hits) {
                             \@snp_split, "PGTS",
                         )
                     );
-                    die
-"Genotype count (GTC) does not have the same number of alleles as possible genotypes (PGTS) field for line:\n$snp_line\n"
+                    die "Genotype count (GTC) does not have the same number ".
+                        "of alleles as possible genotypes (PGTS) field for ".
+                        "line:\n$snp_line\n"
                       if @gtcs != @pgts;
                     for ( my $i = 0 ; $i < @gtcs ; $i++ ) {
                         $geno_counts{ $pgts[$i] } = $gtcs[$i];
                     }
                 }
-                my $filter_match = ''
-                  ; #if one of the filter's ALTs matches store the ALT allele code here
+                my $filter_match = ''; #if one of the filter's ALTs matches 
+                                       # store the ALT allele code here
 ALT:            foreach my $alt (@f_alts) {
                     next ALT if $alt eq '.';
                     next ALT if $alt == 0;
@@ -808,10 +843,20 @@ ALT:            foreach my $alt (@f_alts) {
                     next FILTER_LINE;
                 }
                 if(@pop_acs){
-                    add_pop_freqs_to_allele($min_vars{$allele}, \@snp_split, $filter_match) ;
+                    add_pop_freqs_to_allele
+                    (
+                        $min_vars{$allele}, 
+                        \@snp_split, 
+                        $filter_match
+                    );
                 }
                 if ($annotate_af){
-                    add_annotated_af_to_allele($min_vars{$allele}, \@snp_split, $filter_match) ;
+                    add_annotated_af_to_allele
+                    (
+                        $min_vars{$allele}, 
+                        \@snp_split, 
+                        $filter_match
+                    );
                 }
                 if ($threshold) {
                     foreach my $k ( keys %geno_counts ) {
@@ -832,7 +877,11 @@ ALT:            foreach my $alt (@f_alts) {
                         );
                         my $freq = $afs[ $filter_match - 1 ];
                         if ( exists $filter_info->{AN}) {
-                            my $an = VcfReader::getVariantInfoField(\@snp_split, "AN");
+                            my $an = VcfReader::getVariantInfoField
+                            (
+                                \@snp_split, 
+                                "AN"
+                            );
                             if ($an >= $MIN_AN){
                                 if ( $freq >= $maf ) {
                                     $alleles_over_maf{$allele}++;
@@ -841,7 +890,8 @@ ALT:            foreach my $alt (@f_alts) {
                         }elsif ( $freq >= $maf ) {
                             $alleles_over_maf{$allele}++;
                         }
-                        if(@pop_acs and not $alleles_over_maf{$allele}){#if total AF not over maf check individual populations
+                        if(@pop_acs and not $alleles_over_maf{$allele}){
+                        #if total AF not over maf check individual populations
                             if ( pop_freq_over_maf($min_vars{$allele}) ) {
                                 $alleles_over_maf{$allele}++;
                             }
@@ -872,7 +922,8 @@ ALT:            foreach my $alt (@f_alts) {
         }    #search
     }   #foreach allele
         #done each allele - see if we've got enough data to filter this line
-    if ( not $maf and not $filter_homozygotes ) { # no filters - default is filter if we found a match
+    if ( not $maf and not $filter_homozygotes ) { 
+    # no filters - default is filter if we found a match
         if (keys %sample_matches == keys %sample_alleles ){#found all alleles
             if ($print_matching) {
                 $vcf_line = annotate_pop_freqs(\%min_vars, $vcf_line);
@@ -1086,7 +1137,7 @@ sub filter_on_vcf_samples {
         return;
     }
 
-#process each allele separately in case we have MNVs/deletions that need to be simplified
+#process each allele separately in case MNVs/deletions need simplified
 
     my %min_vars       = VcfReader::minimizeAlleles( $vcf_line, );
     my %sample_alleles = ();
@@ -1108,12 +1159,11 @@ sub filter_on_vcf_samples {
         %sample_alleles = map { $_ => undef } keys %min_vars;
         deleteRefAndNoCallAlleles(\%sample_alleles, \%min_vars);
     }
-    my %sample_matches = ()
-      ; #check each allele matches in all filter_vcfs but don't reset after each file
-    my %thresh_counts =
-      ();    #count samples in all filter_vcfs i.e. don't reset after each file
-    my %f_genos =
-      ();    #store genotypes as keys if we're using $filter_homozygotes
+    my %sample_matches = (); #check each allele matches in all filter_vcfs 
+                             # but don't reset after each file
+    my %thresh_counts  = (); #count samples in all filter_vcfs i.e. 
+                             # don't reset after each file
+    my %f_genos        = (); #store genotypes as keys if using $filter_homozygotes
 
     my @temp_reject = keys %{ $filter_vcf_samples };
 ALLELE: foreach my $allele ( keys %sample_alleles ) {
@@ -1136,7 +1186,6 @@ FILTER_LINE: foreach my $snp_line (@snp_hits) {
                 }
                 my %filter_min = VcfReader::minimizeAlleles( \@snp_split, );
 
-#%f_alts = map {$_ => undef} $filter_obj->getSampleActualGenotypes(multiple => \@temp_reject, return_alleles_only => 1, minGQ => $unaff_quality);
                 my @f_alts = ();
                 if (@temp_reject){
                     @f_alts = VcfReader::getSampleCall(
@@ -1164,8 +1213,8 @@ FILTER_LINE: foreach my $snp_line (@snp_hits) {
                         $f_genos{$k}++;
                     }
                 }
-                my $filter_match = ''
-                  ; #if one of the filter's ALTs matches store the ALT allele code here
+                my $filter_match = ''; #if one of the filter's ALTs matches 
+                                       # store the ALT allele code here
               ALT: foreach my $alt (@f_alts) {
                     next ALT if $alt eq '.';
                     next ALT if $alt == 0;
@@ -1244,7 +1293,12 @@ FILTER_LINE: foreach my $snp_line (@snp_hits) {
                 return;
             }else{
                 if ($annotate_af){
-                    $vcf_line = annotate_sample_freqs(\%min_vars, $vcf_line, $annotate_af);
+                    $vcf_line = annotate_sample_freqs
+                    (
+                        \%min_vars, 
+                        $vcf_line, 
+                        $annotate_af
+                    );
                 }
                 return $vcf_line ;
             }
@@ -1302,7 +1356,12 @@ COUNTS: foreach my $allele ( keys %sample_alleles ) {
     }
     else {
         if ($annotate_af){
-            $vcf_line = annotate_sample_freqs(\%min_vars, $vcf_line, $annotate_af);
+            $vcf_line = annotate_sample_freqs
+            (
+                \%min_vars, 
+                $vcf_line, 
+                $annotate_af
+            );
         }
         return $vcf_line;
     }
@@ -1384,10 +1443,12 @@ sub check_filter_vcf_info_fields {
         }
         @pop_acs = check_pop_ac_info();
         if (@pop_acs){
-            print STDERR "[INFO] Found " . scalar(@pop_acs) . " population " . 
-                "allele counts in VCF INFO fields. These will be used for per ".
-                "population allele-frequency filtering. To disable use " .
-                "'--population_ids disable' when running this program.\n";
+            my $time = strftime( "%H:%M:%S", localtime );
+            print STDERR "[$time] INFO - Found " . scalar(@pop_acs) . 
+                " population allele counts in VCF INFO fields. These will be ".
+                "used for per population allele-frequency filtering. To " .
+                "disable use '--population_ids disable' when running this ".
+                "program.\n";
         }
     }
 }
@@ -1410,35 +1471,43 @@ sub check_pop_ac_info{
 #################################################
 sub check_pgts_gtc {
     if ( not exists $filter_info->{PGTS} ) {
-        die
-"Cannot filter on genotype information with the --info_filter option without " . 
-"possible genotypes (PGTS) info field. Filter VCF $filter_vcf is missing this field from " .
-"its header. This INFO field is available by processing a VCF containing multiple" . 
-" samples using the sampleCallsToInfo.pl script.\n";
+        die <<EOT
+Cannot filter on genotype information with the --info_filter option without 
+possible genotypes (PGTS) info field. Filter VCF $filter_vcf is missing this 
+field from its header. This INFO field is available by processing a VCF 
+containing multiple samples using the sampleCallsToInfo.pl script.
+EOT
+        ;
     }
     elsif ( $filter_info->{PGTS}->{Description} ne
         "\"Possible Genotype Call Codes (for ease of reference).\"" )
     {
-        die
-"Filter VCF $filter_vcf possible genotypes (PGTS) field does not match expected INFO field " .
-"description. This INFO field is available by processing a VCF containing multiple "
-."samples using the sampleCallsToInfo.pl script.\n";
+        die <<EOT
+Filter VCF $filter_vcf possible genotypes (PGTS) field does not match expected 
+INFO field description. This INFO field is available by processing a VCF 
+containing multiple samples using the sampleCallsToInfo.pl script.
+EOT
+        ;
     }
 
     if ( not exists $filter_info->{GTC} ) {
-        die
-"Cannot filter on genotype information with the --info_filter option without ".
-"genotype counts (GTC) info field. Filter VCF $filter_vcf is missing this field from ".
-"its header. This INFO field is available by processing a VCF containing multiple "
-."samples using the sampleCallsToInfo.pl script.\n";
+        die <<EOT
+Cannot filter on genotype information with the --info_filter option without 
+genotype counts (GTC) info field. Filter VCF $filter_vcf is missing this field 
+from its header. This INFO field is available by processing a VCF containing 
+multiple samples using the sampleCallsToInfo.pl script.
+EOT
+        ;
     }
     elsif ( $filter_info->{GTC}->{Description} ne
         "\"Genotype counts in order of genotypes listed by PGTS field.\"" )
     {
-        die
-"Filter VCF $filter_vcf genotype counts (GTC) field does not match expected INFO field ".
-"description. This INFO field is available by processing a VCF containing multiple ".
-"samples using the sampleCallsToInfo.pl script.\n";
+        die <<EOT
+Filter VCF $filter_vcf genotype counts (GTC) field does not match expected INFO 
+field description. This INFO field is available by processing a VCF containing 
+multiple samples using the sampleCallsToInfo.pl script.
+EOT
+        ;
     }
 }
 

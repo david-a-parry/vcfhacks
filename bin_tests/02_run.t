@@ -1,18 +1,10 @@
 use strict;
 use warnings;
 #use Test::More;
-use Test::More tests => 15;
+use Test::More tests => 13;
 use FindBin qw($RealBin);
-use lib "$RealBin/../lib";
-use lib "$RealBin/../lib/dapPerlGenomicLib";
-use lib "$RealBin/../lib/Bioperl";
-use lib "$RealBin/../lib/BioASN1EntrezGene/lib";
-BEGIN 
-{ 
-    use_ok("VcfReader");
-    use_ok("Bio::DB::HTS::Tabix");
-}
-my $n_tests = 2;
+use IO::Uncompress::Gunzip qw/ gunzip $GunzipError /;
+my $n_tests = 0;
 
 #Set up our input files
 my $vcf = "$RealBin/test_data/test1.vcf";
@@ -26,9 +18,9 @@ my $dtest = "$RealBin/test_data/dbSnpTestCommonAndRare.vcf";
 my $biallelic = "$RealBin/test_data/biallelic_test1.vcf";
 my $annoremote = "$RealBin/test_data/annoTestRemote.vcf";
 
-my $script_prefix = "perl $RealBin/..";
+my $script_prefix = "$RealBin/..";
 my $gdb = "$RealBin/../data/geneAnnotatorDb" ;
-my $output = `$script_prefix/findBiallelic.pl -s Sample_133 Sample_76 -r Sample_139  -i $vcf 2> /dev/null |  grep -v '#'`;
+my $output = `$script_prefix/findBiallelic -s Sample_133 Sample_76 -r Sample_139  -i $vcf 2> /dev/null |  grep -v '#'`;
 my $expected = getBiallelicData();
 is
 (
@@ -40,33 +32,33 @@ $n_tests++;
 
 $expected = getLocationData();
 
-$output = `$script_prefix/getVariantsByLocation.pl -i $vcf -r 6:24658070-25581425  2> /dev/null |  cut -sf 1-9`;
+$output = `$script_prefix/getVariantsByLocation -i $vcf -r 6:24658070-25581425  2> /dev/null |  cut -sf 1-9`;
 is(
     $output,
     $expected,
-    "retrieve variants with getVariantsByLocation.pl with an uncompressed vcf '$vcf'"
+    "retrieve variants with getVariantsByLocation with an uncompressed vcf '$vcf'"
 );
 $n_tests++; 
 
-$output = `$script_prefix/getVariantsByLocation.pl -i $gz -r 6:24658070-25581425  2> /dev/null |  cut -sf 1-9`;
+$output = `$script_prefix/getVariantsByLocation -i $gz -r 6:24658070-25581425  2> /dev/null |  cut -sf 1-9`;
 is(
     $output,
     $expected,
-    "retrieve variants with getVariantsByLocation.pl with a compressed vcf '$gz'"
+    "retrieve variants with getVariantsByLocation with an compressed vcf '$gz'"
 );
 $n_tests++; 
 
 $expected = getLocatioGeneData();
-$output = `$script_prefix/getVariantsByLocation.pl -i $gz -g COL3A1 COL13A1  2> /dev/null |  cut -sf 1-9`;
+$output = `$script_prefix/getVariantsByLocation -i $gz -g COL3A1 COL13A1  2> /dev/null |  cut -sf 1-9`;
 is(
     $output,
     $expected,
-    "retrieve variants with getVariantsByLocation.pl using gene symbols"
+    "retrieve variants with getVariantsByLocation using gene symbols"
 );
 $n_tests++; 
 
 $expected = 578;
-chomp($output = `$script_prefix/getFunctionalVariants.pl -i $vcf 2> /dev/null | grep -v '#' |  wc -l `);
+chomp($output = `$script_prefix/getFunctionalVariants -i $vcf 2> /dev/null | grep -v '#' |  wc -l `);
 $output =~ s/^\s+//;
 is(
     $output,
@@ -76,7 +68,7 @@ is(
 $n_tests++; 
 
 $expected = 114;
-chomp($output = `$script_prefix/filterOnSample.pl -s Sample_100 -i $vcf 2> /dev/null |  wc -l `);
+chomp($output = `$script_prefix/filterOnSample -s Sample_100 -i $vcf 2> /dev/null |  wc -l `);
 $output =~ s/^\s+//;
 is(
     $output,
@@ -85,43 +77,43 @@ is(
 );
 $n_tests++; 
 
-`$script_prefix/sortVcf.pl -i $shuf -o $tmpsort 2>/dev/null`;
+`$script_prefix/sortVcf -i $shuf -o $tmpsort 2>/dev/null`;
 is
 (
-    VcfReader::checkCoordinateSorted($tmpsort),
+    checkCoordinateSorted($tmpsort),
     1,
-    "check sortVcf.pl output is sorted"
+    "check sortVcf output is sorted"
 );
 $n_tests++; 
 
-chomp ($output = `$script_prefix/annotateSnps.pl -i $dtest -d $dref -f 1 2> /dev/null |  grep -v '#' | wc -l `);
+chomp ($output = `$script_prefix/annotateSnps -i $dtest -d $dref -f 1 2> /dev/null |  grep -v '#' | wc -l `);
 $output =~ s/^\s+//;
 is
 (
     $output,
     12,
-    "annotateSnps.pl filters on frequency "
+    "annotateSnps filters on frequency "
 );
 $n_tests++; 
 
 
-chomp ($output = `$script_prefix/annotateSnps.pl -i $dtest -d $dref -b 129 2> /dev/null |  grep -v '#' | wc -l `);
+chomp ($output = `$script_prefix/annotateSnps -i $dtest -d $dref -b 129 2> /dev/null |  grep -v '#' | wc -l `);
 $output =~ s/^\s+//;
 is
 (
     $output,
     22,
-    "annotateSnps.pl filters on build"
+    "annotateSnps filters on build"
 );
 $n_tests++; 
 
-chomp ($output = `$script_prefix/annotateSnps.pl -i $dtest -d $dref -f 1 -b 129 2> /dev/null |  grep -v '#' | wc -l `);
+chomp ($output = `$script_prefix/annotateSnps -i $dtest -d $dref -f 1 -b 129 2> /dev/null |  grep -v '#' | wc -l `);
 $output =~ s/^\s+//;
 is
 (
     $output,
     10,
-    "annotateSnps.pl filters on frequency and build"
+    "annotateSnps filters on frequency and build"
 );
 $n_tests++; 
 
@@ -131,7 +123,7 @@ ok
     <<EOT
 geneAnnotator data folder ('$gdb') exists  
 this directory and required files can be created by running 
-'geneAnnotator.pl -D' or by downloading from the 'Releases' page at 
+'geneAnnotator -D' or by downloading from the 'Releases' page at 
 'https://github.com/gantzgraf/vcfhacks'
 EOT
      ,
@@ -139,23 +131,23 @@ EOT
 $n_tests++; 
 
 $expected = getAnnoData();
-$output = `$script_prefix/geneAnnotator.pl -i $biallelic 2> /dev/null |  cut -sf 1-9`;
+$output = `$script_prefix/geneAnnotator -i $biallelic 2> /dev/null |  cut -sf 1-9`;
 like
 (
     $output,
     $expected,
-    "geneAnnotator.pl retrieves information from local database",
+    "geneAnnotator retrieves information from local database",
 );
 $n_tests++; 
 
 
 $expected = getAnnoDataRemote();
-$output = `$script_prefix/geneAnnotator.pl -i $annoremote 2> /dev/null |  cut -sf 1-9`;
+$output = `$script_prefix/geneAnnotator -i $annoremote 2> /dev/null |  cut -sf 1-9`;
 like
 (
     $output,
     $expected,
-    "geneAnnotator.pl retrieves information via REST server",
+    "geneAnnotator retrieves information via REST server",
 );
 $n_tests++; 
 
@@ -188,7 +180,7 @@ sub getAnnoData{
 
 ###############################################################################
 sub getBiallelicData{
-    open (my $IN, "<", $biallelic) or die "Can't open findBiallelic.pl test data: $!\n";
+    open (my $IN, "<", $biallelic) or die "Can't open findBiallelic test data: $!\n";
     my $data;
     while (<$IN>){
         $data .= $_ unless /^#/;
@@ -218,4 +210,38 @@ sub getLocatioGeneData{
 10	71682523	.	AG	A	1150.87	PASS	AC=3;AF=6.329e-03;AN=474;BaseQRankSum=-1.170e-01;ClippingRankSum=1.29;DP=6195;FS=1.808;GQ_MEAN=65.26;GQ_STDDEV=21.48;InbreedingCoeff=0.6411;MLEAC=3;MLEAF=6.329e-03;MQ=70.00;MQ0=0;MQRankSum=-4.280e-01;NCC=0;QD=22.13;ReadPosRankSum=0.371;SOR=1.162;VQSLOD=3.34;culprit=SOR;set=variant;SnpAnnotation=[.];CSQ=-|ENSG00000197467|ENST00000517713|Transcript|frameshift_variant|1105|1105|369|G/X|Ggg/gg|||1|COL13A1|HGNC|2190|protein_coding|||CCDS44423.2|ENSP00000430061|CODA1_HUMAN|Q9UP45_HUMAN|UPI0000F6E6D3|||21/37||Low_complexity_(Seg):Seg&Pfam_domain:PF01391&PROSITE_profiles:PS50315&PROSITE_profiles:PS50099|ENST00000517713.1:c.1105delG|ENSP00000430061.1:p.Leu370SerfsTer71||||||||||||||||||HC|,-|ENSG00000197467|ENST00000354547|Transcript|frameshift_variant|1597|1105|369|G/X|Ggg/gg|||1|COL13A1|HGNC|2190|protein_coding|||CCDS44424.2|ENSP00000346553|CODA1_HUMAN|Q9UP45_HUMAN|UPI0000EE047D|||21/39||Low_complexity_(Seg):Seg&Pfam_domain:PF01391&PROSITE_profiles:PS50315&PROSITE_profiles:PS50099|ENST00000354547.3:c.1105delG|ENSP00000346553.3:p.Leu370SerfsTer71||||||||||||||||||HC|,-|ENSG00000197467|ENST00000398975|Transcript|upstream_gene_variant|||||||4320|1|COL13A1|HGNC|2190|protein_coding||||ENSP00000381947|||UPI000059D163||||||||||||||||||||||||||,-|ENSG00000197467|ENST00000398978|Transcript|frameshift_variant|1663|1171|391|G/X|Ggg/gg|||1|COL13A1|HGNC|2190|protein_coding|YES||CCDS44419.1|ENSP00000381949|CODA1_HUMAN|Q9UP45_HUMAN|UPI000046FD72|||22/40||Low_complexity_(Seg):Seg&Pfam_domain:PF01391&PROSITE_profiles:PS50315&PROSITE_profiles:PS50099|ENST00000398978.3:c.1171delG|ENSP00000381949.3:p.Leu392SerfsTer71||||||||||||||||||HC|,-|ENSG00000197467|ENST00000398964|Transcript|frameshift_variant|1620|1084|362|G/X|Ggg/gg|||1|COL13A1|HGNC|2190|protein_coding||||ENSP00000381936||Q9UP45_HUMAN&E7ES56_HUMAN|UPI0000160933|||19/37||Low_complexity_(Seg):Seg&Pfam_domain:PF01391&PROSITE_profiles:PS50315&PROSITE_profiles:PS50099|ENST00000398964.3:c.1084delG|ENSP00000381936.3:p.Leu363SerfsTer71||||||||||||||||||HC|,-|ENSG00000197467|ENST00000398971|Transcript|frameshift_variant|1707|1171|391|G/X|Ggg/gg|||1|COL13A1|HGNC|2190|protein_coding||||ENSP00000381943||Q9UP45_HUMAN&E7ES49_HUMAN|UPI0000160930|||21/38||Low_complexity_(Seg):Seg&Pfam_domain:PF01391&PROSITE_profiles:PS50315&PROSITE_profiles:PS50099|ENST00000398971.3:c.1171delG|ENSP00000381943.3:p.Leu392SerfsTer71||||||||||||||||||HC|,-|ENSG00000197467|ENST00000398973|Transcript|frameshift_variant|1707|1171|391|G/X|Ggg/gg|||1|COL13A1|HGNC|2190|protein_coding||||ENSP00000381945||Q9UP45_HUMAN&E9PEG9_HUMAN|UPI0002065296|||22/38||Low_complexity_(Seg):Seg&Pfam_domain:PF01391&PROSITE_profiles:PS50315&PROSITE_profiles:PS50099|ENST00000398973.3:c.1171delG|ENSP00000381945.3:p.Leu392SerfsTer134||||||||||||||||||HC|,-|ENSG00000197467|ENST00000398966|Transcript|frameshift_variant|1641|1105|369|G/X|Ggg/gg|||1|COL13A1|HGNC|2190|protein_coding||||ENSP00000381938||Q9UP45_HUMAN&E7ES55_HUMAN|UPI000016092F|||20/38||Low_complexity_(Seg):Seg&Pfam_domain:PF01391&PROSITE_profiles:PS50315&PROSITE_profiles:PS50099|ENST00000398966.3:c.1105delG|ENSP00000381938.3:p.Leu370SerfsTer71||||||||||||||||||HC|,-|ENSG00000197467|ENST00000398969|Transcript|frameshift_variant|1536|1000|334|G/X|Ggg/gg|||1|COL13A1|HGNC|2190|protein_coding||||ENSP00000381941||Q9UP45_HUMAN&E7ES50_HUMAN|UPI0002065294|||18/35||Low_complexity_(Seg):Seg&Pfam_domain:PF01391&PROSITE_profiles:PS50315&PROSITE_profiles:PS50099|ENST00000398969.3:c.1000delG|ENSP00000381941.3:p.Leu335SerfsTer134||||||||||||||||||HC|,-|ENSG00000197467|ENST00000520133|Transcript|frameshift_variant|1018|1018|340|G/X|Ggg/gg|||1|COL13A1|HGNC|2190|protein_coding|||CCDS44428.2|ENSP00000430173|CODA1_HUMAN|Q9UP45_HUMAN|UPI0001CA7E68|||19/34||Low_complexity_(Seg):Seg&Pfam_domain:PF01391&PROSITE_profiles:PS50315&PROSITE_profiles:PS50099|ENST00000520133.1:c.1018delG|ENSP00000430173.1:p.Leu341SerfsTer71||||||||||||||||||HC|,-|ENSG00000197467|ENST00000520267|Transcript|frameshift_variant|1306|1000|334|G/X|Ggg/gg|||1|COL13A1|HGNC|2190|protein_coding|||CCDS44427.2|ENSP00000428057|CODA1_HUMAN|Q9UP45_HUMAN|UPI000192C3E9|||18/35||Low_complexity_(Seg):Seg&Pfam_domain:PF01391&PROSITE_profiles:PS50315&PROSITE_profiles:PS50099|ENST00000520267.1:c.1000delG|ENSP00000428057.1:p.Leu335SerfsTer71||||||||||||||||||HC|,-|ENSG00000197467|ENST00000479733|Transcript|frameshift_variant&NMD_transcript_variant|1691|1198|400|G/X|Ggg/gg|||1|COL13A1|HGNC|2190|nonsense_mediated_decay||||ENSP00000430089||Q9UP45_HUMAN&E7EX21_HUMAN|UPI0001E8F0C8|||23/41||Low_complexity_(Seg):Seg&Pfam_domain:PF01391&PROSITE_profiles:PS50315&PROSITE_profiles:PS50099|ENST00000479733.1:c.1198delG|ENSP00000430089.1:p.Leu401SerfsTer71|||||||||||||||||||,-|ENSG00000197467|ENST00000522165|Transcript|frameshift_variant|1114|1114|372|G/X|Ggg/gg|||1|COL13A1|HGNC|2190|protein_coding|||CCDS44425.2|ENSP00000428342|CODA1_HUMAN|Q9UP45_HUMAN|UPI0000F6E6D7|||21/38||Low_complexity_(Seg):Seg&Pfam_domain:PF01391&PROSITE_profiles:PS50315&PROSITE_profiles:PS50099|ENST00000522165.1:c.1114delG|ENSP00000428342.1:p.Leu373SerfsTer71||||||||||||||||||HC|,-|ENSG00000197467|ENST00000398968|Transcript|frameshift_variant|1650|1114|372|G/X|Ggg/gg|||1|COL13A1|HGNC|2190|protein_coding||||ENSP00000381940||Q9UP45_HUMAN&E7ES51_HUMAN|UPI000016092D|||20/38||Low_complexity_(Seg):Seg&Pfam_domain:PF01391&PROSITE_profiles:PS50315&PROSITE_profiles:PS50099|ENST00000398968.3:c.1114delG|ENSP00000381940.3:p.Leu373SerfsTer71||||||||||||||||||HC|,-|ENSG00000197467|ENST00000398974|Transcript|frameshift_variant|1671|1135|379|G/X|Ggg/gg|||1|COL13A1|HGNC|2190|protein_coding||||ENSP00000381946||Q9UP45_HUMAN&E7ES46_HUMAN|UPI0000160926|||20/38||Low_complexity_(Seg):Seg&Pfam_domain:PF01391&PROSITE_profiles:PS50315&PROSITE_profiles:PS50099|ENST00000398974.3:c.1135delG|ENSP00000381946.3:p.Leu380SerfsTer71||||||||||||||||||HC|,-|ENSG00000197467|ENST00000356340|Transcript|frameshift_variant|1707|1171|391|G/X|Ggg/gg|||1|COL13A1|HGNC|2190|protein_coding||||ENSP00000348695||Q9UP45_HUMAN&G5E987_HUMAN|UPI0000167B85|||21/39||Low_complexity_(Seg):Seg&Pfam_domain:PF01391&PROSITE_profiles:PS50315&PROSITE_profiles:PS50099|ENST00000356340.3:c.1171delG|ENSP00000348695.3:p.Leu392SerfsTer71||||||||||||||||||HC|,-|ENSG00000197467|ENST00000398972|Transcript|frameshift_variant|1707|1171|391|G/X|Ggg/gg|||1|COL13A1|HGNC|2190|protein_coding||||ENSP00000381944||Q9UP45_HUMAN&E7ES47_HUMAN|UPI0002065295|||22/39||Low_complexity_(Seg):Seg&Pfam_domain:PF01391&PROSITE_profiles:PS50315&PROSITE_profiles:PS50099|ENST00000398972.3:c.1171delG|ENSP00000381944.3:p.Leu392SerfsTer134||||||||||||||||||HC|,-|ENSG00000197467|ENST00000357811|Transcript|frameshift_variant|1597|1105|369|G/X|Ggg/gg|||1|COL13A1|HGNC|2190|protein_coding||||ENSP00000350463|CODA1_HUMAN|Q9UP45_HUMAN|UPI000046FD74|||21/38||Low_complexity_(Seg):Seg&Pfam_domain:PF01391&PROSITE_profiles:PS50315&PROSITE_profiles:PS50099|ENST00000357811.3:c.1105delG|ENSP00000350463.3:p.Leu370SerfsTer71||||||||||||||||||HC|	GT:AD:DP:GQ:PL
 EOT
 ;
+}
+
+sub checkCoordinateSorted{
+#return 1 if vcf is coordinate sorted (not checking chrom order)
+    my ($vcf) = @_;
+    my $FH = _openFileHandle($vcf);
+    my %contigs = ();
+    my $prev_pos = 0;
+    while (my $line = <$FH>){
+        next if $line =~ /^#/;
+        my @split = split("\t", $line);
+        if (exists $contigs{$split[0]}){
+            if ($contigs{$split[0]}  != scalar(keys%contigs) -1 ){
+                return 0; #not sorted - encountered contig twice with another inbetween
+            }
+            return 0 if $split[1] < $prev_pos;
+        }else{
+            $contigs{$split[0]}  = scalar(keys%contigs);
+        }
+        $prev_pos = $split[1];
+    }
+    return 1;
+}
+
+sub _openFileHandle{
+    my $vcf = shift;
+    die "_openFileHandle method requires a file or filehandle as an argument" if not $vcf;
+    my $FH; 
+    if ($vcf =~ /\.(b){0,1}gz$/){
+        $FH = new IO::Uncompress::Gunzip $vcf, MultiStream => 1 or die "IO::Uncompress::Gunzip failed while opening $vcf for reading: \n$GunzipError";
+    }else{
+        open ($FH, $vcf) or die "Failed to open $vcf for reading: $! ";
+    }
+    return $FH;
 }

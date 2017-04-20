@@ -3,8 +3,8 @@ use warnings;
 use strict;
 use Getopt::Long;
 use FindBin qw($RealBin);
-use lib "$RealBin/lib";
-use VcfReader;
+use lib "$RealBin/lib/dapPerlGenomicLib";
+use VcfReader 0.3;
 my @remove = ();
 my %opts = (r => \@remove);
 GetOptions(

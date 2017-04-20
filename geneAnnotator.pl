@@ -23,10 +23,11 @@ use Term::ProgressBar;
 
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
+use lib "$RealBin/lib/dapPerlGenomicLib";
 use lib "$RealBin/lib/Bioperl";
 use lib "$RealBin/lib/BioASN1EntrezGene/lib";
 use VcfhacksUtils;
-use VcfReader; 
+use VcfReader 0.3; 
 
 my @add_classes;
 my @annotations;
@@ -63,8 +64,8 @@ GetOptions(
     "p|progress", 
     "r|rest_server=s{,}" => \$rest_server,
 ) or pod2usage( -message => "Syntax error", -exitval => 2 );
-pod2usage( -verbose => 2, ) if $opts{manual};
-pod2usage( -verbose => 1, ) if $opts{h};
+pod2usage( -verbose => 2, -exitval => 0 ) if $opts{manual};
+pod2usage( -verbose => 1, -exitval => 0 ) if $opts{h};
 pod2usage( -exitval => 2, -message => "--input is required", )
   if not $opts{i}
   and not $opts{D}
@@ -177,12 +178,12 @@ my %database     = (
         file      => "morbidmap.txt"
     },
     biogrid    => {
-        localfile => "$opts{d}/BIOGRID-ALL-3.4.134.tab2.txt",
+        localfile => "$opts{d}/BIOGRID-ALL.tab2.txt",
         col       => 1,
         delimiter => "\t",
         url       => "http://thebiogrid.org",
-        dir       => "downloads/archives/Release%20Archive/BIOGRID-3.4.134",
-        file      => "BIOGRID-ALL-3.4.134.tab2.zip"
+        dir       => "downloads/archives/Latest%20Release",
+        file      => "BIOGRID-ALL-LATEST.tab2.zip"
     },
     pli        => {
         localfile => "$opts{d}/fordist_cleaned_exac_r03_march16_z_pli_rec_null_data.txt",
@@ -356,7 +357,7 @@ sub parseAsList{
         chomp $line;
         next if not $line;
         my @entrez_ids = (); 
-        my $id = (split "\t", $line)[0];
+        my $id = (split "\t", $line, 2)[0];
         my $entrez_id;
         if ($id =~ /^\d+$/){
             push @entrez_ids, $id;
@@ -471,7 +472,8 @@ LINE: while ( my $line = <$VCF> ) {
         next if $line =~ /^#/;#skip header
         chomp $line;
         $vcf_line++;
-        my @split = split("\t", $line); 
+        my @split = split("\t", $line, 9); #only need first 8 fields, possible 
+                                           #optimization for VERY long lines
         my @entrez_ids = ();
         my @csq = getConsequences(\@split, \@csq_fields, \%csq_header);
     
@@ -1339,6 +1341,12 @@ sub prepare_database {
 sub downloadBiogrid{
     my $file = shift;
     my $exists = shift;
+    if (not eval "use LWP::Protocol::https; 1"){
+        my $time = strftime( "%H:%M:%S", localtime );
+        warn "[$time] LWP::Protocol::https module does not appear to be ".
+             "installed. Download of Biogrid file will probably fail. ".
+             "If so, please install LWP::Protocol::https using CPAN.\n";
+    }
     my $url = "$file->{url}/$file->{dir}/$file->{file}";
     my $dl  = "$opts{d}/$file->{file}";
     my $time = strftime( "%H:%M:%S", localtime );

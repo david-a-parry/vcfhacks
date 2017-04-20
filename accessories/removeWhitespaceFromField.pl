@@ -8,8 +8,9 @@ use List::Util qw ( first ) ;
 use POSIX qw/strftime/;
 use FindBin;
 use Term::ProgressBar;
-use lib "$FindBin::Bin/lib";
-use VcfReader;
+use lib "$FindBin::Bin/../lib";
+use lib "$FindBin::Bin/../lib/dapPerlGenomicLib";
+use VcfReader 0.3;
 use VcfhacksUtils;
 
 my %opts = (f => 'INFO');

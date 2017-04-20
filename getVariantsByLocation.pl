@@ -70,7 +70,7 @@ Use this flag to prevent outputting the VCF header.
 
 Use this flag to supress printing of information to STDERR.
 
-=item B<-s    --silent>
+=item B<--silent>
 
 Use this flag to supress warnings and information to STDERR.
 
@@ -140,9 +140,9 @@ use Data::Dumper;
 use Pod::Usage;
 use POSIX qw/strftime/;
 use FindBin qw($RealBin);
-use lib "$RealBin/lib";
+use lib "$RealBin/lib/dapPerlGenomicLib";
 use SortGenomicCoordinates;
-use VcfReader;
+use VcfReader 0.3;
 use IdParser;
 use EnsemblRestQuery;
 
@@ -173,15 +173,15 @@ GetOptions
     'g|gene_ids=s{,}',
     'e|matching',
     'q|quiet',
-    's|silent',
-    'species=s',
+    'silent',
+    'species|s=s',
     'd|defaultRestServer',
     'h|?|help',
     'm|manual',
 ) or pod2usage( -message => "Syntax error.", -exitval => 2 );
 
-pod2usage( -verbose => 2 ) if ($opts{m});
-pod2usage( -verbose => 1 ) if ($opts{h});
+pod2usage( -verbose => 2, -exitval => 0  ) if ($opts{m});
+pod2usage( -verbose => 1, -exitval => 0  ) if ($opts{h});
 
 pod2usage
 (
@@ -202,10 +202,10 @@ pod2usage( -message => "ERROR: --vcf_filter option can not be used in conjunctio
   if ( (@bedfile or @reg or @gene_ids) and $opts{v} );
 
 if ($opts{e} and not $opts{v}){
-    print STDERR "WARNING: redundant use of --matching argument without --vcf_filter argument.\n" unless $opts{s};
+    print STDERR "WARNING: redundant use of --matching argument without --vcf_filter argument.\n" unless $opts{silent};
 }
 
-$opts{q}++ if $opts{s};
+$opts{q}++ if $opts{silent};
 $opts{species} ||= 'human'; 
 
 if (lc($opts{species}) !~  /^human|homo sapiens|h_sapiens|homo|enshs|hsap|9606|homsap|hsapiens$/){
@@ -308,7 +308,7 @@ sub process_regions{
             close BED;
 
             warn "$invalid invalid region(s) found in $bedfile\n" 
-                if $invalid and not $opts{s};
+                if $invalid and not $opts{silent};
         }
     }
     if (@reg) {
@@ -355,7 +355,7 @@ sub process_regions{
         if (@indices_to_remove){
             my $inv_contigs = keys %invalid_contigs;
             warn "$inv_contigs contigs in regions not found in VCF ("
-                . scalar(@indices_to_remove)." regions).\n" unless $opts{s};
+                . scalar(@indices_to_remove)." regions).\n" unless $opts{silent};
             foreach my $i (@indices_to_remove){
                 splice(@regions, $i, 1);
             }
@@ -534,7 +534,7 @@ sub get_region_from_gene{
                 $gene_hash = geneFromEnst($tr->{id});
             }
         }else{
-            if (not $opts{s}){
+            if (not $opts{silent}){
                 print STDERR "WARNING: No transcript identified for ID \"$id\"\n";
             }
         }
@@ -564,7 +564,7 @@ sub get_region_from_gene{
         }
     }
     if (not $gene_hash){
-        if (not $opts{s}){
+        if (not $opts{silent}){
             print STDERR "WARNING: Could not identify gene for ID \"$id\"\n";
             if (@lookups){
                 my $idstring = join("\n", map { $_->{display_name} } @lookups );

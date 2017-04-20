@@ -4,8 +4,8 @@ use warnings;
 use Getopt::Long;
 use Pod::Usage;
 use FindBin qw($RealBin);
-use lib "$RealBin/lib";
-use VcfReader;
+use lib "$RealBin/lib/dapPerlGenomicLib";
+use VcfReader 0.3;
 my %opts = ();
 GetOptions(\%opts,
         "output=s",
@@ -15,8 +15,8 @@ GetOptions(\%opts,
         "help",
         "manual",
         ) or pod2usage(-exitval => 2, -message => "Syntax error") ;
-pod2usage (-verbose => 2) if $opts{manual};
-pod2usage (-verbose => 1) if $opts{help};
+pod2usage (-verbose => 2, -exitval => 0) if $opts{manual};
+pod2usage (-verbose => 1, -exitval => 0) if $opts{help};
 pod2usage(-exitval => 2, -message => "Syntax error") if not $opts{input}; 
 
 my %sort_args = (vcf => $opts{input});

@@ -5,13 +5,13 @@ use Parallel::ForkManager;
 use Getopt::Long qw(:config no_ignore_case);
 use Sys::CPU;
 use Pod::Usage;
-use Term::ProgressBar;
 use Data::Dumper;
 use List::MoreUtils qw(first_index);
 use POSIX qw/strftime/;
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
-use VcfReader;
+use lib "$RealBin/lib/dapPerlGenomicLib";
+use VcfReader 0.3;
 use ClinVarReader;
 use VcfhacksUtils;
 
@@ -55,8 +55,8 @@ GetOptions(
     "VERBOSE|V",
     "no_common_tag|n",
 ) or pod2usage( -exitval => 2, -message => "Syntax error" );
-pod2usage( -verbose => 2 ) if $opts{manual};
-pod2usage( -verbose => 1 ) if $opts{help};
+pod2usage( -verbose => 2, -exitval => 0 ) if $opts{manual};
+pod2usage( -verbose => 1, -exitval => 0 ) if $opts{help};
 pod2usage( -exitval => 2, -message => "Syntax error" )
   if not $opts{input}
   or (not @{ $opts{dbsnp_file} } and not $opts{clinvar_file});
@@ -117,14 +117,23 @@ print STDERR "[$time] INFO - Initializing input VCF...\n";
 my ($header, $first_var, $VCF)  = VcfReader::getHeaderAndFirstVariant($opts{input});
 die "Header not ok for input ($opts{input}) "
     if not VcfReader::checkHeader( header => $header );
-if ( defined $opts{progress} and not -p $opts{input} and  $opts{input} ne '-') {
-    $total_vcf = VcfReader::countVariants( $opts{input} );
-    $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "\n[$time] INFO - $opts{input} has $total_vcf variants.\n";
-}elsif(defined $opts{progress}){
-    $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "\n[$time] INFO - Input is from STDIN or pipe - will report progress per 10000 variants.\n";
+
+my $prog_total = -1;
+if ( $opts{progress} ){
+    my $x_prog = 3;
+    $x_prog = 4 if $KNOWN;
+    my $name = "Annotating";
+    if ( $opts{build} || $freq ) {
+        $name = "Filtering";
+    }
+    ($progressbar, $total_vcf) = VcfhacksUtils::getProgressBar(
+        input  => $opts{input},
+        name   => $name,
+        factor => $x_prog,
+    );
+    #$progressbar->minor(0);
 }
+
 my %sample_to_col = ();
 if (@samples) {
     %sample_to_col = VcfReader::getSamples(
@@ -197,7 +206,7 @@ $dbpm->wait_all_children;
 #get dbSNP category headers
 my %head_info_fields = (
     "clinical significance" => [ qw / CLNSIG SCS / ] ,
-    "clinvar annotations"   => [ qw / CLNALLE CLNDBN CLNDSDBID CLNHGVS / ] ,
+    "clinvar annotations"   => [ qw / CLNALLE CLNDBN CLNDSDBID CLNHGVS GENEINFO / ] ,
     "dbSNPBuildID"          => [ qw / dbSNPBuildID / ],
     "allele frequency"      => [ qw / AF CAF G5A G5 COMMON / ] ,
 );
@@ -250,27 +259,6 @@ elsif ( $opts{pathogenic} ) {
 "WARNING: --pathogenic flag acheives nothing if neither --build or --freq filtering is in effect and --known_out output is not specified\n";
     }
 }
-my $prog_total = -1;
-my $x_prog = 3;
-$x_prog = 4 if $KNOWN;
-if ( defined $opts{progress}){
-    my $name = "Annotating";
-    if ( $opts{build} || $freq ) {
-        $name = "Filtering";
-    }
-    if ($total_vcf ) {
-        $prog_total = $total_vcf * $x_prog;
-    }
-    $progressbar = Term::ProgressBar->new(
-        { 
-          name => $name,
-          count => ($prog_total), 
-          ETA => "linear" 
-        } 
-    );
-    #$progressbar->minor(0);
-}
-
 my $n                = 0;
 my $vars             = 0;
 my @lines_to_process = ();
@@ -375,15 +363,12 @@ sub print_header{
 
 ################################################
 sub checkProgress{
-    return if not $progressbar;
+    return if not $opts{progress};
     my $do_count_check = shift;
-    if ($prog_total > 0){
+    if ($progressbar) {
         $next_update = $progressbar->update($n) if $n >= $next_update;
     }elsif($do_count_check){#input from STDIN/pipe
-        if (not $vars % 10000) {
-            my $time = strftime( "%H:%M:%S", localtime );
-            $progressbar->message( "[INFO - $time] $vars variants read" );
-        }
+        VcfhacksUtils::simpleProgress($vars, " variants read" );
     }
 }
 
@@ -772,13 +757,16 @@ sub evaluate_clinvar {
     my @sig = ();
     my @path = ();
     my @conf = ();
+    my @symbols = ();
     foreach my $m (@matches){
         push @traits, ClinVarReader::getColumnValue($m, 'all_traits', $cvar_args->{col_hash});
         push @sig, ClinVarReader::getColumnValue($m, 'clinical_significance', $cvar_args->{col_hash});
         my $c =  ClinVarReader::getColumnValue($m, 'conflicted', $cvar_args->{col_hash});
         my $p = ClinVarReader::getColumnValue($m, 'pathogenic', $cvar_args->{col_hash});
+        my $s =  ClinVarReader::getColumnValue($m, 'symbol', $cvar_args->{col_hash});
         push @path, $p;
         push @conf, $c;
+        push @symbols, $s;
         $isPathogenic += $p;
         $isConflicted += $c;
     }
@@ -791,6 +779,10 @@ sub evaluate_clinvar {
     if (@sig){
         @sig = map { VcfReader::convertTextForInfo($_) } @sig;
         $min_allele->{cvar_info}->{ClinVarClinicalSignificance} = join("/", @sig);
+    }
+    if (@symbols){
+        @symbols = map { VcfReader::convertTextForInfo($_) } @symbols;
+        $min_allele->{cvar_info}->{ClinVarSymbol} = join("/", @symbols);
     }
     return $isPathogenic;
 }
@@ -948,7 +940,8 @@ sub checkVarMatches {
 sub annotateClnVarVcf{
     my ( $min_allele, $snp_line, $snp_alt, $file ) = @_;
     my %inf = ();
-    foreach my $f ( qw/ CLNSIG CLNALLE CLNHGVS CLNDSDBID CLNDBN / ){ 
+    my @c_fields = qw/ CLNSIG CLNALLE CLNHGVS CLNDSDBID CLNDBN GENEINFO /;
+    foreach my $f ( @c_fields ){ 
         #only take annotations from first file with matching variant
         return if exists $min_allele->{snp_info}->{$f};
         next if not exists $dbsnp_to_info{$file}->{$f};
@@ -959,9 +952,13 @@ sub annotateClnVarVcf{
 
     my $al_index = first_index {$_ == $snp_alt} split(",", $inf{CLNALLE});
     return if $al_index < 0;
-    foreach my $f ( qw/ CLNSIG CLNALLE CLNHGVS CLNDSDBID CLNDBN / ){ 
-        next if not exists $inf{$f}; 
-        $min_allele->{snp_info}->{$f}    = (split ",", $inf{$f})[$al_index];
+    foreach my $f ( @c_fields ){ 
+        next if not defined $inf{$f}; 
+        if ($f eq 'GENEINFO'){
+            $min_allele->{snp_info}->{$f} = $inf{$f}; 
+        }else{
+            $min_allele->{snp_info}->{$f} = (split ",", $inf{$f})[$al_index];
+        }
     }
 }
 
@@ -986,8 +983,8 @@ sub checkAndAddHeaders{
 
     my %inf_heads = ();
 
-    foreach my $type (keys %head_info_fields){
-        foreach my $field (@{$head_info_fields{$type}}){
+    foreach my $annot_type (keys %head_info_fields){
+        foreach my $field (@{$head_info_fields{$annot_type}}){
             my $inf_head;
 DBSNP:      foreach my $d (@dbsnp){
                 $time = strftime( "%H:%M:%S", localtime );
@@ -1008,7 +1005,7 @@ DBSNP:      foreach my $d (@dbsnp){
                                        " per ALT allele. Original description ".
                                        "was as follows: $desc",
                     );
-                    push @{$inf_heads{$type}}, VcfhacksUtils::getInfoHeader(%d_info);
+                    push @{$inf_heads{$annot_type}}, VcfhacksUtils::getInfoHeader(%d_info);
                     last DBSNP;#keep first
                 }
             }
@@ -1051,7 +1048,15 @@ DBSNP:      foreach my $d (@dbsnp){
             Type        =>  "String",
             Description => "Clinical significance terms for this allele given in ClinVar",
         );
-        foreach my $infhash (\%cvp_info, \%cvc_info, \%cvt_info, \%cvcs_info){
+
+        my %cvsym_info = 
+        (
+            ID          =>  "ClinVarSymbol",
+            Number      =>  "A",
+            Type        =>  "String",
+            Description =>  "Associated gene symbol given in ClinVar",
+        );
+        foreach my $infhash (\%cvp_info, \%cvc_info, \%cvt_info, \%cvcs_info, \%cvsym_info){
             push @{$inf_heads{cv}}, VcfhacksUtils::getInfoHeader(%{$infhash});
         }
     }
