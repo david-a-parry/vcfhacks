@@ -38,6 +38,7 @@ For convenience, the bioperl modules required for the geneAnnotator.pl database 
 
 Other perl modules required by these scripts are installable via CPAN - perl will complain that they are not available in "@INC" when you attempt to run these programs if they are not on your system. Please see http://www.cpan.org/modules/INSTALL.html for instructions on how to install these modules. Below is a list of these non-core modules that you are likely to need install:
 
+    List::MoreUtils
     Parallel::ForkManager
     Sys::CPU
     Term::ProgressBar
