@@ -50,7 +50,7 @@ $output = `$script_prefix/getVariantsByLocation.pl -i $gz -r 6:24658070-25581425
 is(
     $output,
     $expected,
-    "retrieve variants with getVariantsByLocation.pl with an compressed vcf '$gz'"
+    "retrieve variants with getVariantsByLocation.pl with a compressed vcf '$gz'"
 );
 $n_tests++; 
 
