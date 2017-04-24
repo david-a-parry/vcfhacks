@@ -72,14 +72,16 @@ pod2usage(-verbose => 1, -exitval => 0) if ($opts{h});
 if (not $opts{i}){
     pod2usage
     (
-        -message => "Syntax error - an input file (-i/--input) must be supplied.\n", 
+        -message => "Syntax error - an input file (-i/--input) must be ".
+                    "supplied.\n", 
         -exitval => 2
     );
 }
 if (not $opts{f}){
     pod2usage
     (
-        -message => "Syntax error - a ped/fam file (-f/--ped_file) must be supplied.\n", 
+        -message => "Syntax error - a ped/fam file (-f/--ped_file) must be ".
+                    "supplied.\n", 
         -exitval => 2
     );
 }
@@ -87,8 +89,8 @@ if (not $opts{f}){
 if (defined $opts{af} && ($opts{af} < 0 or $opts{af} > 1.0)){
     pod2usage
     (
-        -message =>  "-a/--allele_frequency option requires a value between 0.00 and 1.00 to ".
-                     "filter on allele frequency.\n", 
+        -message => "-a/--allele_frequency option requires a value between ".
+                    "0.00 and 1.00 to filter on allele frequency.\n", 
         -exitval => 2
     );
 }
@@ -131,7 +133,8 @@ if (defined $opts{pl}){
 #CADD phred score filter is >= 0 (0 means no CADD filtering)
 if (defined $opts{c}){
     pod2usage(
-        -message => "SYNTAX ERROR: -c/--cadd_filter cannot be a negative value.\n",
+        -message => "SYNTAX ERROR: -c/--cadd_filter cannot be a negative ".
+                    "value.\n",
         -exitval => 2
     ) if $opts{c} < 0;
 }
@@ -200,7 +203,8 @@ my %biotype_keep = map { $_ => undef } getAndCheckBiotypes();
 
 
 # get available allele frequency annotations if filtering on AF
-# NOTE: we do not use VEP annotations as they do not necessarily match the variant allele
+# NOTE: we do not use VEP annotations as they do not necessarily match the 
+# variant allele
 my %af_info_fields = (); #check available INFO fields for AF annotations
 if ( defined $opts{a} ) {
     %af_info_fields = getAfAnnotations(\%info_fields);   
@@ -210,8 +214,8 @@ if ( defined $opts{a} ) {
 if ( $opts{c} ){
     if (not exists $info_fields{CaddPhredScore}){
         informUser("WARNING: No 'CaddPhredScore' INFO field found in header ".
-         "- your input probably does not contain annotations for filtering on" . 
-         " CADD score.\n");
+         "- your input probably does not contain annotations for filtering " . 
+         " on CADD score.\n");
     }
 }
 
@@ -224,7 +228,7 @@ writeOptionsToHeader();
 
 my %contigs = (); 
 my %counts  = ();   #counts for each transcript
-my %trans_info = ();#store gene id and symbol id for each transcript we encounter
+my %trans_info = ();#store gene id and symbol for each transcript we encounter
 #keep track of contigs we've seen so we can check input is (roughly) sorted 
 #... (only relevant if using --find_shared_genes option)
 #progress bar vars
@@ -273,8 +277,8 @@ sub processByLine{
     }
     informUser
     (
-        "$functional_count variants matching criteria found from $var_count total".
-        " variants.\n" . 
+        "$functional_count variants matching criteria found from $var_count ".
+        "total variants.\n" . 
         keys(%trans_info) . " transcripts analyzed.\n"
     );
 }
@@ -386,7 +390,7 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
         
         #filter if AF annotations > MAF
         if (%af_info_fields){ #check for annotateSnps.pl etc. frequencies
-           $benign_alleles{$i}++ if ( alleleAboveMaf($i - 1, \%af_info_values) );
+           $benign_alleles{$i}++ if (alleleAboveMaf($i - 1, \%af_info_values));
         }
 
         #get all consequences for current allele
@@ -416,7 +420,9 @@ CSQ:    foreach my $annot (@a_csq){
                 $trans_info{$t}->{gene} = $annot->{$gene_id};
                 $trans_info{$t}->{symbol} = $annot->{$symbol_id};
             }
-            if (not $benign_alleles{$i} and consequenceMatchesClass($annot, $split)){
+            if (not $benign_alleles{$i} and 
+                consequenceMatchesClass($annot, $split)
+            ){
                 push @{ $allele_to_csq{damaging}->{$i} }, $annot;
             }else{
                 push @{ $allele_to_csq{benign}->{$i} }, $annot;
@@ -427,7 +433,8 @@ CSQ:    foreach my $annot (@a_csq){
           not keys %{$allele_to_csq{benign}};#no variant in valid transcript
 
     splitRemainingFields($split);
-    # get allele frequencies in  @samples if using -u/--max_control_allele_frequency
+    #get allele frequencies in  @samples if using 
+    #-u/--max_control_allele_frequency
     my %s_allele_counts = ();
     my $allele_count;
     if ($opts{u}){
@@ -445,7 +452,8 @@ CSQ:    foreach my $annot (@a_csq){
             foreach my $i (keys %{$allele_to_csq{damaging}}){
                 my $freq = $s_allele_counts{$i}/$allele_count;
                 if ($freq >= $opts{u}){
-                    push @{$allele_to_csq{benign}->{$i}}, @{$allele_to_csq{damaging}->{$i}};
+                    push @{$allele_to_csq{benign}->{$i}}, 
+                         @{$allele_to_csq{damaging}->{$i}};
                     delete $allele_to_csq{damaging}->{$i} 
                 }
             }
@@ -464,22 +472,29 @@ CSQ:    foreach my $annot (@a_csq){
                 my $t = $annot->{$feature_id};
                 #add sample IDs as entries to this variant count class
                 # e.g. $counts{ENST00001234567}->{benign}->{sample_1} = undef
-                # we will count no. keys for each transcript at end of chromosome
+                # we will count no. keys for each transcript at end of 
+                # chromosome
                 my %samps_with_allele = map {$_ => 1 } addSamplesWithAllele
                 (
                     \%samp_to_gt, 
                     $j,
                     $split,
                 );
-                map { $counts{$t}->{$k}->{$_} = undef } keys %samps_with_allele;
+                map {$counts{$t}->{$k}->{$_} = undef} keys %samps_with_allele;
                 #output annotation details and sample counts if --q 
                 if ($VAR and $k eq 'damaging'){
-                    my @cases_with_allele = grep { $samps_with_allele{$_} } @cases;
-                    my @hom_cases = grep { $samp_to_gt{$_} =~ /^$j[\|\/]$j$/ } @cases_with_allele;
-                    my @het_cases = grep { $samp_to_gt{$_} !~ /^$j[\|\/]$j$/ } @cases_with_allele;
-                    my @conts_with_allele = grep { $samps_with_allele{$_} } @controls;
-                    my @hom_conts = grep { $samp_to_gt{$_} =~ /^$j[\|\/]$j$/ } @conts_with_allele;
-                    my @het_conts = grep { $samp_to_gt{$_} !~ /^$j[\|\/]$j$/ } @conts_with_allele;
+                    my @cases_with_allele = grep { 
+                        $samps_with_allele{$_} } @cases;
+                    my @hom_cases = grep { 
+                        $samp_to_gt{$_} =~ /^$j[\|\/]$j$/ } @cases_with_allele;
+                    my @het_cases = grep { 
+                        $samp_to_gt{$_} !~ /^$j[\|\/]$j$/ } @cases_with_allele;
+                    my @conts_with_allele = grep { 
+                        $samps_with_allele{$_} } @controls;
+                    my @hom_conts = grep { 
+                        $samp_to_gt{$_} =~ /^$j[\|\/]$j$/ } @conts_with_allele;
+                    my @het_conts = grep { 
+                        $samp_to_gt{$_} !~ /^$j[\|\/]$j$/ } @conts_with_allele;
                     print $VAR join
                     (
                         "\t", 
@@ -520,13 +535,19 @@ sub outputCounts{
         my %case_counts = (damaging => 0, benign => 0);
         my %cont_counts = (damaging => 0, benign => 0);
         my %fisher = (
-            damaging => { 'p.value' => "NA", 'conf.int' => "NA", estimate => "NA"},
-            benign   => { 'p.value' => "NA", 'conf.int' => "NA", estimate => "NA"},
+            damaging =>
+                {'p.value' => "NA", 'conf.int' => "NA", estimate => "NA"},
+            benign   =>  
+               { 'p.value' => "NA", 'conf.int' => "NA", estimate => "NA"},
         );
         foreach my $d (qw /damaging benign/){
             if (exists $counts{$t}->{$d} ){
-                map { $case_counts{$d}++ if exists $counts{$t}->{$d}->{$_} } @cases;
-                map { $cont_counts{$d}++ if exists $counts{$t}->{$d}->{$_} } @controls;
+                map { 
+                     $case_counts{$d}++ if exists $counts{$t}->{$d}->{$_} 
+                } @cases;
+                map { 
+                     $cont_counts{$d}++ if exists $counts{$t}->{$d}->{$_} 
+                } @controls;
             }
             my $d_counts  = join
             (   ",", 
@@ -615,8 +636,8 @@ sub checkAllelePl{
             );
             informUser
             ( 
-                "WARNING: Not enough PL scores ($pl) for allele " .
-                "'$i', sample $sample at $chrom:$pos. Your VCF may be malformed.\n"
+                "WARNING: Not enough PL scores ($pl) for allele '$i', sample ".
+                "$sample at $chrom:$pos. Your VCF may be malformed.\n"
             );
             return 1;
         }
@@ -691,10 +712,13 @@ sub getAndCheckCsqHeader{
             } ;
             if (not $@){
                 $opts{m} = 'snpeff';
-                informUser("Found SnpEff header - using SnpEff 'ANN' annotations.\n");
+                informUser("Found SnpEff header - using SnpEff 'ANN' ".
+                           "annotations.\n"
+                );
             }else{
                 die "ERROR: Could not find VEP or SnpEff headers in input. ".
-                    "Please annotate your input with either program and try again.\n";
+                    "Please annotate your input with either program and try ".
+                    "again.\n";
             }
         }
     }else{
@@ -766,8 +790,8 @@ sub getCsqFields{
                   "running VEP.\n";
             }
             die "Could not find '$f' field in $opts{m} consequence header " .
-              "- please ensure you have annotated your file including the appropriate ".
-              "fields.\n";
+              "- please ensure you have annotated your file including the ".
+              "appropriate fields.\n";
         }
     }
     return @fields;
@@ -863,7 +887,7 @@ sub getAndCheckEvalFilters{
 FLT: foreach my $s (@eval_filters){
         my %f =  VcfhacksUtils::getEvalFilter($s);
         foreach my $fld (@{$f{field}}){
-            (my $fb = $fld) =~ s/^\(//;#we may have used ( to specify precedence
+            (my $fb = $fld) =~ s/^\(//;#may have used ( to specify precedence
             if (not exists $csq_header{lc($fb)}){
                 informUser
                 (
@@ -893,13 +917,15 @@ sub openOutput{
     my $OUT_FH;
     my $VAR_FH;
     if ($opts{o}) {
-        open( $OUT_FH, ">", $opts{o} ) || die "Can't open $opts{o} for writing: $!\n";
+        open( $OUT_FH, ">", $opts{o} ) || 
+          die "Can't open $opts{o} for writing: $!\n";
     }
     else {
         $OUT_FH = \*STDOUT;
     }
     if ($opts{s}){
-        open( $VAR_FH, ">", $opts{s} ) || die "Can't open $opts{s} for writing: $!\n";
+        open( $VAR_FH, ">", $opts{s} ) || 
+          die "Can't open $opts{s} for writing: $!\n";
     }
     return ($OUT_FH, $VAR_FH);
 }
@@ -1022,9 +1048,10 @@ sub getAfAnnotations{
     }
     push @af_fields, @custom_af;
     foreach my $key (keys %$info_fields){
-        my $warning = "WARNING: Found expected frequency annotation ($key) in ". 
-          "INFO fields, but 'Number' field is $info_fields->{$key}->{Number}, ".
-          "expected 'A'. Ignoring this field.\n";
+        my $warning = "WARNING: Found expected frequency annotation ($key) ". 
+          "in INFO fields, but 'Number' field is  ".
+          "$info_fields->{$key}->{Number}, expected 'A'. Ignoring this ".
+          "field.\n";
         my $info = "Found allele frequency annotation: $key. ".
           "This will be used for filtering on allele frequency.\n";
         if (grep { $key eq $_ } @af_fields){
@@ -1069,7 +1096,10 @@ sub alleleAboveMaf{
             if ($af_info_fields{$k}->{Type} eq 'Float' or $k eq 'AS_CAF'){
                 return 1 if $split[$i] >= $opts{a};
             }else{
-                inform_user("WARNING: Don't know how to parse INFO field: $k.\n");
+                inform_user
+                (
+                    "WARNING: Don't know how to parse INFO field: $k.\n"
+                );
             }
         }
     }
@@ -1226,7 +1256,7 @@ SCORE:  foreach my $f ( @{ $in_silico_filters{$k} } ) {
         }
     }
     foreach my $k ( keys %in_silico_filters ) {
-        #filter if any of sift/condel/polyphen haven't matched our deleterious settings
+    #filter if any of sift/condel/polyphen haven't matched deleterious settings
         return 0 if not exists $filter_matched{$k};
     }
     return 1;
@@ -1303,7 +1333,7 @@ PROG: foreach my $k ( sort keys %in_silico_filters) {
         }
     }
     foreach my $k ( keys %in_silico_filters ) {
-        #filter if any of sift/condel/polyphen haven't matched our deleterious settings
+    #filter if any of sift/condel/polyphen haven't matched deleterious settings
         return 0 if not exists $filter_matched{$k};
     }
     return 1;
