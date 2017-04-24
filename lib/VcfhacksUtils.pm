@@ -560,22 +560,31 @@ sub informUser{
 
 Print an updating progress count to STDERR
     
-Takes the current count as first argument and an optional second argument as 
-the message to output alongside the count (default = "variants processed...").
+Requires the current count as first argument. Takes optional second and third 
+arguments:
+
+The second argument determines whether to increase the count only 
+proportional to the total count (default, or if second argument evaluates to 
+false) or to increment granularly (if second argument evaluates to true). 
+
+The third argument is the message to output alongside the count (default = 
+"variants processed...").
 
  while (<$FH>){
      ...
-     VcfhacksUtils::simpleProgress(++$n, "variants converted...");
+     VcfhacksUtils::simpleProgress(++$n, 0, "variants converted...");
  } 
 
 =cut
 
 sub simpleProgress{
-    my ($count, $msg) = @_;
+    my ($count, $granular, $msg) = @_;
     $msg ||= "variants processed...";
     local $| = 0;
     my $mod = 1;
-    if ($count >= 100000){
+    if ($granular){
+        $mod = 0;
+    }elsif ($count >= 100000){#update at least every 100 counts
         $mod = 100;
     }elsif($count > 0){
         my $exp = int ( log($count)/log(10)); 
