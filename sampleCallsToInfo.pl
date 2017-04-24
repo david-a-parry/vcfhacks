@@ -260,7 +260,7 @@ sub updateProgress{
             $next_update = $progressbar->update( $n )
         }
     }elsif($opts{progress}){
-        VcfhacksUtils::simpleProgress($n, " variants converted" );
+        VcfhacksUtils::simpleProgress($n, 0, " variants converted" );
     }
 }
 

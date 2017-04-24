@@ -232,7 +232,7 @@ sub updateProgress{
             $next_update = $progressbar->update( $n )
         }
     }elsif($opts{progress}){
-        VcfhacksUtils::simpleProgress($n, " variants processed" );
+        VcfhacksUtils::simpleProgress($n, 0, " variants processed" );
     }
 }
 

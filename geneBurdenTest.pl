@@ -435,7 +435,7 @@ CSQ:    foreach my $annot (@a_csq){
         (
             minGQ   => $opts{g},
             line    => $split,
-            samples => \@samples,
+            samples => \@controls,
             sample_to_columns => \%sample_to_col,
         );
         map { $allele_count += $s_allele_counts{$_} } keys %s_allele_counts;

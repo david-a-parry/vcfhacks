@@ -86,7 +86,7 @@ sub updateProgress{
     if ($progressbar) {
         $next_update = $progressbar->update($n) if $n >= $next_update;
     }else{
-        VcfhacksUtils::simpleProgress($n, " variants processed" );
+        VcfhacksUtils::simpleProgress($n, 0, " variants processed" );
     }
 }
 

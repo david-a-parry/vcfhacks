@@ -368,7 +368,7 @@ sub checkProgress{
     if ($progressbar) {
         $next_update = $progressbar->update($n) if $n >= $next_update;
     }elsif($do_count_check){#input from STDIN/pipe
-        VcfhacksUtils::simpleProgress($vars, " variants read" );
+        VcfhacksUtils::simpleProgress($vars, 0, " variants read" );
     }
 }
 

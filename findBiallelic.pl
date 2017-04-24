@@ -1931,7 +1931,7 @@ sub updateProgressBar{
             $next_update = $progressbar->update( $var_count )
         }
     }elsif($opts{b}){
-        VcfhacksUtils::simpleProgress($var_count, " variants processed" );
+        VcfhacksUtils::simpleProgress($var_count, 0, " variants processed" );
     }
 }
 
