@@ -435,11 +435,11 @@ CSQ:    foreach my $annot (@a_csq){
         (
             minGQ   => $opts{g},
             line    => $split,
-            samples => \@controls,
+            samples => \@samples,
             sample_to_columns => \%sample_to_col,
         );
         map { $allele_count += $s_allele_counts{$_} } keys %s_allele_counts;
-        # filter if frequency in @controls is greater or equal to 
+        # filter if frequency in @samples is greater or equal to 
         # -u/--max_sample_allele_frequency
         if ($opts{u} and $allele_count > 0){
             foreach my $i (keys %{$allele_to_csq{damaging}}){
