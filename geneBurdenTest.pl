@@ -6,7 +6,7 @@ use Pod::Usage;
 use POSIX qw/strftime/;
 use Data::Dumper;
 use Statistics::R;
-use List::Util qw ( first max min ) ;
+use List::Util qw ( max min ) ;
 use File::Temp qw/ tempfile /;
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
