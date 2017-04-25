@@ -9,14 +9,12 @@ annovcfToSimple.pl - takes a vcf file and outputs a simplified version in Excel'
 
         annovcfToSimple.pl -i [ file] [options]
         
-        annovcfToSimple.pl -s -i [SnpEff annotated VCF file] [options]
+        annovcfToSimple.pl --snpeff -i [SnpEff annotated VCF file] [options]
         
-        annovcfToSimple.pl -v -i [VEP annotated VCF file] [options]
+        annovcfToSimple.pl --vep -i [VEP annotated VCF file] [options]
         
         annovcfToSimple.pl -g -v -i [VEP and geneAnnotator.pl annotated VCF file] [options]
         
-        annovcfToSimple.pl -s -i [SnpEff annotated VCF file] [options]
-
         annovcfToSimple.pl -h (display help message)
         
         annovcfToSimple.pl -m (display manual page)
