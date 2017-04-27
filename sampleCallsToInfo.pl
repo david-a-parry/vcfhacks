@@ -80,7 +80,7 @@ if ( defined $opts{progress} ) {
 }
 my %contigs = ();
 if ($forks){
-    %contigs = VcfReader::getContigOrder($opts{input});
+    %contigs = VcfReader::getContigOrder(vcf => $opts{input});
 }
 
 $time = strftime( "%H:%M:%S", localtime );
