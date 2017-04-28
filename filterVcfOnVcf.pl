@@ -328,7 +328,8 @@ else {
     $unaff_quality = $minGQ;
 }
 if (not @pop_ids){
-    @pop_ids =  qw / AFR AMR EAS FIN NFE SAS / ; #default is ExAC pop codes
+    @pop_ids =  qw /POPMAX AFR AMR EAS FIN NFE SAS/ 
+    ;#default are gnomAD/ExAC pop codes except for OTH and ASJ
 } 
 elsif ( grep{ /^disable$/i } @pop_ids ){
     @pop_ids = ();
@@ -1107,11 +1108,16 @@ sub add_pop_freqs_to_allele{
     # and return 1 if > $maf
     foreach my $pop (@pop_acs){
         my $an = VcfReader::getVariantInfoField($split, "AN_$pop");
-        if (not $an){
+        if (not $an or $an eq '.'){
             $min_allele->{"FVOV_AN_$pop"} = '.';
             $min_allele->{"FVOV_AC_$pop"} = '.';
             next;
         }
+        my @ans = split(",", $an);#some AN (e.g.POPMAX) have Number=A, not 1
+        if (@ans > 1){
+            $an = $ans[$allele_code -1]
+        }
+        next if $an eq '.';
         $min_allele->{"FVOV_AN_$pop"} = $an;
         my $acs = VcfReader::getVariantInfoField($split, "AC_$pop");
         my $count = (split ",", $acs)[$allele_code -1];
@@ -1461,7 +1467,8 @@ sub check_pop_ac_info{
             exists $filter_info->{"AN_$pop"}){
             next if ($filter_info->{"AC_$pop"}->{Number} ne 'A');
             next if ($filter_info->{"AC_$pop"}->{Type} ne 'Integer');
-            next if ($filter_info->{"AN_$pop"}->{Number} ne '1');
+            next if ($filter_info->{"AN_$pop"}->{Number} ne '1' and 
+                     $filter_info->{"AN_$pop"}->{Number} ne 'A' );
             next if ($filter_info->{"AN_$pop"}->{Type} ne 'Integer');
             push @pop_codes, $pop;
         }
