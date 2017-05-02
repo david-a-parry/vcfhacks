@@ -1279,7 +1279,7 @@ sub checkMatchingVariants{
     my $min_matching = $opts{n} ? $opts{n} : scalar @samples;
     my %lines_to_print = (); 
     foreach my $tr (keys %transcript_sample_vars){
-        if (scalar (keys %{ $transcript_sample_vars{$tr} }) > $min_matching ){
+        if (scalar (keys %{ $transcript_sample_vars{$tr} }) >= $min_matching ){
             my %new_lines = map { $vcf_lines{$_} => undef } 
                             map { @{$transcript_sample_vars{$tr}->{$_}} } 
                             keys %{ $transcript_sample_vars{$tr} } ;
