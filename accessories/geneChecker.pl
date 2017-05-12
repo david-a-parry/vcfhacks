@@ -12,17 +12,20 @@ my $script_prefix = "perl $RealBin/..";
 my $loc = tmpnam(); 
 my $func = tmpnam(); 
 my @genes = ();
+my @classes = ();
 my %opts = 
 (
     g => \@genes,
     b => 'GRCh37',
     a => 0.01,
+    v => \@classes,
 );
 GetOptions(
         \%opts,
         'i|input=s',
         'g|genes=s{,}',
         'o|output=s',
+        'v|add_variant_classes=s{,}',
         'f|force',
         'b|build=s',
         'a|allele_frequency=f',
@@ -63,6 +66,9 @@ die "getVariantsByLocation.pl Error $? / $@\n" if $?;
 $cmd = "$script_prefix/getFunctionalVariants.pl -i $loc -o $func -add splice_region_variant";
 if ($opts{a}){
      $cmd .= " -a $opts{a}";
+}
+if (@classes){
+    $cmd .= " --add_classes " . join(" ", @classes) ;
 }
 print STDERR "Executing command: $cmd\n";
 system($cmd);
@@ -140,6 +146,29 @@ Options:
 
     -o,--output FILE
         Output XLSX file. Default = geneSummary.xlsx.
+
+    -v,--add_variant_classes
+        Specify additional VEP variant classes to retrieve (e.g. intron_variant) 
+        in addition to the default. By default the following classes are 
+        retrieved:
+                    frameshift_variant
+                    inframe_deletion
+                    inframe_insertion
+                    initiator_codon_variant
+                    missense_variant
+                    protein_altering_variant
+                    regulatory_region_ablation
+                    regulatory_region_amplification
+                    splice_acceptor_variant
+                    splice_donor_variant
+                    splice_region_variant
+                    stop_gained
+                    stop_lost
+                    transcript_ablation
+                    transcript_amplification
+                    TFBS_ablation
+                    TFBS_amplification
+
 
     -f,--force
         Use this flag to overwrite existing output files.
