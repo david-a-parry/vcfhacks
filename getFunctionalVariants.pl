@@ -164,12 +164,12 @@ if (defined $opts{c}){
     
 #get and check header
 
-my @header = VcfReader::getHeader($opts{i});
+my ($header, $first_var, $VCF)  = VcfReader::getHeaderAndFirstVariant($opts{i});
 die "ERROR: Invalid VCF header in $opts{i}\n" 
-  if not VcfReader::checkHeader(header => \@header);
+  if not VcfReader::checkHeader(header => $header);
 my %sample_to_col = VcfReader::getSamples
 (
-    header => \@header,
+    header => $header,
     get_columns => 1,
 );
 
@@ -198,7 +198,7 @@ if ( ( not @samples and (defined $opts{f} or $opts{u} or $opts{gene_counts}) )
 @samples = VcfhacksUtils::removeDups(@samples);
 
 #get available INFO fields from header
-my %info_fields = VcfReader::getInfoFields(header => \@header);
+my %info_fields = VcfReader::getInfoFields(header => $header);
 
 #check mode
 
@@ -314,6 +314,7 @@ if ($opts{b}) {
 }
 
 if ($opts{t}){
+    close $VCF;
     processTargets();
 }else{
     processByLine();
@@ -353,8 +354,8 @@ sub processTargets{
 
 #################################################
 sub processByLine{
-    my $VCF = VcfReader::openVcf($opts{i}); 
-    #read line
+    processLine($first_var);
+    updateProgressBar();  
     while (my $line = <$VCF>){
         processLine($line);
         updateProgressBar();  
@@ -1385,7 +1386,7 @@ sub getAndCheckCsqHeader{
         eval { 
             %csq_head = VcfReader::readVepHeader
             (
-                header => \@header
+                header => $header
             ); 
         } ;
         if (not $@){
@@ -1396,7 +1397,7 @@ sub getAndCheckCsqHeader{
             eval { 
                 %csq_head = VcfReader::readSnpEffHeader
                 (
-                    header => \@header
+                    header => $header
                 ); 
             } ;
             if (not $@){
@@ -1411,12 +1412,12 @@ sub getAndCheckCsqHeader{
         if ($opts{m} eq 'vep'){
             %csq_head = VcfReader::readVepHeader
                 (
-                    header => \@header
+                    header => $header
                 ); 
         }else{
             %csq_head = VcfReader::readSnpEffHeader
             (
-                header => \@header
+                header => $header
             ); 
         }
     }
@@ -1661,7 +1662,7 @@ sub writeOptionsToHeader{
     ); 
     
     #add existing meta header lines
-    print $FH join("\n", grep { /^##/ } @header) . "\n" ;
+    print $FH join("\n", grep { /^##/ } @$header) . "\n" ;
     #add new INFO fields
     print $FH VcfhacksUtils::getInfoHeader(%al_info) . "\n";
     if (defined $opts{f}){
@@ -1676,7 +1677,7 @@ sub writeOptionsToHeader{
     }
     #add header line detailing program options
     print $FH VcfhacksUtils::getOptsVcfHeader(%opts) . "\n"; 
-    print $FH "$header[-1]\n";
+    print $FH "$header->[-1]\n";
 }
 
 #################################################
@@ -2085,7 +2086,7 @@ This program will attempt to detect the format of your input automatically by lo
 
 =item B<-s    --samples>
 
-Only keep variants present in one of these samples.  You may specify 'all' (without quotes) instead of a sample name to select all samples in the VCF.  
+Only keep variants present in one of these samples.  You may specify 'all' (without quotes) instead of a sample name to select all samples in the VCF (potentially useful if used in confunction with --find_shared_genes). If you only want to identify variants present in a subset of these samples you can use the --num_matching argument to specify a minimum number of samples that must carry a variant. 
 
 =item B<-f    --find_shared_genes>
 

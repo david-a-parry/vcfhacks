@@ -151,16 +151,16 @@ if (defined $opts{c}){
     
 #get and check header
 
-my @header = VcfReader::getHeader($opts{i});
+my ($header, $first_var, $VCF)  = VcfReader::getHeaderAndFirstVariant($opts{i});
 die "ERROR: Invalid VCF header in $opts{i}\n" 
-  if not VcfReader::checkHeader(header => \@header);
+  if not VcfReader::checkHeader(header => $header);
 my %sample_to_col = VcfReader::getSamples
 (
-    header => \@header,
+    header => $header,
     get_columns => 1,
 );
 #get available INFO fields from header
-my %info_fields = VcfReader::getInfoFields(header => \@header);
+my %info_fields = VcfReader::getInfoFields(header => $header);
 
 #check annotation mode
 
@@ -292,10 +292,23 @@ my %transcript_to_symbol = ();
 my %gene_listing = ();
  #gene symbols => transcripts with biallelic variants
 
-my $VCF = VcfReader::openVcf($opts{i}); 
-
-#read line
+process_line($first_var);
 LINE: while (my $line = <$VCF>){
+    process_line($line);
+}
+
+close $VCF;
+
+updateProgressBar();  
+
+checkBiallelic();
+close $OUT;
+
+outputGeneList();
+
+
+sub process_line{
+    my $line = shift;
     next if $line =~ /^#/;#skip header
     chomp $line;
     updateProgressBar();  
@@ -478,14 +491,6 @@ ALT: for (my $i = 1; $i < @alleles; $i++){
         }
     }
 }
-close $VCF;
-
-updateProgressBar();  
-
-checkBiallelic();
-close $OUT;
-
-outputGeneList();
 
 #################################################
 sub getNonRelatedFromVcf{
@@ -988,7 +993,7 @@ sub getAndCheckCsqHeader{
         eval { 
             %csq_head = VcfReader::readVepHeader
             (
-                header => \@header
+                header => $header
             ); 
         } ;
         if (not $@){
@@ -999,7 +1004,7 @@ sub getAndCheckCsqHeader{
             eval { 
                 %csq_head = VcfReader::readSnpEffHeader
                 (
-                    header => \@header
+                    header => $header
                 ); 
             } ;
             if (not $@){
@@ -1014,12 +1019,12 @@ sub getAndCheckCsqHeader{
         if ($opts{m} eq 'vep'){
             %csq_head = VcfReader::readVepHeader
                 (
-                    header => \@header
+                    header => $header
                 ); 
         }else{
             %csq_head = VcfReader::readSnpEffHeader
             (
-                header => \@header
+                header => $header
             ); 
         }
     }
@@ -1355,7 +1360,7 @@ sub openOutput{
 #################################################
 sub writeOptionsToHeader{
     #print meta header lines
-    print $OUT join("\n", grep { /^##/ } @header) . "\n";
+    print $OUT join("\n", grep { /^##/ } @$header) . "\n";
 
     #add header line detailing program options
     print $OUT VcfhacksUtils::getOptsVcfHeader(%opts) . "\n"; 
@@ -1383,7 +1388,7 @@ sub writeOptionsToHeader{
 
     print $OUT VcfhacksUtils::getInfoHeader(%hom_info) . "\n"; 
     print $OUT VcfhacksUtils::getInfoHeader(%het_info) . "\n"; 
-    print $OUT "$header[-1]\n";
+    print $OUT "$header->[-1]\n";
 }
 
 #################################################
