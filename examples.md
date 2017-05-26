@@ -1,6 +1,6 @@
 # vcfhacks examples #
 
-### Getting started ###
+### Getting started 
 
 These programs are written primarily with a view to assisting mutation discovery in Mendelian disease. They have been tested on data generated using GATK variant callers (UnifiedGenotyper and HaplotypeCaller) but should work with data generate in VCF format from other variant callers. When using tools such as findBiallelicVep.pl or filterOnSample.pl it is assumed that you are using a multisample VCF as input.   Help information is available for each script by running the script with either '--help' or '--manual' options. You will probably need to install additional perl modules from CPAN (http://www.cpan.org/modules/INSTALL.html) in order to run these programs. See the [readme.md](https://github.com/gantzgraf/vcfhacks/blob/master/readme.md) file for details.
 
@@ -16,7 +16,7 @@ Use the *--forks*  option with these programs to specify the number of forks to 
 
 Examples are given below of what are envisaged to be typical uses of these programs. They are only intended as guidelines for use of some of these programs in order to get people started with these tools. 
 
-### FILTERING VARIANTS: ###
+### FILTERING VARIANTS: 
 
 Typically we may first want to remove common variation from a VCF. The example below is typical for processing data relating to a rare recessive condiation. It removes variants in the **dbSnp VCF file** (dbSnp138.b37.vcf.gz) present at **build 129** (generally considered the last build before 'contamination' with data from large sequencing projects) or with a **minor allele frequency (MAF) of 1 % or higher** in later build versions.  However, any variant with a **'Pathogenic'** or **'Probably Pathogenic'** annotation in the **ClinVar** VCF file (clinvar_20130506.vcf) will be retained regardless of frequency or dbSNP build. We optionally use the --progress flag to show a progressbar as variants are processed.
 
@@ -78,7 +78,7 @@ The **getFunctionalVariants.pl** program identifies variants matching 'functiona
 
 You may then want to submit your 'not_found_cadd_scores.tsv' to http://cadd.gs.washington.edu/score and rerun once you have downloaded and tabix indexed your missing results.
 
-### ANNOTATING YOUR OUTPUT:###
+### ANNOTATING YOUR OUTPUT:
 
 Having filtered/ranked you variant calls you may want to annotate gene information using geneAnnotator.pl. If you downloaded a release of 0.2.0 or higher you should already have the geneAnnotatorDb folder in the data subdirectory. If instead you retrieved the scripts by cloning this repository you may either create your own database with geneAnnotator or download a pre-built database from: 
 
@@ -99,7 +99,7 @@ At this point you may wish to produce a spreadsheet of your results using annovc
 If you have many samples in your VCF you may want to specify only a few using the --samples option or alternatively use the --summarise option to summarise the alleles and genotypes in your VCF rather than giving information for each sample.
 
 
-### GETTING VARIANTS FROM COORDINATES:###
+### GETTING VARIANTS FROM COORDINATES:
 
 You may quickly obtain variants that lie within genomic regions (specified in a BED file or on the command line), overlap single genomic coordinates or match those of another VCF using getVariantsByLocation.pl. If an index does not already exist one will be created, which may take some time for large files, but once created retrieval of regions should be quick. Note that your input must be coordinate sorted for this to work, otherwise the program will error.
 
@@ -142,7 +142,7 @@ To get variants from vars.vcf that lie within the region 1:2000000-50000000 and 
     ./filterVcfOnLocation.pl -i vars.vcf -r 1:2000000-50000000 -o filtered.vcf
 
 
-### MISC USEFUL TOOLS ###
+### MISC USEFUL TOOLS 
 
 If you need to sort a VCF in coordinate order use sortVcf.pl:
 
