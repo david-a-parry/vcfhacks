@@ -18,6 +18,8 @@ intron_variant	valid
 mature_miRNA_variant	valid
 missense_variant	default
 nc_transcript_variant	valid
+non_coding_transcript_variant	valid
+non_coding_transcript_exon_variant	valid
 non_coding_exon_variant	valid
 protein_altering_variant	default
 regulatory_region_ablation	default
