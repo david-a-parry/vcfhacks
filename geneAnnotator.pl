@@ -510,8 +510,23 @@ LINE: while ( my $line = <$VCF> ) {
             }elsif($c->{$gene_field} =~ /^[NX][MR]_\d+$/){
                 #not implemented unless we decide to include gene2refseq in database
                # push @entrez_ids, search_refseq_id($c, $gene_field); 
+            }else{ #assume gene symbol, might be split if SnpEff intergenic
+                my @e = ();
+                if ($c->{$gene_field} =~ /^\w+(-AS1|-\d+)$/){
+                    push @e, $c->{$gene_field}; 
+                }elsif($c->{$gene_field} =~ /^(\w+(-AS1|-\d+))-(\S+)$/){ 
+                    push @e, ($1, $3);
+                }elsif($c->{$gene_field} =~ /^(\S+)-(\w+(-AS1|-\d+))/){
+                    push @e, ($1, $2);
+                }else{
+                    @e = split("-", $c->{$gene_field});
+                }
+                push @entrez_ids, map { getEntrezIdFromSymbol($_) } @e;
             }
         }
+        my %seen = ();
+        @entrez_ids = grep { !$seen{$_}++ }  @entrez_ids;
+        %seen = ();
         foreach my $id (@entrez_ids){
             $gene_annot{$id} = searchWithEntrezId($id);
         }
@@ -1075,6 +1090,7 @@ sub check_consequence {
 sub check_snpeff_consequence {
     my ($annot, $biotype_filters, $class_filters) = @_;
     #skip variants with undef features (intergenic variants)
+    return 0 if $annot->{consequence} eq "intergenic_region";
     return 0 if not defined $annot->{feature_id};
     #skip unwanted biotypes
     return 0 if exists $biotype_filters->{lc $annot->{transcript_biotype} };
