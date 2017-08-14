@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 28;
+use Test::More tests => 32;
 use FindBin qw($RealBin);
 use lib "$RealBin/../lib";
 use lib "$RealBin/../lib/dapPerlGenomicLib";
@@ -20,6 +20,7 @@ my $shuf = "$RealBin/test_data/test1_shuffled.vcf";
 my $tmpsort = "$shuf.tmpsort";
 my $gz = "$RealBin/test_data/test1.vcf.gz";
 my $tbi = "$gz.tbi";
+my $dbsnp = "$RealBin/test_data/dbSnpTestRef.vcf.gz";
 
 foreach my $f ($tmpsort, $index, $tbi){
     if (-e $f){
@@ -105,7 +106,60 @@ is
 ); 
 $n_tests++; 
 
+
+
+my %db_sargs = VcfReader::getSearchArguments($dbsnp);
+is
+(
+    VcfReader::searchForPosition(
+        %db_sargs,
+        chrom => '22',
+        pos   => 42991511,
+    ),
+    1,
+    "searchForPosition returns single hit for snp with a snp immediately after",
+);
+$n_tests++; 
    
+is
+(
+    VcfReader::searchForPosition(
+        %db_sargs,
+        chrom => '22',
+        pos   => 42991512,
+    ),
+    1,
+    "searchForPosition returns single hit for snp with a snp immediately before",
+);
+$n_tests++; 
+
+
+is
+(
+    VcfReader::searchByRegion(
+        %db_sargs,
+        chrom => '22',
+        start => 42991511, 
+        end   => 42991511,
+    ),
+    1,
+    "searchByRegion returns single hit for snp with a snp immediately after",
+);
+$n_tests++; 
+   
+is
+(
+    VcfReader::searchByRegion(
+        %db_sargs,
+        chrom => '22',
+        start => 42991512, 
+        end   => 42991512,
+    ),
+    1,
+    "searchByRegion returns single hit for snp with a snp immediately before",
+);
+$n_tests++; 
+
 ok
 (
     @hits = VcfReader::searchByRegion(
