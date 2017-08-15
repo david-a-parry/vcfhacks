@@ -373,16 +373,6 @@ print STDERR "[$time] INFO - Initializing input VCF...\n";
 my ($header, $first_var, $VCF)  = VcfReader::getHeaderAndFirstVariant($vcf);
 die "[ERROR] Header not ok for input ($vcf) "
     if not VcfReader::checkHeader( header => $header );
-if ( defined $progress ) {
-    $time = strftime( "%H:%M:%S", localtime );
-    if (-p $vcf or $vcf eq "-" ) {
-        print STDERR "\n[$time] INFO - Input is from STDIN or pipe - ".
-                     "will report progress per 10000 variants. ";
-    }else {
-        $total_variants = VcfReader::countVariants($vcf);
-        print STDERR "[$time] - INFO $vcf has $total_variants variants.\n";
-    }
-}
 my %sample_to_col = ();
 if (@samples) {
     %sample_to_col = VcfReader::getSamples(
