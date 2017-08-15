@@ -92,8 +92,7 @@ my $progressbar;
 my $next_update = 0;
 my $time = strftime("%H:%M:%S", localtime);
 my $total_vcf = 0;
- VcfReader::countVariants( $opts{input} ) if defined $opts{progress};
-if (defined $opts{progress} and $total_vcf){
+if (defined $opts{progress}){
     ($progressbar, $total_vcf) = VcfhacksUtils::getProgressBar(
         input  => $opts{input},
         name => "Annotating", 
@@ -193,7 +192,7 @@ unless ($opts{do_not_rank}){
         while ( defined( $_ = $sortex->fetch ) ) {
             print $OUT substr($_, 6) ."\n";
             $n++;
-            if (defined $opts{progress}){
+            if ($progressbar){
                $next_update = $progressbar->update($n) if $n >= $next_update;
             }
         }
@@ -207,12 +206,12 @@ unless ($opts{do_not_rank}){
         foreach my $var (@variants){
             print $OUT substr($var, 6) ."\n";
             $n++;
-            if (defined $opts{progress}){
+            if ($progressbar){
                $next_update = $progressbar->update($n) if $n >= $next_update;
             }
         }
     }
-    if (defined $opts{progress} and $total_vcf){
+    if ($progressbar and $total_vcf){
         $progressbar->update($total_vcf) if $total_vcf >= $next_update;
     }
 }
