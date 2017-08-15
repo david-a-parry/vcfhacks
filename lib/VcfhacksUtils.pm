@@ -537,13 +537,16 @@ EOT
         informUser("Counting variants in input for progress monitoring.\n"); 
         my $total_vars = VcfReader::countVariants($args{input});
         informUser("$args{input} has $total_vars variants.\n");
-        return Term::ProgressBar->new
-        (
-            {
-                name  => $args{name},
-                count => $total_vars * $args{factor},
-                ETA   => "linear",
-            }
+        return (
+            Term::ProgressBar->new
+            (
+                {
+                    name  => $args{name},
+                    count => $total_vars * $args{factor},
+                    ETA   => "linear",
+                }
+            ),
+            $total_vars
         );
     }
     return 0;
