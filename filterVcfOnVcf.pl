@@ -495,7 +495,7 @@ if ($progressbar) {
     $progressbar->message( "[INFO - $time] $variants_done variants processed" );
 }
 $time = strftime( "%H:%M:%S", localtime );
-print STDERR "[$time] INFO - $filtered variants filtered, $kept printed ";
+print STDERR "\n[$time] INFO - $filtered variants filtered, $kept printed ";
 print STDERR "($total_variants total)" if $total_variants;
 print STDERR "\n";
 
