@@ -70,7 +70,7 @@ if ($opts{output}){
 }
 my $time = strftime("%H:%M:%S", localtime);
 my $total_vcf = -1;
-print STDERR "[$time] Initializing input VCF...\n";
+print STDERR "[INFO - $time] Initializing input VCF...\n";
 my ($header, $first_var, $VCF)  = VcfReader::getHeaderAndFirstVariant($opts{input});
 die "Header not ok for input ($opts{input}) "
     if not VcfReader::checkHeader( header => $header );
@@ -96,7 +96,7 @@ if (@samples) {
 }
 
 $time = strftime( "%H:%M:%S", localtime );
-print STDERR "[$time] Finished initializing input VCF\n";
+print STDERR "[INFO - $time] Finished initializing input VCF\n";
 
 if ($opts{dir}){
     opendir (my $DIR, $opts{dir}) or die "Can't read directory $opts{dir}: $!\n";
@@ -135,7 +135,7 @@ for ( my $i = 0 ; $i < @evs ; $i++ ) {
         }
     );
     $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "[$time] Initializing $evs[$i] EVS reference VCF "
+    print STDERR "[INFO - $time] Initializing $evs[$i] EVS reference VCF "
       . ( $i + 1 ) . " of "
       . scalar(@evs) . "\n";
     $dbpm->start() and next;
@@ -143,7 +143,7 @@ for ( my $i = 0 ; $i < @evs ; $i++ ) {
     push @info_and_index, $evs[$i];
     $time = strftime( "%H:%M:%S", localtime );
     print STDERR
-      "[$time] Finished initializing $evs[$i] EVS reference VCF.\n";
+      "[INFO - $time] Finished initializing $evs[$i] EVS reference VCF.\n";
     $dbpm->finish( 0, \@info_and_index );
 }
 print STDERR "Waiting for children...\n" if $opts{VERBOSE};
@@ -154,7 +154,7 @@ checkEvsInfoFields();
 writeHeaders(); 
 
 $time = strftime("%H:%M:%S", localtime);
-print STDERR "[$time] EVS filter starting\n";
+print STDERR "[INFO - $time] EVS filter starting\n";
 
 my $kept = 0; #variants not filtered
 my $filtered = 0; #variants filtered

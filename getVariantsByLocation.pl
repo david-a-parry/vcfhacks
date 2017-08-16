@@ -215,7 +215,7 @@ if (lc($opts{species}) !~  /^human|homo sapiens|h_sapiens|homo|enshs|hsap|9606|h
 my $time = strftime( "%H:%M:%S", localtime );
 print STDERR "Time started: $time\n" unless $opts{q};
 my $total_variants;
-print STDERR "[$time] Initializing input VCF... " unless $opts{q};
+print STDERR "[INFO - $time] Initializing input VCF... " unless $opts{q};
 die "Header not ok for input ($opts{i}) "
   if not VcfReader::checkHeader( vcf => $opts{i} );
 my %sargs = VcfReader::getSearchArguments($opts{i});
@@ -231,7 +231,7 @@ if (exists $sargs{contig_order}){
 }
 
 $time = strftime( "%H:%M:%S", localtime );
-print STDERR "\n[$time] Finished initializing input VCF\n" unless $opts{q};
+print STDERR "\n[INFO - $time] Finished initializing input VCF\n" unless $opts{q};
 my $printed      = 0;
 my $OUT;
 my %potential_overlaps = ();
@@ -277,7 +277,7 @@ sub process_regions{
         push @regions, $region if defined $region;
     }
     
-    print STDERR "[$time] Preparing regions... " unless $opts{q};
+    print STDERR "[INFO - $time] Preparing regions... " unless $opts{q};
     if (@bedfile) {
         foreach my $bedfile (@bedfile) {
             open( BED, $bedfile ) || die "can't open $bedfile: $!";
@@ -394,7 +394,7 @@ sub process_regions{
 
     my $region_ref = $reg_obj->prep();
     $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "\n[$time] Finished preparing regions.\n" unless $opts{q};
+    print STDERR "\n[INFO - $time] Finished preparing regions.\n" unless $opts{q};
     open_output();
     write_header();
     foreach my $r (@$region_ref) {

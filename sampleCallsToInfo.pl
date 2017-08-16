@@ -64,7 +64,7 @@ my $progressbar;
 my $next_update = 0;
 my $total_vcf   = 0;
 my $time = strftime( "%H:%M:%S", localtime );
-print STDERR "[$time] Initializing input VCF... ";
+print STDERR "[INFO - $time] Initializing input VCF... ";
 die "Header not ok for input ($opts{input}) "
     if not VcfReader::checkHeader( vcf => $opts{input} );
 if ( defined $opts{progress} ) {
@@ -84,7 +84,7 @@ if ($forks){
 }
 
 $time = strftime( "%H:%M:%S", localtime );
-print STDERR "\n[$time] Finished initializing input VCF\n";
+print STDERR "\n[INFO - $time] Finished initializing input VCF\n";
 
 my @meta_head = VcfReader::getMetaHeader( $opts{input} );
 my %info_fields = VcfReader::getInfoFields(header => \@meta_head);
@@ -135,7 +135,7 @@ if (defined $opts{keep_calls}){
 }
 if (not $progressbar){
     $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "[$time] Conversion starting\n";
+    print STDERR "[INFO - $time] Conversion starting\n";
 }
 
 my $n   = 0;

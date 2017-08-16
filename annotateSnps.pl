@@ -112,7 +112,7 @@ my $found            = 0;    #variants that match a known SNP
 my $printed_to_known = 0;
 my $total_vcf        = 0;
 my $time = strftime( "%H:%M:%S", localtime );
-print STDERR "[$time] INFO - Initializing input VCF...\n";
+print STDERR "[INFO - $time] Initializing input VCF...\n";
 
 my ($header, $first_var, $VCF)  = VcfReader::getHeaderAndFirstVariant($opts{input});
 die "Header not ok for input ($opts{input}) "
@@ -143,20 +143,20 @@ if (@samples) {
 }
 
 $time = strftime( "%H:%M:%S", localtime );
-print STDERR "[$time] INFO - Finished initializing input VCF\n";
+print STDERR "[INFO - $time] Finished initializing input VCF\n";
 
 if ($opts{clinvar_file}){
     $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "[$time] INFO - Checking ClinVar file, $opts{clinvar_file}...\n";
+    print STDERR "[INFO - $time] Checking ClinVar file, $opts{clinvar_file}...\n";
     my ( $cv, $col ) = ClinVarReader::checkClinVarFile($opts{clinvar_file});
     $opts{clinvar_file} = $cv;
     $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "[$time] INFO - ClinVar file is OK.\n";
+    print STDERR "[INFO - $time] ClinVar file is OK.\n";
 }
 
 if (@dbsnp > 1){
     $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "[$time] INFO - Multiple dbSNP files in use - "
+    print STDERR "[INFO - $time] Multiple dbSNP files in use - "
       . "annotations will be added in following order of precedence: "
       . join (" > ", @dbsnp) . "\n";
 }
@@ -189,7 +189,7 @@ for ( my $i = 0 ; $i < @dbsnp ; $i++ ) {
         }
     );
     $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "[$time] INFO - Initializing $dbsnp[$i] dbSNP reference VCF "
+    print STDERR "[INFO - $time] Initializing $dbsnp[$i] dbSNP reference VCF "
       . ( $i + 1 ) . " of "
       . scalar(@dbsnp) . "\n";
     $dbpm->start() and next;
@@ -197,7 +197,7 @@ for ( my $i = 0 ; $i < @dbsnp ; $i++ ) {
     push @info_and_index, $dbsnp[$i];
     $time = strftime( "%H:%M:%S", localtime );
     print STDERR
-      "[$time] INFO - Finished initializing $dbsnp[$i] dbSNP reference VCF.\n";
+      "[INFO - $time] Finished initializing $dbsnp[$i] dbSNP reference VCF.\n";
     $dbpm->finish( 0, \@info_and_index );
 }
 print STDERR "INFO - Waiting for children...\n" if $opts{VERBOSE};
@@ -233,12 +233,12 @@ if ( $opts{freq} ) {
 print_header();
 
 $time = strftime( "%H:%M:%S", localtime );
-print STDERR "[$time] INFO - SNP annotation starting\n";
+print STDERR "[INFO - $time] SNP annotation starting\n";
 
 $freq /= 100 if ($freq);
 if ( $opts{build} || $freq ) {
     $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "[$time] INFO - Filtering variants on following criteria:\n";
+    print STDERR "[INFO - $time] Filtering variants on following criteria:\n";
     print STDERR ">in dbSNP$opts{build} or previous\n"
       if defined $opts{build} && $opts{build};
     print STDERR
@@ -876,7 +876,7 @@ sub evaluate_snp {
             }
         }
         if ( $freq <= 0.01 && not $opts{no_common_tag}) {
-              #only use COMMON tag if user has specifically asked for it 
+              #only use COMMON tag if user has specifically asked for it?
               #as it seems to be quite inaccurate (small n?)
             if ( $info_values{COMMON} ) {
                 $min_allele->{filter_snp}++;
@@ -989,7 +989,7 @@ sub checkAndAddHeaders{
 DBSNP:      foreach my $d (@dbsnp){
                 $time = strftime( "%H:%M:%S", localtime );
                 if ( $dbsnp_to_info{$d}->{$field} ){
-                    print STDERR "[$time] INFO - $field field found in $d...\n";
+                    print STDERR "[INFO - $time] $field field found in $d...\n";
                     (my $desc = $dbsnp_to_info{$d}->{$field}->{Description}) =~ s/\"//g;
                     my $type = $dbsnp_to_info{$d}->{$field}->{Type};
                     if ($type eq 'Flag'){

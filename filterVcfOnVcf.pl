@@ -334,7 +334,7 @@ if (not @pop_ids){
 elsif ( grep{ /^disable$/i } @pop_ids ){
     @pop_ids = ();
     my $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "[$time] INFO - Filtering on population allele count / allele".
+    print STDERR "[INFO - $time] Filtering on population allele count / allele".
                  " number disabled.\n";
 }
 
@@ -356,20 +356,20 @@ else {
     if ( $forks > $cpus ) {
         print STDERR
         my $time = strftime( "%H:%M:%S", localtime );
-        print STDERR "[$time] WARNING - Number of forks ($forks) exceeds " .
+        print STDERR "[WARNING - $time] Number of forks ($forks) exceeds " .
                      "number of CPUs on this machine ($cpus)\n";
     }
     if ( not $buffer_size ) {
         $buffer_size = 10000 > $forks * 1000 ? 10000 : $forks * 1000;
     }
     my $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "[$time] INFO - Processing in batches of $buffer_size ".
+    print STDERR "[INFO - $time] Processing in batches of $buffer_size ".
                  "variants split among $forks forks.\n";
 }
 
 my $time = strftime( "%H:%M:%S", localtime );
 my $total_variants = 0;
-print STDERR "[$time] INFO - Initializing input VCF...\n";
+print STDERR "[INFO - $time] Initializing input VCF...\n";
 my ($header, $first_var, $VCF)  = VcfReader::getHeaderAndFirstVariant($vcf);
 die "[ERROR] Header not ok for input ($vcf) "
     if not VcfReader::checkHeader( header => $header );
@@ -387,15 +387,15 @@ if (@samples) {
 }
 
 $time = strftime( "%H:%M:%S", localtime );
-print STDERR "[$time] INFO - Finished initializing input VCF\n";
+print STDERR "[INFO - $time] Finished initializing input VCF\n";
 
-print STDERR "[$time] INFO - Initializing filter VCF ($filter_vcf)...\n";
+print STDERR "[INFO - $time] Initializing filter VCF ($filter_vcf)...\n";
 my (
     $filter_vcf_index, 
     $filter_vcf_samples, 
     $filter_info
 ) = initializeFilterVcfs( $filter_vcf );
-print STDERR "[$time] INFO - Finished initializing filter VCF.\n";
+print STDERR "[INFO - $time] Finished initializing filter VCF.\n";
 if ($filter_with_info) {
     check_filter_vcf_info_fields();
 }
@@ -465,7 +465,7 @@ if ($progress) {
     );
 }else{
     $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "[$time] INFO - Filtering started.\n";
+    print STDERR "[INFO - $time] Filtering started.\n";
 }
 
 my $kept             = 0;
@@ -495,7 +495,7 @@ if ($progressbar) {
     $progressbar->message( "[INFO - $time] $variants_done variants processed" );
 }
 $time = strftime( "%H:%M:%S", localtime );
-print STDERR "\n[$time] INFO - $filtered variants filtered, $kept printed ";
+print STDERR "\n[INFO - $time] $filtered variants filtered, $kept printed ";
 print STDERR "($total_variants total)" if $total_variants;
 print STDERR "\n";
 
@@ -707,7 +707,7 @@ sub printHeader{
                            "filterVcfOnVcf.pl from $filter_vcf.",
         );  
         my $time = strftime( "%H:%M:%S", localtime );
-        print STDERR "[$time] INFO - Adding INFO fields $annotate_af" .
+        print STDERR "[INFO - $time] Adding INFO fields $annotate_af" .
                      "_AF and $annotate_af" ."_AN to output for allele ".
                      "frequency and allele numbers calculated from ".
                      "$filter_vcf...\n";
@@ -1440,7 +1440,7 @@ sub check_filter_vcf_info_fields {
         @pop_acs = check_pop_ac_info();
         if (@pop_acs){
             my $time = strftime( "%H:%M:%S", localtime );
-            print STDERR "[$time] INFO - Found " . scalar(@pop_acs) . 
+            print STDERR "[INFO - $time] Found " . scalar(@pop_acs) . 
                 " population allele counts in VCF INFO fields. These will be ".
                 "used for per population allele-frequency filtering. To " .
                 "disable use '--population_ids disable' when running this ".

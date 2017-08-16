@@ -1214,7 +1214,7 @@ sub prepare_database {
         }
         $n++;
         my $time = strftime( "%H:%M:%S", localtime );
-        print STDERR "[$time] Processing $file_name, file $n of $t...\n";
+        print STDERR "[INFO - $time] Processing $file_name, file $n of $t...\n";
         chdir $opts{d} or display_error_and_exit(
             "Directory Error",
             "Can't move to directory $opts{d}",
@@ -1239,7 +1239,7 @@ sub prepare_database {
             next; 
         }
         $time = strftime( "%H:%M:%S", localtime );
-        print STDERR "[$time] Connecting to $file->{url}...\n";
+        print STDERR "[INFO - $time] Connecting to $file->{url}...\n";
         my $ftpobj =
           Net::FTP->new( $file->{url} )
           or restore_file( $file_exists, $file )
@@ -1256,14 +1256,14 @@ sub prepare_database {
           );
         $ftpobj->binary();
         $time = strftime( "%H:%M:%S", localtime );
-        print STDERR "[$time] Downloading $file->{file}...\n";
+        print STDERR "[INFO - $time] Downloading $file->{file}...\n";
         $ftpobj->get( $file->{file} )
           or restore_file( $file_exists, $file )
           && display_error_and_exit( "Download error",
             "Could not download $file->{url}/$file->{dir}/$file->{file}" );
         if ( $file->{file} =~ /\.gz$/ ) {
             $time = strftime( "%H:%M:%S", localtime );
-            print STDERR "[$time] Decompressing $file->{file}...\n";
+            print STDERR "[INFO - $time] Decompressing $file->{file}...\n";
             ( my $output = $file->{file} ) =~ s/\.gz$//i;
             if ( $file->{file} =~ /\.ags/ )
             {    #make sure we use binmode for .ags files
@@ -1297,7 +1297,7 @@ sub prepare_database {
             my $gene2xml = "./gene2xml";
             if ( not -e $gene2xml ) {
                 $time = strftime( "%H:%M:%S", localtime );
-                print STDERR "[$time] Retrieving gene2xml executable...\n";
+                print STDERR "[INFO - $time] Retrieving gene2xml executable...\n";
                 download_gene2xml("./");
             }
             ( my $decomp_file = $file->{file} ) =~ s/\.gz$//;
@@ -1323,7 +1323,7 @@ sub prepare_database {
                     "Check permissions and/or disk space."
                 );
             $time = strftime( "%H:%M:%S", localtime );
-            print STDERR "[$time] Sorting and indexing ensemblToEntrez file...\n";
+            print STDERR "[INFO - $time] Sorting and indexing ensemblToEntrez file...\n";
             sort_and_index_gene_files(
                 $enstoEntrez_file_name,
                 $database_ref->{ensemblToEntrez}->{col},
@@ -1338,7 +1338,7 @@ sub prepare_database {
         }
         chdir $dir;
         $time = strftime( "%H:%M:%S", localtime );
-        print STDERR "[$time] Sorting and indexing $file_name...\n";
+        print STDERR "[INFO - $time] Sorting and indexing $file_name...\n";
         sort_and_index_gene_files( "$file_dir/$file_name", $file->{col},
             $file->{delimiter} );
         if (-e "$file->{localfile}.bkup"){
@@ -1350,7 +1350,7 @@ sub prepare_database {
     }
     #$progressbar->update(100);
     my $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "[$time] Database update finished.\n";
+    print STDERR "[INFO - $time] Database update finished.\n";
 }
 
 #########################################
@@ -1359,14 +1359,14 @@ sub downloadBiogrid{
     my $exists = shift;
     if (not eval "use LWP::Protocol::https; 1"){
         my $time = strftime( "%H:%M:%S", localtime );
-        warn "[$time] LWP::Protocol::https module does not appear to be ".
+        warn "[INFO - $time] LWP::Protocol::https module does not appear to be ".
              "installed. Download of Biogrid file will probably fail. ".
              "If so, please install LWP::Protocol::https using CPAN.\n";
     }
     my $url = "$file->{url}/$file->{dir}/$file->{file}";
     my $dl  = "$opts{d}/$file->{file}";
     my $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "[$time] Downloading $url...\n";
+    print STDERR "[INFO - $time] Downloading $url...\n";
     my $er = getstore($url, $dl );
     if (is_error($er)){
           restore_file( $exists, $file )
@@ -1377,13 +1377,13 @@ sub downloadBiogrid{
             );
     }
     $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "[$time] Decompressing $dl...\n";
+    print STDERR "[INFO - $time] Decompressing $dl...\n";
     unzip $dl => $file->{localfile} or die "Unzip failed: $UnzipError\n";   
     unlink($dl) 
                 or display_error_and_continue(
                 "Can't delete backup file \"$dl\"",
                 "Check permissions - it is safe to manually delete this file now" );
-    print STDERR "[$time] Sorting and indexing $file->{localfile}...\n";
+    print STDERR "[INFO - $time] Sorting and indexing $file->{localfile}...\n";
     sort_and_index_gene_files(
         $file->{localfile},
         $file->{col},
@@ -1573,7 +1573,7 @@ sub extract_ncbi_summaries {
         "to extract NCBI gene summaries. Please install bioperl and try again\n";
     my $time = strftime( "%H:%M:%S", localtime );
     my $cmd = "$gene2xml -i $agsfile -b -x > $agsfile.asn.1";
-    print STDERR "[$time] Converting NCBI binary gene data to text from ". 
+    print STDERR "[INFO - $time] Converting NCBI binary gene data to text from ". 
                  "$agsfile using the following command:\n$cmd\n";
     system($cmd); 
     if ($? == -1) {
@@ -1591,7 +1591,7 @@ sub extract_ncbi_summaries {
     open( my $SUMOUT, ">$sum_out" ) or die "Can't open $sum_out for writing\n";
 
     $time = strftime( "%H:%M:%S", localtime );
-    print STDERR "[$time] Extracting NCBI gene data from $agsfile - ". 
+    print STDERR "[INFO - $time] Extracting NCBI gene data from $agsfile - ". 
                  "this may take some time...\n";
     while ( my ( $gene, $genestructure, $uncaptured ) = $io->next_seq ) {
     

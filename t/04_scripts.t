@@ -40,7 +40,7 @@ $n_tests++;
 
 $expected = getLocationData();
 
-$output = `$script_prefix/getVariantsByLocation.pl -i $vcf -r 6:24658070-25581425  2> /dev/null |  cut -sf 1-9`;
+$output = `$script_prefix/getVariantsByLocation.pl -i $vcf -r chr6:24658070-25581425  2> /dev/null |  cut -sf 1-9`;
 is(
     $output,
     $expected,

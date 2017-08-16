@@ -170,23 +170,23 @@ if ( $forks < 2 ) {
 else {
     if ( $forks > $cpus ) {
         print STDERR
-"[$time] WARNING - Number of forks ($forks) exceeds number of CPUs on this machine ($cpus)\n";
+"[WARNING - $time] Number of forks ($forks) exceeds number of CPUs on this machine ($cpus)\n";
     }
     if ( not $buffer_size ) {
         $buffer_size = 20000 > $forks * 5000 ? 20000 : $forks * 5000;
     }
     $time = strftime( "%H:%M:%S", localtime );
     print STDERR
-"[$time] INFO - Processing in batches of $buffer_size variants split among $forks forks.\n";
+"[INFO - $time] Processing in batches of $buffer_size variants split among $forks forks.\n";
 }
 
 $time = strftime( "%H:%M:%S", localtime );
 print STDERR
-  "[$time] WARNING - --num_matching has no effect when --presence flag is set.\n"
+  "[WARNING - $time] --num_matching has no effect when --presence flag is set.\n"
   if $check_presence_only and $num_matching;
 
 my $total_variants = 0;
-print STDERR "[$time] INFO - Initializing input VCF...\n";
+print STDERR "[INFO - $time] Initializing input VCF...\n";
 my ($header, $first_var, $VCF)  = VcfReader::getHeaderAndFirstVariant($vcf);
 die "Header not ok for input ($vcf) "
     if not VcfReader::checkHeader( header => $header );
@@ -206,7 +206,7 @@ if (defined $progress) {
     );
 }
 $time = strftime( "%H:%M:%S", localtime );
-print STDERR "\n[$time] INFO - Finished initializing input VCF\n";
+print STDERR "\n[INFO - $time] Finished initializing input VCF\n";
 
 my @not_found       = ();
 my @samples_checked = ();
@@ -218,17 +218,17 @@ if ( @$samples_not_found or @$reject_not_found ) {
     my @not_found = ( @$samples_not_found, @$reject_not_found );
     if ( not $ignore_non_existing ) {
         $time = strftime( "%H:%M:%S", localtime );
-        print STDERR "[$time] WARNING - could not find the following samples in VCF:\n"
+        print STDERR "[WARNING - $time] could not find the following samples in VCF:\n"
           . join( "\n", @not_found ) . "\n";
         if ( @samples and not @$samples_found ) {
             $time = strftime( "%H:%M:%S", localtime );
             print STDERR
-"[$time] WARNING - no samples specified by --samples identified in VCF.\n";
+"[WARNING - $time] no samples specified by --samples identified in VCF.\n";
         }
         if ( @reject and not @$reject_found ) {
             $time = strftime( "%H:%M:%S", localtime );
             print STDERR
-              "[$time] WARNING -: no samples specified by --reject identified in VCF.\n";
+              "[WARNING - $time] No samples specified by --reject identified in VCF.\n";
         }
         @samples = @$samples_found;
         @reject  = @$reject_found;
@@ -251,7 +251,7 @@ if (@reject_except) {
 if ( not @reject and not @samples and not $opts{f}) {
     $time = strftime( "%H:%M:%S", localtime );
     print STDERR
-"[$time] WARNING - no samples from --samples (-s), --reject (-r) or --reject_all_except (-x) argument found to filter. Your output will remain unchanged.\n";
+"[WARNING - $time] no samples from --samples (-s), --reject (-r) or --reject_all_except (-x) argument found to filter. Your output will remain unchanged.\n";
 }
 
 my $OUT;
@@ -291,7 +291,7 @@ if ($progressbar) {
     $progressbar->message( "[INFO - $time] $variants_done variants processed" );
 }
 $time = strftime( "%H:%M:%S", localtime );
-print STDERR "[$time] INFO - Filtering finished.\n\n";
+print STDERR "[INFO - $time] Filtering finished.\n\n";
 printf STDERR ("%10d %s.\n", $variants_done, "variants processed"); 
 printf STDERR ("%10d %s.\n", $kept, "variants kept"); 
 printf STDERR ("%10d %s.\n", $filtered, "variants filtered"); 
