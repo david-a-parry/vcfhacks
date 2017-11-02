@@ -338,11 +338,11 @@ sub process_line{
     
     #skip if FILTER != PASS and PASS required
     if ($opts{pass_filters}){
-        next LINE if $filter ne 'PASS';
+        return if $filter ne 'PASS';
     }
     
     #check that this is an autosome (or X if we're interested in X-linked)
-    next LINE if not checkChromosome($chrom); 
+    return if not checkChromosome($chrom); 
     
     #skip if no variant allele in affecteds 
     my %samp_to_gt = VcfReader::getSampleCall
@@ -352,11 +352,11 @@ sub process_line{
           minGQ             => $opts{w},
           multiple          => \@samples,
     );
-    next LINE if not haveVariant(\%samp_to_gt);
+    return if not haveVariant(\%samp_to_gt);
     
     #skip if not identical GTs in all affecteds and identical variants required
     if ($opts{e}){
-        next LINE if not identicalGenotypes(\%samp_to_gt, $opts{n});
+        return if not identicalGenotypes(\%samp_to_gt, $opts{n});
     }
 
     #collect genotypes from @reject samples so we can skip homozygous alleles
