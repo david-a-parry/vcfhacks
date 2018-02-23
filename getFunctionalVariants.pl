@@ -341,7 +341,7 @@ sub processTargets{
         outputGeneCounts();
     }
     close $TMP; 
-    my %contigs = VcfReader::getContigOrder(vcf => $opts{i});#will already be indexed
+    my %contigs = VcfReader::getContigOrder($opts{i});#will already be indexed
     informUser("Sorting and outputting variants...\n");
     VcfReader::sortVcf
     (

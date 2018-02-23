@@ -227,7 +227,7 @@ if (exists $sargs{contig_order}){
         }
     }
 }else{
-    %contigs = VcfReader::getContigOrder(vcf => $opts{i});
+    %contigs = VcfReader::getContigOrder($opts{i});
 }
 
 $time = strftime( "%H:%M:%S", localtime );
