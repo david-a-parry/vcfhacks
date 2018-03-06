@@ -23,6 +23,31 @@ usage("--ped option is required") if not $opts{p};
 usage("--r or --r2 option is required") if not $opts{r} and not $opts{r2};
 usage("please only use one of --r or --r2 options") if  $opts{r} and  $opts{r2};
 
+sub usage{
+    my $msg = shift;
+    print "$msg\n" if $msg;
+    print <<EOT
+    
+Usage: $0 -p pedfile.ped -r out.relatedness
+       $0 -p pedfile.ped -r2 out.relatedness2
+
+Options:
+
+    -p PED --ped PED
+        Ped file detailing expected sample relationships.
+
+    -r RELATEDNESS_OUTPUT
+        Output file from vcftools --relatedness function.
+
+    -r2 RELATEDNESS2_OUTPUT
+        Output file from vcftools --relatedness2 function.
+
+EOT
+    ;
+    exit 1 if $msg;
+    exit;
+}
+
 my $p = ParsePedfile->new(file => $opts{p});
 my $rel = $opts{r} ? $opts{r} : $opts{r2}; 
 open (my $REL, $rel) or die "Error opening $rel: $!\n";

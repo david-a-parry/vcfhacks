@@ -1,13 +1,8 @@
 #!/usr/bin/env perl
 #David Parry August 2011
-
-#TO DO - implement an allele frequency filter which uses information from ped files
-# to only count per family
-
 use strict;
 use warnings;
 use Parallel::ForkManager;
-use Sys::CPU;
 use Getopt::Long;
 use Pod::Usage;
 use Data::Dumper;
@@ -19,7 +14,6 @@ use lib "$RealBin/lib/dapPerlGenomicLib";
 use VcfReader 0.3;
 use VcfhacksUtils;
 
-my $cpus  = Sys::CPU::cpu_count();
 my $forks = 0;
 my $buffer_size;
 my $vcf;
@@ -168,10 +162,6 @@ if ( $forks < 2 ) {
     $forks       = 0;    #no point having overhead of forks for one fork
 }
 else {
-    if ( $forks > $cpus ) {
-        print STDERR
-"[WARNING - $time] Number of forks ($forks) exceeds number of CPUs on this machine ($cpus)\n";
-    }
     if ( not $buffer_size ) {
         $buffer_size = 20000 > $forks * 5000 ? 20000 : $forks * 5000;
     }

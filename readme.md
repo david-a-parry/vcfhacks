@@ -46,7 +46,6 @@ Other perl modules required by these scripts are installable via CPAN - perl wil
 
     List::MoreUtils
     Parallel::ForkManager
-    Sys::CPU
     Term::ProgressBar
     Bio::DB::HTS::Tabix
     List::MoreUtils

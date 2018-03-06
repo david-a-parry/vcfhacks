@@ -3,7 +3,6 @@ use warnings;
 use strict;
 use Parallel::ForkManager;
 use Getopt::Long;
-use Sys::CPU;
 use Pod::Usage;
 use Data::Dumper;
 use List::Util qw (sum);
@@ -21,7 +20,6 @@ my @evs_pop = qw ( EVS_EA_AF EVS_AA_AF EVS_ALL_AF ) ;
 my $freq;
 my $forks = 1;
 my $buffer_size;
-my $cpus = Sys::CPU::cpu_count();
 my %opts = (samples => \@samples, esp_file => \@evs, freq => \$freq, cache => \$buffer_size, forks => \$forks);
 
 GetOptions(\%opts,
@@ -51,9 +49,6 @@ $freq /= 100 if ($freq);
 if ( $forks < 2 ) {
     $forks = 0;    #no point having overhead of forks for one fork
 }else{
-    if ($forks > $cpus){
-        print STDERR "[Warning]: Number of forks ($forks) exceeds number of CPUs on this machine ($cpus)\n";
-    }
     if ( not $buffer_size ) {
         $buffer_size = 10000 > $forks * 1000 ? 10000 : $forks * 1000;
     }

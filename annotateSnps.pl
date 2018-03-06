@@ -3,7 +3,6 @@ use warnings;
 use strict;
 use Parallel::ForkManager;
 use Getopt::Long qw(:config no_ignore_case);
-use Sys::CPU;
 use Pod::Usage;
 use Data::Dumper;
 use List::MoreUtils qw(first_index);
@@ -21,7 +20,6 @@ my $cvar;
 my $freq;
 my $quiet;
 my $strict;
-my $cpus = Sys::CPU::cpu_count();
 my $forks = 0;
 my $buffer_size;
 my %opts = (
@@ -65,9 +63,6 @@ if ( $forks < 2 ) {
     $forks = 0;    #no point having overhead of forks for one fork
 }
 else {
-    if ($forks > $cpus){
-        print STDERR "Warning - Number of forks ($forks) exceeds number of CPUs on this machine ($cpus)\n";
-    }
     if ( not $buffer_size ) {
         $buffer_size = 10000 > $forks * 1000 ? 10000 : $forks * 1000;
     }

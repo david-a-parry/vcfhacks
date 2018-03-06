@@ -15,7 +15,6 @@ BEGIN {
 
 my @modules = qw /
     Parallel::ForkManager
-    Sys::CPU
     Term::ProgressBar
     List::MoreUtils
     LWP::Simple 
@@ -48,7 +47,7 @@ print STDERR "Attempting to install the following modules with CPAN:\n" .
 my @fails = ();
 foreach my $m (@modules){
     my $mod = CPAN::Shell->expand("Module", $m);
-    if ($mod->uptodate){
+    if (defined $mod and $mod->uptodate){
         print STDERR "$m is up to date. Skipping.\n";
         next;
     }
@@ -56,7 +55,8 @@ foreach my $m (@modules){
     #system("perl -MCPAN -e 'install $m'"); 
     CPAN::Shell->install($m);
     #$mod->install;
-    if (not $mod->uptodate){
+    $mod = CPAN::Shell->expand("Module", $m);
+    if (not defined $mod or not $mod->uptodate){
         warn "Error installing $m\n";
         push @fails, $m;
     }

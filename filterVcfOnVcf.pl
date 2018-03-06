@@ -3,7 +3,6 @@ use warnings;
 use strict;
 use Getopt::Long;
 use Parallel::ForkManager;
-use Sys::CPU;
 use Pod::Usage;
 use Data::Dumper;
 use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
@@ -348,17 +347,10 @@ if (not defined $MIN_AN){
     }
 }
 
-my $cpus = Sys::CPU::cpu_count();
 if ( $forks < 2 ) {
     $forks = 0;    #no point having overhead of forks for one fork
 }
 else {
-    if ( $forks > $cpus ) {
-        print STDERR
-        my $time = strftime( "%H:%M:%S", localtime );
-        print STDERR "[WARNING - $time] Number of forks ($forks) exceeds " .
-                     "number of CPUs on this machine ($cpus)\n";
-    }
     if ( not $buffer_size ) {
         $buffer_size = 10000 > $forks * 1000 ? 10000 : $forks * 1000;
     }

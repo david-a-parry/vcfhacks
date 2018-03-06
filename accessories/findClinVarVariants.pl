@@ -3,7 +3,6 @@ use warnings;
 use strict;
 use Parallel::ForkManager;
 use Getopt::Long qw(:config no_ignore_case);
-use Sys::CPU;
 use Pod::Usage;
 use Term::ProgressBar;
 use Data::Dumper;
