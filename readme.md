@@ -69,6 +69,7 @@ You can test your installation (scripts or binaries) by simply running the follo
     
 The 'prove' command will run all tests in the 't' folder. The tests are not exhaustive, but should give you a good idea about whether there is an issue with your installation.
 
+In order for all tests to complete successfully, you will need the geneAnnotator database, which can be downloaded from: https://github.com/gantzgraf/vcfhacks/releases/download/v.0.2.1/geneAnnotatorDb.zip. Unzip this file and place the 'geneAnnotatorDb' folder in vcfhacks 'data' directory'.
 
 __CREDIT__
 
