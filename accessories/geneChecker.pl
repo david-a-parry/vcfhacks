@@ -12,10 +12,12 @@ my $script_prefix = "perl $RealBin/..";
 my $loc = tmpnam(); 
 my $func = tmpnam(); 
 my @genes = ();
+my @coords = ();
 my @classes = ();
 my %opts = 
 (
     g => \@genes,
+    c => \@coords,
     b => 'GRCh37',
     a => 0.01,
     v => \@classes,
@@ -24,6 +26,7 @@ GetOptions(
         \%opts,
         'i|input=s',
         'g|genes=s{,}',
+        'c|coordinates=s{,}',
         'o|output=s',
         'v|add_variant_classes=s{,}',
         'f|force',
@@ -34,7 +37,8 @@ GetOptions(
 
 usage() if $opts{h};
 usage("--input argument is required!\n") if not $opts{i};
-usage("--genes argument is required!\n") if not @genes;
+usage("--genes or --coordinates arguments are required!\n") if not @genes and 
+                                                               not @coords;
 
 my $useHg38 = checkBuild();
 if ($useHg38){
@@ -54,10 +58,15 @@ if (-e $output and not $opts{f}){
     die "$output already exists - use the --force flag to overwrite\n";
 }
 
-
-my $cmd = "$script_prefix/getVariantsByLocation.pl -g " . join(" ", @genes) . " -i $opts{i} -o $loc";
-if ($useHg38){
-    $cmd .= " -d";
+my $cmd = "$script_prefix/getVariantsByLocation.pl -i $opts{i} -o $loc";
+if (@genes){
+    $cmd .= " -g " . join(" ", @genes);
+    if ($useHg38){
+        $cmd .= " -d";
+    }
+}
+if (@coords){
+    $cmd .= " -r " . join(" ", @coords);
 }
 print STDERR "Executing command: $cmd\n";
 system($cmd);
