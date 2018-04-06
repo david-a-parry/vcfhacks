@@ -17,10 +17,15 @@ GetOptions("exclude_non_variants" => \$exclude_non_variants, "ouput=s" => \$out,
     or usage("Syntax error");
 usage($help) if ($help);
 usage() unless($vcf);
-open (my $IN, $vcf) || die "can't open $vcf:$!\n";
+my $IN;
+if ($vcf =~ /\.b?gz$/){
+    open ($IN, "gzip -dc $vcf | ") || die "can't open $vcf via gzip: $!\n";
+}else{
+    open ($IN, $vcf) || die "can't open $vcf: $!\n";
+}
 my $OUT;
 if ($out){
-    open ($OUT, ">$out") || die "can't open $out for writing:$!\n";
+    open ($OUT, ">$out") || die "can't open $out for writing: $!\n";
 }else{
     $OUT = \*STDOUT;
 }
