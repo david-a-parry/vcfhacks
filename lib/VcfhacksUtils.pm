@@ -418,7 +418,7 @@ sub evalFilter{
     my @eval = (); 
     for (my $i = 0; $i < @{$exps->{field}}; $i++){
         (my $field = $exps->{field}->[$i]) =~ s/^\(//;#remove preceding bracket
-        my $v = $vals->{$field};
+        my $v = $vals->{lc($field)};#VcfReader puts all CSQ annotations into lowercase
         push @eval, "(" if $exps->{field}->[$i] =~ /^\(/;
         if ($exps->{comparator}->[$i] =~ /^([<>][=]{0,1}|[=!]=)$/){
             if ($v ne ''){
