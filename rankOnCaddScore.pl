@@ -246,6 +246,7 @@ ALLELE: foreach my $al (sort {$a<=>$b} keys %{$vars}){
                 "$vars->{$al}->{CHROM}:$vars->{$al}->{POS}-" . 
                 ($vars->{$al}->{POS} + 1) 
             );
+            next if not defined $it;
             while (my $result = $it->next){
                 chomp($result);
                 my @res = split("\t", $result);
