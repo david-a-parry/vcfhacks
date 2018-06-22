@@ -21,7 +21,12 @@
 
 =head1 DESCRIPTION
 
- A simple example VEP filter plugin that prints splice_region_variants only if they match certain criteria (ignores other variant classes). The plugin finds variants with a 'splice_region_variant' annotation and asseses whether the variants lie within a stricter definition of the splice consensus sequence (that is, 3 bp before the exon to the first 3 bp of the exon or the last bp of the exon to 6 bp after the exon) and outputs only these variants.
+ A simple VEP filter plugin that prints splice_region_variants only if they
+ match certain criteria (ignores other variant classes). The plugin finds
+ variants with a 'splice_region_variant' annotation and asseses whether the
+ variants lie within a stricter definition of the splice consensus sequence (that
+ is, 3 bp before the exon to the first 3 bp of the exon or the last bp of the
+ exon to 6 bp after the exon) and outputs only these variants.
 
 =cut
 

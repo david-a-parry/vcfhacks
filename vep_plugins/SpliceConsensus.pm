@@ -20,7 +20,11 @@
 
 =head1 DESCRIPTION
 
- A VEP plugin that adds a splice_consensus annotation field. Finds variants with a 'splice_region_variant' annotation and asseses whether the variants lie within a stricter definition of the splice consensus sequence (that is, 3 bp before the exon to the first 3 bp of the exon or the last bp of the exon to 6 bp after the exon). Could do with better indel handling.
+ A VEP plugin that adds a splice_consensus annotation field. Finds variants
+ with a 'splice_region_variant' annotation and asseses whether the variants lie
+ within a stricter definition of the splice consensus sequence (that is, 3 bp
+ before the exon to the first 3 bp of the exon or the last bp of the exon to 6
+ bp after the exon). Could do with better indel handling.
 =cut
 
 package SpliceConsensus;
@@ -33,7 +37,8 @@ package SpliceConsensus;
 
     sub get_header_info {
         return {
-            SPLICE_CONSENSUS => "Splice consensus as defined by 3 bp before, 6 bp after or first 3 bp of exon or last bp of exon"
+            SPLICE_CONSENSUS => 
+            "Splice consensus as defined by 3 bp before, 6 bp after or first 3 bp of exon or last bp of exon"
         };
     }
 
