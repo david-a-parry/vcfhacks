@@ -475,6 +475,13 @@ CSQ:    foreach my $annot (@a_csq){
                 # e.g. $counts{ENST00001234567}->{benign}->{sample_1} = undef
                 # we will count no. keys for each transcript at end of 
                 # chromosome
+				my %samps_with_allele = map {$_ => 1 } addSamplesWithAllele
+                (
+                     \%samp_to_gt, 
+                     $j,
+                     $split,
+                );
+                map {$counts{$t}->{$k}->{$_} = undef} keys %samps_with_allele;
                 if ($opts{r}){ #count alleles if using recessive mode
                     map {$counts{$t}->{$k}->{$_} = 
                          countAlleles($samp_to_gt{$_}) } addSamplesWithAllele(
@@ -620,9 +627,6 @@ sub addSamplesWithAllele{
     return @samp;
 }
 
-#################################################
-sub countAlleles{
-    my ($gts, $allele) = @_;
 #################################################
 sub checkAllelePl{
     #returns 0 if PL for any genotype that does not include $allele
