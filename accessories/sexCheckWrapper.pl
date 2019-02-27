@@ -20,10 +20,10 @@ if (grep  {/^chrX$/} @contigs){
 }
 print join("\t", qw ( Sample Het Hom Prop.Het Gender ) ). "\n";
 foreach my $s (@samples){
-    my $cmd = "tabix -h $vcf chrX | $script_prefix/getHetVariants.pl -i - -s $s -gq 30 | $script_prefix/countVariants.pl - ";
+    my $cmd = "tabix -h $vcf $x | $script_prefix/getHetVariants.pl -i - -s $s -gq 30 | $script_prefix/countVariants.pl - ";
     my $het = execute($cmd);
     next if not defined $het;
-    $cmd = "tabix -h $vcf chrX | $script_prefix/getHetVariants.pl -i - -s $s  -r -gq 30 | $script_prefix/countVariants.pl - ";
+    $cmd = "tabix -h $vcf $x | $script_prefix/getHetVariants.pl -i - -s $s  -r -gq 30 | $script_prefix/countVariants.pl - ";
     my $hom = execute($cmd);
     next if not defined $hom;
     my $total = $het + $hom;
