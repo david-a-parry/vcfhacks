@@ -1,3 +1,9 @@
+# Unmaintained Notice
+
+I have stopped maintaining this project in favour of an improved system for performing similar analyses. Please see my [VASE](https://github.com/david-a-parry/vase) project which performs similar rare-disease variant filtering analyses with a single entry point, speed improvements, more up to date features and easier installation. The [VASE wiki](https://github.com/david-a-parry/vase/wiki) provides some example commands for performing variant filtering and familial segregation analysis.
+
+***
+
 # vcfhacks
 
 This project comprises a set of perl programs and modules for VCF manipulation when trying to discover disease-causing variants in sequencing data. This project provides conceptually simple programs that can perform variant filtering and annotation to aid identification of disease-causing variants.
